@@ -23,6 +23,7 @@ export class PrinterState {
   canvas: CanvasInfo | null = null;
   files: FileEntry[] = [];
   thumbnail: string | null = null; // base64 PNG
+  thumbnailFailed = false; // true when printer returns error (e.g. no embedded thumbnail)
   fileTotalLayers: number | null = null;
   private listeners: StateListener[] = [];
 
@@ -98,11 +99,15 @@ export class PrinterState {
         break;
       }
       case 1045: { // GET_FILE_THUMBNAIL
+        const errorCode = result.error_code as number | undefined;
         const thumb = result.thumbnail as string | undefined;
-        if (thumb) {
+        if (thumb && errorCode === 0) {
           this.thumbnail = thumb;
-          this.notify();
+          this.thumbnailFailed = false;
+        } else {
+          this.thumbnailFailed = true;
         }
+        this.notify();
         break;
       }
       case 1046: { // GET_FILE_DETAIL
