@@ -9,6 +9,7 @@ export interface MqttClientOptions {
   onRegistered: (sn: string) => void;
   onMessage: (method: number, data: unknown) => void;
   onStatusEvent: (data: unknown) => void;
+  onRawMessage?: (direction: 'sent' | 'received', topic: string, data: unknown) => void;
 }
 
 export class CC2MqttClient {
@@ -93,6 +94,8 @@ export class CC2MqttClient {
       return;
     }
 
+    this.opts.onRawMessage?.('received', topic, data);
+
     // Discover SN from status topic
     if (topic.includes('/api_status') && !this.sn) {
       const parts = topic.split('/');
@@ -160,10 +163,10 @@ export class CC2MqttClient {
   sendCommand(method: number, params: Record<string, unknown>): void {
     if (!this.client || !this.sn) return;
     this.commandId++;
-    this.client.publish(
-      `elegoo/${this.sn}/${this.clientId}/api_request`,
-      JSON.stringify({ id: this.commandId, method, params })
-    );
+    const topic = `elegoo/${this.sn}/${this.clientId}/api_request`;
+    const msg = { id: this.commandId, method, params };
+    this.client.publish(topic, JSON.stringify(msg));
+    this.opts.onRawMessage?.('sent', topic, msg);
   }
 
   disconnect(): void {

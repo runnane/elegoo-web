@@ -37,24 +37,28 @@
     <div id="dashboard" class="dashboard hidden">
       <!-- Top bar: printer info + print progress -->
       <div id="print-status-bar" class="card print-status-card">
+        <div class="print-thumbnail-wrap">
+          <img id="print-thumbnail" class="print-thumbnail hidden" alt="">
+          <div id="print-thumbnail-placeholder" class="print-thumbnail-placeholder">🖨️</div>
+        </div>
         <div class="print-info">
           <div class="print-file" id="print-filename">No active print</div>
+          <div class="print-status-badge" id="print-status-badge"></div>
+          <div class="print-progress-wrap">
+            <span class="progress-text-lg" id="print-progress-text">--%</span>
+            <div class="progress-bar">
+              <div class="progress-fill" id="print-progress-bar"></div>
+            </div>
+          </div>
           <div class="print-meta">
-            <span id="print-layer">Layer: --/--</span>
-            <span id="print-elapsed">Elapsed: --</span>
-            <span id="print-remaining">Remaining: --</span>
+            <span id="print-layer">Layer Progress: --/--</span>
+            <span id="print-remaining">--</span>
           </div>
-        </div>
-        <div class="print-progress-wrap">
-          <div class="progress-bar">
-            <div class="progress-fill" id="print-progress-bar"></div>
-          </div>
-          <span class="progress-text" id="print-progress-text">--%</span>
         </div>
         <div class="print-actions">
-          <button id="btn-pause" class="btn btn-warning btn-sm" title="Pause">⏸</button>
-          <button id="btn-resume" class="btn btn-success btn-sm hidden" title="Resume">▶</button>
-          <button id="btn-stop" class="btn btn-danger btn-sm" title="Stop">⏹</button>
+          <button id="btn-pause" class="btn btn-warning btn-icon" title="Pause">⏸</button>
+          <button id="btn-resume" class="btn btn-success btn-icon hidden" title="Resume">▶</button>
+          <button id="btn-stop" class="btn btn-danger btn-icon" title="Stop">⏹</button>
         </div>
       </div>
 
@@ -119,79 +123,99 @@
           </div>
         </div>
 
-        <!-- Toolhead / Position -->
+        <!-- Control -->
         <div class="card" id="toolhead-card">
-          <h3>🎯 Toolhead</h3>
-          <div class="position-display">
-            <div class="axis">X: <span id="pos-x">--</span> mm</div>
-            <div class="axis">Y: <span id="pos-y">--</span> mm</div>
-            <div class="axis">Z: <span id="pos-z">--</span> mm</div>
-          </div>
-          <div class="move-controls">
-            <div class="move-grid">
-              <div></div>
-              <button class="btn btn-sm move-btn" data-axis="y" data-dir="1">Y+</button>
-              <div></div>
-              <button class="btn btn-sm move-btn" data-axis="z" data-dir="1">Z+</button>
-              <button class="btn btn-sm move-btn" data-axis="x" data-dir="-1">X-</button>
-              <button class="btn btn-sm move-btn home-btn" id="btn-home">⌂</button>
-              <button class="btn btn-sm move-btn" data-axis="x" data-dir="1">X+</button>
-              <div></div>
-              <div></div>
-              <button class="btn btn-sm move-btn" data-axis="y" data-dir="-1">Y-</button>
-              <div></div>
-              <button class="btn btn-sm move-btn" data-axis="z" data-dir="-1">Z-</button>
+          <h3>Control</h3>
+          <div class="control-layout">
+            <div class="move-section">
+              <div class="move-xy-grid">
+                <div></div>
+                <button class="btn btn-sm move-btn" data-axis="y" data-dir="1">Y+</button>
+                <div></div>
+                <button class="btn btn-sm move-btn" data-axis="x" data-dir="-1">X-</button>
+                <button class="btn btn-sm move-btn home-btn" id="btn-home-xy" title="Home XY">⌂</button>
+                <button class="btn btn-sm move-btn" data-axis="x" data-dir="1">X+</button>
+                <div></div>
+                <button class="btn btn-sm move-btn" data-axis="y" data-dir="-1">Y-</button>
+                <div></div>
+              </div>
+              <div class="move-z-col">
+                <button class="btn btn-sm move-btn" data-axis="z" data-dir="1">Z↑</button>
+                <button class="btn btn-sm move-btn home-btn" id="btn-home-z" title="Home Z">⌂</button>
+                <button class="btn btn-sm move-btn" data-axis="z" data-dir="-1">Z↓</button>
+              </div>
+            </div>
+            <div class="position-display">
+              <span class="axis">X:<span id="pos-x">--</span></span>
+              <span class="axis">Y:<span id="pos-y">--</span></span>
+              <span class="axis">Z:<span id="pos-z">--</span></span>
             </div>
             <div class="move-distance">
-              <label>Distance:</label>
-              <select id="move-distance">
-                <option value="0.1">0.1mm</option>
-                <option value="1" selected>1mm</option>
-                <option value="10">10mm</option>
-                <option value="50">50mm</option>
-              </select>
+              <button class="btn btn-sm dist-btn" data-dist="0.1">0.1mm</button>
+              <button class="btn btn-sm dist-btn" data-dist="1">1mm</button>
+              <button class="btn btn-sm dist-btn active" data-dist="10">10mm</button>
+              <button class="btn btn-sm dist-btn" data-dist="30">30mm</button>
+            </div>
+            <div class="speed-control">
+              <label>Print Speed</label>
+              <div class="speed-buttons">
+                <button class="btn btn-sm speed-btn" data-mode="0">Silent</button>
+                <button class="btn btn-sm speed-btn active" data-mode="1">Balanced</button>
+                <button class="btn btn-sm speed-btn" data-mode="2">Sport</button>
+                <button class="btn btn-sm speed-btn" data-mode="3">Ludicrous</button>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Fans & Speed -->
+        <!-- Fans -->
         <div class="card" id="fans-card">
-          <h3>💨 Fans & Speed</h3>
+          <h3>Fans & Light</h3>
           <div class="fan-grid">
             <div class="fan-item">
-              <span class="fan-label">Part Fan</span>
-              <div class="fan-bar-wrap">
-                <div class="fan-bar" id="fan-part-bar"></div>
+              <div class="fan-header">
+                <span class="fan-icon">❄️</span>
+                <span class="fan-label">Model</span>
+                <label class="toggle"><input type="checkbox" id="fan-model-toggle" checked><span class="toggle-slider"></span></label>
               </div>
-              <span class="fan-value" id="fan-part-value">--%</span>
+              <div class="fan-adjust">
+                <button class="btn btn-sm fan-dec" data-fan="fan" data-step="-13">−</button>
+                <div class="fan-bar-wrap"><div class="fan-bar" id="fan-model-bar"></div></div>
+                <span class="fan-value" id="fan-model-value">--%</span>
+                <button class="btn btn-sm fan-inc" data-fan="fan" data-step="13">+</button>
+              </div>
             </div>
             <div class="fan-item">
-              <span class="fan-label">Aux Fan</span>
-              <div class="fan-bar-wrap">
-                <div class="fan-bar" id="fan-aux-bar"></div>
+              <div class="fan-header">
+                <span class="fan-icon">❄️</span>
+                <span class="fan-label">Assistance</span>
+                <label class="toggle"><input type="checkbox" id="fan-aux-toggle"><span class="toggle-slider"></span></label>
               </div>
-              <span class="fan-value" id="fan-aux-value">--%</span>
+              <div class="fan-adjust">
+                <button class="btn btn-sm fan-dec" data-fan="aux_fan" data-step="-13">−</button>
+                <div class="fan-bar-wrap"><div class="fan-bar" id="fan-aux-bar"></div></div>
+                <span class="fan-value" id="fan-aux-value">--%</span>
+                <button class="btn btn-sm fan-inc" data-fan="aux_fan" data-step="13">+</button>
+              </div>
             </div>
             <div class="fan-item">
-              <span class="fan-label">Box Fan</span>
-              <div class="fan-bar-wrap">
-                <div class="fan-bar" id="fan-box-bar"></div>
+              <div class="fan-header">
+                <span class="fan-icon">❄️</span>
+                <span class="fan-label">Case</span>
+                <label class="toggle"><input type="checkbox" id="fan-case-toggle" checked><span class="toggle-slider"></span></label>
               </div>
-              <span class="fan-value" id="fan-box-value">--%</span>
-            </div>
-          </div>
-          <div class="speed-control">
-            <label>Speed Mode:</label>
-            <div class="speed-buttons">
-              <button class="btn btn-sm speed-btn" data-mode="0">Silent</button>
-              <button class="btn btn-sm speed-btn active" data-mode="1">Balanced</button>
-              <button class="btn btn-sm speed-btn" data-mode="2">Sport</button>
-              <button class="btn btn-sm speed-btn" data-mode="3">Ludicrous</button>
+              <div class="fan-adjust">
+                <button class="btn btn-sm fan-dec" data-fan="box_fan" data-step="-13">−</button>
+                <div class="fan-bar-wrap"><div class="fan-bar" id="fan-case-bar"></div></div>
+                <span class="fan-value" id="fan-case-value">--%</span>
+                <button class="btn btn-sm fan-inc" data-fan="box_fan" data-step="13">+</button>
+              </div>
             </div>
           </div>
           <div class="led-control">
-            <label>LED:</label>
-            <button class="btn btn-sm" id="btn-led-toggle">💡 Toggle</button>
+            <span class="fan-icon">☀️</span>
+            <span>Overhead light</span>
+            <label class="toggle"><input type="checkbox" id="led-toggle" checked><span class="toggle-slider"></span></label>
           </div>
         </div>
 
@@ -201,6 +225,21 @@
           <div id="file-list" class="file-list">
             <div class="loading">Loading...</div>
           </div>
+        </div>
+
+        <!-- Log -->
+        <div class="card log-card" id="log-card">
+          <div class="log-header">
+            <h3>📋 MQTT Log</h3>
+            <div class="log-controls">
+              <input type="text" id="log-filter" placeholder="Filter..." class="log-filter-input">
+              <label class="log-autoscroll-label">
+                <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
+              </label>
+              <button class="btn btn-sm btn-ghost" id="log-clear">Clear</button>
+            </div>
+          </div>
+          <div id="log-entries" class="log-entries"></div>
         </div>
       </div>
     </div>

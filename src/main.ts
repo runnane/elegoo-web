@@ -1,8 +1,11 @@
 import { CC2MqttClient } from './mqtt-client';
 import { PrinterState } from './printer-state';
+import { LogStore } from './log-store';
 import { renderDashboard, renderCanvas, renderFiles, renderHeader, bindControls } from './ui/dashboard';
+import { renderLog, bindLogControls } from './ui/log';
 
 const state = new PrinterState();
+const logStore = new LogStore();
 let client: CC2MqttClient | null = null;
 let renderScheduled = false;
 
@@ -15,6 +18,7 @@ function scheduleRender(): void {
       renderHeader(state);
       renderDashboard(state, client);
       renderCanvas(state);
+      renderLog(logStore);
     }
   });
 }
@@ -31,6 +35,7 @@ function updateConnectionBadge(status: string): void {
 
 // Subscribe to state changes
 state.subscribe(scheduleRender);
+logStore.subscribe(scheduleRender);
 
 // Connect button handler
 $('connect-btn').addEventListener('click', () => {
@@ -68,6 +73,7 @@ $('connect-btn').addEventListener('click', () => {
       $('dashboard').classList.remove('hidden');
       // Bind control handlers
       bindControls(client!);
+      bindLogControls(logStore);
       // Request file list
       client!.sendCommand(1044, { storage_media: 'local', path: '/', page: 1, page_size: 50 });
     },
@@ -80,6 +86,9 @@ $('connect-btn').addEventListener('click', () => {
     },
     onStatusEvent(data) {
       state.handleStatusEvent(data as Record<string, unknown>);
+    },
+    onRawMessage(direction, topic, data) {
+      logStore.add(direction, topic, data);
     },
   });
 
