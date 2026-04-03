@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elegoo Web</title>
+  <link rel="stylesheet" href="/src/styles/main.css">
+</head>
+<body>
+  <header id="app-header">
+    <div class="header-left">
+      <h1>Elegoo Web</h1>
+      <span id="printer-name" class="subtitle"></span>
+    </div>
+    <div class="header-right">
+      <span id="connection-status" class="status-badge disconnected">Disconnected</span>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- Connect dialog -->
+    <div id="connect-dialog" class="card connect-card">
+      <h2>Connect to Printer</h2>
+      <div class="form-group">
+        <label for="printer-ip">Printer IP Address</label>
+        <input type="text" id="printer-ip" value="172.20.100.236" placeholder="192.168.1.100">
+      </div>
+      <div class="form-group">
+        <label for="printer-password">Password</label>
+        <input type="password" id="printer-password" value="123456" placeholder="123456 (default)">
+      </div>
+      <button id="connect-btn" class="btn btn-primary">Connect</button>
+      <p id="connect-error" class="error-text"></p>
+    </div>
+
+    <!-- Dashboard (hidden until connected) -->
+    <div id="dashboard" class="dashboard hidden">
+      <!-- Top bar: printer info + print progress -->
+      <div id="print-status-bar" class="card print-status-card">
+        <div class="print-info">
+          <div class="print-file" id="print-filename">No active print</div>
+          <div class="print-meta">
+            <span id="print-layer">Layer: --/--</span>
+            <span id="print-elapsed">Elapsed: --</span>
+            <span id="print-remaining">Remaining: --</span>
+          </div>
+        </div>
+        <div class="print-progress-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" id="print-progress-bar"></div>
+          </div>
+          <span class="progress-text" id="print-progress-text">--%</span>
+        </div>
+        <div class="print-actions">
+          <button id="btn-pause" class="btn btn-warning btn-sm" title="Pause">⏸</button>
+          <button id="btn-resume" class="btn btn-success btn-sm hidden" title="Resume">▶</button>
+          <button id="btn-stop" class="btn btn-danger btn-sm" title="Stop">⏹</button>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <!-- Temperatures -->
+        <div class="card" id="temps-card">
+          <h3>🌡️ Temperatures</h3>
+          <div class="temp-grid">
+            <div class="temp-item">
+              <div class="temp-label">Nozzle</div>
+              <div class="temp-value">
+                <span id="temp-nozzle">--</span>°C
+                <span class="temp-target">/ <span id="temp-nozzle-target">--</span>°C</span>
+              </div>
+              <div class="temp-bar-wrap">
+                <div class="temp-bar nozzle-bar" id="temp-nozzle-bar"></div>
+              </div>
+              <div class="temp-control">
+                <input type="number" id="set-nozzle-temp" placeholder="210" min="0" max="300" step="5">
+                <button class="btn btn-sm" id="btn-set-nozzle">Set</button>
+                <button class="btn btn-sm btn-ghost" id="btn-off-nozzle">Off</button>
+              </div>
+            </div>
+            <div class="temp-item">
+              <div class="temp-label">Bed</div>
+              <div class="temp-value">
+                <span id="temp-bed">--</span>°C
+                <span class="temp-target">/ <span id="temp-bed-target">--</span>°C</span>
+              </div>
+              <div class="temp-bar-wrap">
+                <div class="temp-bar bed-bar" id="temp-bed-bar"></div>
+              </div>
+              <div class="temp-control">
+                <input type="number" id="set-bed-temp" placeholder="60" min="0" max="120" step="5">
+                <button class="btn btn-sm" id="btn-set-bed">Set</button>
+                <button class="btn btn-sm btn-ghost" id="btn-off-bed">Off</button>
+              </div>
+            </div>
+            <div class="temp-item">
+              <div class="temp-label">Chamber</div>
+              <div class="temp-value">
+                <span id="temp-chamber">--</span>°C
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas / AMS -->
+        <div class="card" id="canvas-card">
+          <h3>🎨 Canvas / AMS</h3>
+          <div id="canvas-status" class="canvas-grid">
+            <div class="canvas-empty">Not connected</div>
+          </div>
+        </div>
+
+        <!-- Camera -->
+        <div class="card" id="camera-card">
+          <h3>📷 Camera</h3>
+          <div class="camera-wrap">
+            <img id="camera-feed" alt="Camera off" class="camera-img">
+            <div class="camera-overlay" id="camera-overlay">Camera not available</div>
+          </div>
+        </div>
+
+        <!-- Toolhead / Position -->
+        <div class="card" id="toolhead-card">
+          <h3>🎯 Toolhead</h3>
+          <div class="position-display">
+            <div class="axis">X: <span id="pos-x">--</span> mm</div>
+            <div class="axis">Y: <span id="pos-y">--</span> mm</div>
+            <div class="axis">Z: <span id="pos-z">--</span> mm</div>
+          </div>
+          <div class="move-controls">
+            <div class="move-grid">
+              <div></div>
+              <button class="btn btn-sm move-btn" data-axis="y" data-dir="1">Y+</button>
+              <div></div>
+              <button class="btn btn-sm move-btn" data-axis="z" data-dir="1">Z+</button>
+              <button class="btn btn-sm move-btn" data-axis="x" data-dir="-1">X-</button>
+              <button class="btn btn-sm move-btn home-btn" id="btn-home">⌂</button>
+              <button class="btn btn-sm move-btn" data-axis="x" data-dir="1">X+</button>
+              <div></div>
+              <div></div>
+              <button class="btn btn-sm move-btn" data-axis="y" data-dir="-1">Y-</button>
+              <div></div>
+              <button class="btn btn-sm move-btn" data-axis="z" data-dir="-1">Z-</button>
+            </div>
+            <div class="move-distance">
+              <label>Distance:</label>
+              <select id="move-distance">
+                <option value="0.1">0.1mm</option>
+                <option value="1" selected>1mm</option>
+                <option value="10">10mm</option>
+                <option value="50">50mm</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fans & Speed -->
+        <div class="card" id="fans-card">
+          <h3>💨 Fans & Speed</h3>
+          <div class="fan-grid">
+            <div class="fan-item">
+              <span class="fan-label">Part Fan</span>
+              <div class="fan-bar-wrap">
+                <div class="fan-bar" id="fan-part-bar"></div>
+              </div>
+              <span class="fan-value" id="fan-part-value">--%</span>
+            </div>
+            <div class="fan-item">
+              <span class="fan-label">Aux Fan</span>
+              <div class="fan-bar-wrap">
+                <div class="fan-bar" id="fan-aux-bar"></div>
+              </div>
+              <span class="fan-value" id="fan-aux-value">--%</span>
+            </div>
+            <div class="fan-item">
+              <span class="fan-label">Box Fan</span>
+              <div class="fan-bar-wrap">
+                <div class="fan-bar" id="fan-box-bar"></div>
+              </div>
+              <span class="fan-value" id="fan-box-value">--%</span>
+            </div>
+          </div>
+          <div class="speed-control">
+            <label>Speed Mode:</label>
+            <div class="speed-buttons">
+              <button class="btn btn-sm speed-btn" data-mode="0">Silent</button>
+              <button class="btn btn-sm speed-btn active" data-mode="1">Balanced</button>
+              <button class="btn btn-sm speed-btn" data-mode="2">Sport</button>
+              <button class="btn btn-sm speed-btn" data-mode="3">Ludicrous</button>
+            </div>
+          </div>
+          <div class="led-control">
+            <label>LED:</label>
+            <button class="btn btn-sm" id="btn-led-toggle">💡 Toggle</button>
+          </div>
+        </div>
+
+        <!-- Files -->
+        <div class="card" id="files-card">
+          <h3>📁 Files</h3>
+          <div id="file-list" class="file-list">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
