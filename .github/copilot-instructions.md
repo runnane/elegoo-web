@@ -16,9 +16,16 @@ A browser-based web frontend for Elegoo Centauri Carbon 2 (CC2) FDM printers. Co
 
 - `src/main.ts` — Entry point, connect flow, renders on state change
 - `src/types.ts` — TypeScript types for the CC2 protocol (status codes, data structures)
-- `src/mqtt-client.ts` — MQTT WebSocket client with registration, heartbeat, and command sending
+- `src/mqtt-client.ts` — MQTT WebSocket client with registration, heartbeat, command sending, and raw message capture
 - `src/printer-state.ts` — Centralized state with deep-merge delta updates and subscriber pattern
-- `src/ui/dashboard.ts` — All UI rendering functions and control event handlers
+- `src/log-store.ts` — Ring buffer (500 entries) for MQTT message logging
+- `src/ui/dashboard.ts` — Thin re-export barrel for all UI modules
+- `src/ui/helpers.ts` — Shared DOM helpers (`$`, `formatTime`, `fanPct`, `escapeHtml`)
+- `src/ui/print-status.ts` — Main dashboard rendering (temps, progress, thumbnail, fans, camera)
+- `src/ui/canvas.ts` — Canvas/AMS spool visualization
+- `src/ui/files.ts` — File browser with print start action
+- `src/ui/controls.ts` — All control event handlers (move, temp, fans, LED, speed)
+- `src/ui/log.ts` — MQTT log panel with filter, auto-scroll, click-to-expand
 - `src/styles/main.css` — Fluidd-inspired dark theme
 - `index.html` — Full page layout (single-page, no routing)
 
@@ -32,7 +39,13 @@ The printer runs its own MQTT broker. Communication flow:
 5. Send commands to `elegoo/<sn>/<client_id>/api_request` as `{id, method, params}`
 6. Heartbeat PING every 10 seconds
 
-Key methods: 1001 (attributes), 1002 (full status), 1020-1023 (print control), 1026-1031 (motion/temp/fans), 1044 (file list), 2005 (canvas status), 6000 (status event).
+Key methods: 1001 (attributes), 1002 (full status), 1020-1023 (print control), 1026-1031 (motion/temp/fans), 1044 (file list), 1045 (thumbnail), 1046 (file detail), 2005 (canvas status), 6000 (status event).
+
+**WARNING**: Parameter naming is inconsistent in the CC2 API:
+- Method 1045 (thumbnail) requires `file_name` (with underscore)
+- Method 1046 (file detail) requires `filename` (no underscore)
+- Using the wrong form returns error 1003 (INVALID_PARAMETER)
+- This was discovered by comparing against the official Elegoo web interface source (`raw/index-unminified.html`)
 
 Reference: [CC2_PROTOCOL.md](https://github.com/danielcherubini/elegoo-homeassistant/blob/main/docs/CC2_PROTOCOL.md)
 

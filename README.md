@@ -4,12 +4,13 @@ A Fluidd-inspired web frontend for Elegoo Centauri Carbon 2 (CC2) FDM printers. 
 
 ## Features
 
-- **Real-time dashboard**: Print progress, temperatures, fan speeds, toolhead position
-- **Canvas/AMS display**: Filament slots with colors, types, and active tray indicator
+- **Real-time dashboard**: Print progress with thumbnail, temperatures (2 decimal places), fan speeds, toolhead position
+- **Canvas/AMS display**: Spool-style filament slots with colors, types, and active tray indicator
 - **Camera feed**: Live MJPEG stream from the printer camera
-- **Printer control**: Temperature, fans, speed mode, LED, movement, homing
+- **Printer control**: Temperature, fans (Model/Assistance/Case toggles + fine adjust), speed mode, LED toggle, XY/Z movement with 0.1/1/10/30mm distances
 - **Print management**: File browser, start/pause/resume/stop prints
-- **Dark theme**: Fluidd-inspired UI with responsive layout
+- **MQTT Log**: Real-time log panel showing all sent/received MQTT messages with filtering and click-to-expand
+- **Dark theme**: Fluidd/Elegoo-inspired UI with responsive layout
 
 ## How It Works
 
@@ -62,8 +63,15 @@ src/
 ├── types.ts          # CC2 protocol types and status codes
 ├── mqtt-client.ts    # MQTT WebSocket client with registration/heartbeat
 ├── printer-state.ts  # State management with delta merge
+├── log-store.ts      # Ring buffer for MQTT message logging
 ├── ui/
-│   └── dashboard.ts  # UI rendering and control event handlers
+│   ├── dashboard.ts  # Re-exports all UI modules
+│   ├── helpers.ts    # Shared DOM/formatting utilities
+│   ├── print-status.ts # Main dashboard + header rendering
+│   ├── canvas.ts     # Canvas/AMS spool visualization
+│   ├── files.ts      # File browser with print action
+│   ├── controls.ts   # All control event handlers
+│   └── log.ts        # MQTT log panel rendering
 └── styles/
     └── main.css      # Fluidd-inspired dark theme
 ```
@@ -82,6 +90,12 @@ Resin printers (Mars, Saturn) use a different protocol (SDCP over WebSocket) and
 - **Camera CORS**: The MJPEG stream on port 8080 may be blocked by browser CORS policy depending on your setup. Works when served from the same network.
 - **No file upload**: File upload uses HTTP PUT on port 80, not yet implemented.
 - **LAN-only**: Cloud mode is not supported.
+
+## Protocol Quirks
+
+- Method 1045 (thumbnail) requires `file_name` (with underscore), but 1046 (file detail) requires `filename` (no underscore). Using the wrong form returns error 1003.
+- `total_layer` is often missing from delta status updates — fetched separately via method 1046.
+- Fan speed is PWM 0-255, not percentage. Convert: `pct = Math.round(speed / 255 * 100)`.
 
 ## Credits
 
