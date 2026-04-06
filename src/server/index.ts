@@ -15,6 +15,7 @@ import { MqttBridge } from './mqtt-bridge.js';
 import { StateStore } from './state-store.js';
 import { WebSocketTransport } from './ws-transport.js';
 import { createRestRouter } from './rest-api.js';
+import { handleMcpRequest } from './mcp-server.js';
 import { TelegramIntegration } from './telegram.js';
 import { StatePersistence } from './state-persistence.js';
 import { AIMonitor } from './ai-monitor.js';
@@ -58,7 +59,31 @@ if (config.aiEnabled) {
 }
 
 // --- HTTP Server ---
-const httpServer = createServer(createRestRouter(store, config, aiMonitor));
+const restHandler = createRestRouter(store, config, aiMonitor);
+const httpServer = createServer((req, res) => {
+  const url = req.url || '';
+  if (url === '/mcp' || url.startsWith('/mcp?')) {
+    // CORS for MCP endpoint
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id');
+    res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    handleMcpRequest(req, res, store, bridge).catch((err) => {
+      log.error('MCP request error:', err);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Internal server error' }));
+      }
+    });
+    return;
+  }
+  restHandler(req, res);
+});
 
 // --- WebSocket Transport (for browser clients) ---
 const wsTransport = new WebSocketTransport(httpServer, store, bridge);

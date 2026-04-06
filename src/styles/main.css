@@ -1339,6 +1339,33 @@ body {
 }
 .temp-range-row input { width: 80px; }
 .temp-range-row span { color: var(--text-muted); }
+.fm-temp-info {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+.fm-color-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fm-color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 220px;
+}
+.fm-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: transform 0.1s;
+}
+.fm-swatch:hover {
+  transform: scale(1.2);
+  border-color: var(--text);
+}
 .modal-footer {
   display: flex;
   justify-content: flex-end;

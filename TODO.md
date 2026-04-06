@@ -5,17 +5,12 @@
 - [ ] Hvordan kan jeg laste opp filer?
   - CC2 supports `PUT http://<printer_ip>:80/upload` (stock firmware). SDK sends `Content-Range`, `Content-Type: application/octet-stream`. Server needs a proxy endpoint to forward uploads to the printer.
   - Newer SDK also sends `X-File-Name`, `X-File-MD5`, `X-Token` headers.
-- [x] vi trenger et api metrics endpoint med json data for stats
-- [x] vi trenger et prometheus metrics endpoint
 - [ ] vi trenger et MCP server endpoint
 - [ ] vi trenger en octoprint emulator server 
 - [ ] vi trenger en moonraker emulator server
 - [ ] vi trenger å lage en summary rapport pr print, som viser stats fra print med all info og bilder vi har logget under print. Vi ønsker å lage en god PDF med fine grafer og screenshots og info.
-- [x] **Print history panel** — Method 1036 returns print history (task name, status, begin/end time). Paginated panel with refresh.
-- [x] **Disable controls during commands** — Buttons disabled while command is in flight, auto-recover after 5s timeout
-- [x] **Camera snapshot** — Snapshot button in camera card downloads JPEG via /api/snapshot
-- [x] **Self-check wizard** — Maintenance card with Self-Check (1035), Auto-Level (1032), Vibration (1033), PID (1034) buttons with status display
 - [ ] Vi trenger en ny tab for Help som dokumenterer API, prom, MCP, octoprint, moonraker, command reference etc
+- [ ] thumbnail er vanskelig å se når vi har mørkt filament og mørk bakgrunn. Dette må automatisk justeres basert på fargen på bildet/filamentet i bildet. 
 
 
 ## Medium Priority
@@ -117,3 +112,9 @@
 - [x] vi trenger en knapp for å resette layer duration data
 - [x] Spool Calculator - her trenger vi å kunne inputte hvor mange mm tykkelse vi har igjen på rullen slik at den utifra dette kan kalkulere vekt på filament og antall meter igjen. 
 - [x] På camera overlay må vi ikke kutte lengden på filnavn, nå stopper den halveis over img. Vi vet jo størrelse på bilde..
+- [x] **Print history panel** — Method 1036 returns print history (task name, status, begin/end time). Paginated panel with refresh.
+- [x] **Disable controls during commands** — Buttons disabled while command is in flight, auto-recover after 5s timeout
+- [x] **Camera snapshot** — Snapshot button in camera card downloads JPEG via /api/snapshot
+- [x] **Self-check wizard** — Maintenance card with Self-Check (1035), Auto-Level (1032), Vibration (1033), PID (1034) buttons with status display
+- [x] vi trenger et api metrics endpoint med json data for stats
+- [x] vi trenger et prometheus metrics endpoint
