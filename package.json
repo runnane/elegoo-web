@@ -18,6 +18,7 @@
     "service:logs": "sudo journalctl -u elegoo-web -f"
   },
   "devDependencies": {
+    "@types/pdfkit": "^0.17.5",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.0",
@@ -30,6 +31,7 @@
     "dotenv": "^16.4.0",
     "grammy": "^1.35.0",
     "mqtt": "^5.10.0",
+    "pdfkit": "^0.18.0",
     "sharp": "^0.34.5",
     "winston": "^3.19.0",
     "ws": "^8.18.0",

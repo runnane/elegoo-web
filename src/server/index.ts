@@ -16,9 +16,13 @@ import { StateStore } from './state-store.js';
 import { WebSocketTransport } from './ws-transport.js';
 import { createRestRouter } from './rest-api.js';
 import { handleMcpRequest } from './mcp-server.js';
+import { createOctoPrintRouter } from './octoprint-compat.js';
+import { createMoonrakerRouter } from './moonraker-compat.js';
+import { MoonrakerServer } from './moonraker-server.js';
 import { TelegramIntegration } from './telegram.js';
 import { StatePersistence } from './state-persistence.js';
 import { AIMonitor } from './ai-monitor.js';
+import { PrintReportCollector } from './print-report-collector.js';
 import { initLogger, getLogger } from './logger.js';
 
 const config = loadConfig();
@@ -36,6 +40,7 @@ if (config.telegramEnabled) {
 if (config.aiEnabled) {
   log.info(`AI:       enabled (VLM: ${config.aiVlmEnabled ? config.aiVlmModel : 'off'}, Local: ${config.aiLocalEnabled ? 'on' : 'off'})`);
 }
+log.info(`Moonraker: http://0.0.0.0:${config.moonrakerPort}`);
 
 // --- MQTT Bridge (singleton connection to printer) ---
 const bridge = new MqttBridge(config.printerIp, config.printerPassword);
@@ -58,8 +63,14 @@ if (config.aiEnabled) {
   aiMonitor = new AIMonitor(store, config);
 }
 
+// --- Print Report Collector ---
+const reportCollector = new PrintReportCollector(store, config);
+
 // --- HTTP Server ---
-const restHandler = createRestRouter(store, config, aiMonitor);
+const restHandler = createRestRouter(store, config, aiMonitor, reportCollector);
+const octoPrintHandler = createOctoPrintRouter(store, bridge, config);
+const moonrakerHandler = createMoonrakerRouter(store, bridge, config);
+const moonrakerServer = new MoonrakerServer(store, bridge, config);
 const httpServer = createServer((req, res) => {
   const url = req.url || '';
   if (url === '/mcp' || url.startsWith('/mcp?')) {
@@ -82,6 +93,33 @@ const httpServer = createServer((req, res) => {
     });
     return;
   }
+
+  // OctoPrint compatibility API
+  if (url === '/octoprint' || url.startsWith('/octoprint/') || url.startsWith('/octoprint?')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (octoPrintHandler(req, res)) return;
+  }
+
+  // Moonraker compatibility API
+  if (url === '/moonraker' || url.startsWith('/moonraker/') || url.startsWith('/moonraker?')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (moonrakerHandler(req, res)) return;
+  }
+
   restHandler(req, res);
 });
 
@@ -116,6 +154,9 @@ async function start(): Promise<void> {
   await persistence.load();
   persistence.start();
 
+  // Initialize report collector
+  await reportCollector.init();
+
   // Start MQTT connection
   bridge.connect();
 
@@ -123,6 +164,9 @@ async function start(): Promise<void> {
   httpServer.listen(config.servicePort, '0.0.0.0', () => {
     log.info(`Listening on :${config.servicePort}`);
   });
+
+  // Start dedicated Moonraker compat server
+  moonrakerServer.start();
 
   // Start Telegram bot if configured
   if (telegram) {
@@ -140,6 +184,7 @@ function shutdown(): void {
   log.info('Shutting down...');
   aiMonitor?.stop();
   persistence.stop();
+  moonrakerServer.stop();
   wsTransport.close();
   telegram?.stop();
   bridge.disconnect();

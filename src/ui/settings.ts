@@ -3,6 +3,7 @@
 import { $ } from './helpers';
 import { toast } from './toast';
 import { renderSpoolCalc } from './spool-calc';
+import { renderHelp } from './help';
 
 // ---- Card layout settings (localStorage) ----
 
@@ -99,12 +100,13 @@ export function openSettings(): void {
   renderSettingsContent();
 }
 
-/** Switch between main tabs (dashboard / settings / tools) */
-export function switchToTab(tab: 'dashboard' | 'settings' | 'tools'): void {
+/** Switch between main tabs (dashboard / settings / tools / help) */
+export function switchToTab(tab: 'dashboard' | 'settings' | 'tools' | 'help'): void {
   const connectDialog = document.getElementById('connect-dialog');
   const dashboard = document.getElementById('dashboard');
   const settingsPage = document.getElementById('settings-tab-content');
   const toolsPage = document.getElementById('tools-tab-content');
+  const helpPage = document.getElementById('help-tab-content');
   const tabs = document.querySelectorAll('.main-tab');
 
   if (!dashboard || !settingsPage) return;
@@ -117,6 +119,7 @@ export function switchToTab(tab: 'dashboard' | 'settings' | 'tools'): void {
   // Hide all pages first
   settingsPage.classList.add('hidden');
   toolsPage?.classList.add('hidden');
+  helpPage?.classList.add('hidden');
   dashboard.classList.add('hidden');
   connectDialog?.classList.add('hidden');
 
@@ -133,6 +136,9 @@ export function switchToTab(tab: 'dashboard' | 'settings' | 'tools'): void {
   } else if (tab === 'tools') {
     toolsPage?.classList.remove('hidden');
     renderSpoolCalc();
+  } else if (tab === 'help') {
+    helpPage?.classList.remove('hidden');
+    renderHelp();
   }
 }
 

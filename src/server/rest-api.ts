@@ -22,11 +22,13 @@ import sharp from 'sharp';
 import type { StateStore } from './state-store.js';
 import type { ServiceConfig } from './config.js';
 import type { AIMonitor, AILabelConfig } from './ai-monitor.js';
+import type { PrintReportCollector } from './print-report-collector.js';
+import { generateReportPDF } from './print-report-pdf.js';
 import { getLogger } from './logger.js';
 import { STATUS_NAMES, SUB_STATUS_NAMES, SPEED_MODE_NAMES, EXCEPTION_NAMES } from '../types.js';
 import type { FanInfo } from '../types.js';
 
-const log = getLogger('Camera');
+const log = getLogger('REST');
 const debugLog = getLogger('Debug');
 
 const JPEG_START = Buffer.from([0xff, 0xd8]);
@@ -359,7 +361,7 @@ function addOverlayClient(res: ServerResponse, config: ServiceConfig): void {
   startMjpegUpstream(config.cameraUrl);
 }
 
-export function createRestRouter(store: StateStore, config: ServiceConfig, aiMonitor?: AIMonitor | null) {
+export function createRestRouter(store: StateStore, config: ServiceConfig, aiMonitor?: AIMonitor | null, reportCollector?: PrintReportCollector | null) {
   overlayStore = store;
   return (req: IncomingMessage, res: ServerResponse) => {
     const url = req.url || '';
@@ -394,6 +396,28 @@ export function createRestRouter(store: StateStore, config: ServiceConfig, aiMon
         canvas: store.canvas,
         files: store.files,
       }));
+      return;
+    }
+
+    // /webcam/?action=stream|snapshot (mjpegstreamer-compatible)
+    if (url.startsWith('/webcam/') || url === '/webcam') {
+      const qIdx = url.indexOf('?');
+      const qs = qIdx >= 0 ? url.slice(qIdx + 1) : '';
+      const action = new URLSearchParams(qs).get('action');
+      if (action === 'stream') {
+        if (!config.cameraEnabled) { res.writeHead(503); res.end('Camera disabled'); return; }
+        addStreamClient(res, config);
+        return;
+      }
+      // Default to snapshot
+      getSnapshot(config).then((jpeg) => {
+        if (jpeg) {
+          res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache', 'Content-Length': jpeg.length });
+          res.end(jpeg);
+        } else {
+          res.writeHead(503, { 'Content-Type': 'text/plain' }); res.end('Camera unavailable');
+        }
+      }).catch(() => { res.writeHead(500); res.end('Internal error'); });
       return;
     }
 
@@ -807,6 +831,122 @@ export function createRestRouter(store: StateStore, config: ServiceConfig, aiMon
     if (url === '/api/metrics/prometheus' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
       res.end(buildPrometheusMetrics(store));
+      return;
+    }
+
+    // ── Print Reports ───────────────────────────────────────────────
+    if (url === '/api/reports' && req.method === 'GET') {
+      if (!reportCollector) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reports: [] }));
+        return;
+      }
+      reportCollector.listReports().then(reports => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reports, active: reportCollector.isActive() }));
+      }).catch(() => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to list reports' }));
+      });
+      return;
+    }
+
+    if (url.startsWith('/api/reports/') && req.method === 'GET') {
+      if (!reportCollector) { res.writeHead(404); res.end('Not found'); return; }
+      const parts = url.slice('/api/reports/'.length).split('/');
+      const reportId = decodeURIComponent(parts[0]);
+      const action = parts[1];
+
+      // Validate report ID
+      if (!reportId || reportId.includes('..')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid report ID' }));
+        return;
+      }
+
+      // GET /api/reports/:id/pdf — Download PDF
+      if (action === 'pdf') {
+        Promise.all([
+          reportCollector.getReport(reportId),
+          reportCollector.getChartData(reportId),
+        ]).then(async ([report, chartData]) => {
+          if (!report) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Report not found' }));
+            return;
+          }
+          const pdf = await generateReportPDF(report, chartData ?? [], join(config.dataDir, 'reports'));
+          const safeName = report.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+          res.writeHead(200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="report-${safeName}.pdf"`,
+            'Content-Length': pdf.length,
+          });
+          res.end(pdf);
+        }).catch((err) => {
+          log.error(`PDF generation failed: ${err}`);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'PDF generation failed' }));
+          }
+        });
+        return;
+      }
+
+      // GET /api/reports/:id/snapshot/:filename — Download snapshot JPEG
+      if (action === 'snapshot' && parts[2]) {
+        const snapName = decodeURIComponent(parts[2]);
+        if (snapName.includes('..') || !snapName.endsWith('.jpg')) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid snapshot filename' }));
+          return;
+        }
+        reportCollector.getSnapshot(reportId, snapName).then(jpeg => {
+          if (jpeg) {
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': jpeg.length });
+            res.end(jpeg);
+          } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Snapshot not found' }));
+          }
+        }).catch(() => {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Failed to read snapshot' }));
+        });
+        return;
+      }
+
+      // GET /api/reports/:id — Report JSON
+      reportCollector.getReport(reportId).then(report => {
+        if (report) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(report));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Report not found' }));
+        }
+      }).catch(() => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to read report' }));
+      });
+      return;
+    }
+
+    if (url.startsWith('/api/reports/') && req.method === 'DELETE') {
+      if (!reportCollector) { res.writeHead(404); res.end('Not found'); return; }
+      const reportId = decodeURIComponent(url.slice('/api/reports/'.length));
+      if (!reportId || reportId.includes('..')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid report ID' }));
+        return;
+      }
+      reportCollector.deleteReport(reportId).then(ok => {
+        res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok }));
+      }).catch(() => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to delete report' }));
+      });
       return;
     }
 

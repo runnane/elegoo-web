@@ -201,6 +201,10 @@ body {
   opacity: 0.3;
 }
 
+.thumbnail-dark {
+  background: #484858 !important;
+}
+
 .print-info { flex: 1; min-width: 0; }
 
 .print-file {
@@ -1792,6 +1796,48 @@ body {
 }
 .history-page-info { font-size: 0.85em; color: var(--text-muted); }
 
+/* ─── Print Reports ────────────────────────── */
+.report-entry {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+.report-entry-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.report-filename {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.report-entry-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+  padding-left: 26px;
+  font-size: 0.82em;
+  color: var(--text-muted);
+}
+.report-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  padding-left: 26px;
+}
+.report-active {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(33, 150, 243, 0.12);
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  color: var(--text);
+  font-size: 0.9em;
+}
+
 /* ─── Maintenance ──────────────────────────── */
 .maintenance-grid {
   display: grid;
@@ -2107,4 +2153,75 @@ body {
   .spool-calc-stats {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* === Help Tab === */
+.help-section {
+  margin-bottom: 24px;
+}
+.help-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+.help-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 12px 0 6px;
+}
+.help-section p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.help-section code {
+  background: var(--bg-input);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.help-section pre {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 6px 0 12px;
+}
+.help-section pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+.help-api, .help-ports {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.help-api th, .help-ports th {
+  text-align: left;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--border);
+}
+.help-api td, .help-ports td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.help-api tr:hover, .help-ports tr:hover {
+  background: var(--bg-secondary);
 }

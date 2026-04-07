@@ -20,4 +20,5 @@ export { openSettings, applyCardLayout, renderSettingsContent, switchToTab } fro
 export { handleEventLog, loadEventLogHistory, renderEventLog } from './event-log';
 export { renderPrintHistory, bindHistoryControls, setHistoryClient, requestHistory } from './print-history';
 export { renderMaintenance, bindMaintenanceControls, setMaintenanceClient } from './maintenance';
+export { renderReports, refreshReports, bindReportControls } from './print-reports';
 

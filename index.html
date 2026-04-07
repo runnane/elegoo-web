@@ -24,6 +24,7 @@
         <button class="main-tab active" data-tab="dashboard">🖨️ Dashboard</button>
         <button class="main-tab" data-tab="tools">🧮 Tools</button>
         <button class="main-tab" data-tab="settings">⚙️ Settings</button>
+        <button class="main-tab" data-tab="help">❓ Help</button>
       </nav>
     </div>
     <div class="header-right">
@@ -433,6 +434,17 @@
           <div id="print-history-total"></div>
         </div>
 
+        <!-- Print Reports -->
+        <div class="card" id="print-reports-card">
+          <div class="card-header">
+            <h3>📊 Print Reports</h3>
+            <button id="btn-reports-refresh" class="btn btn-sm btn-ghost" title="Refresh reports">⟳ Refresh</button>
+          </div>
+          <div id="print-reports-entries">
+            <div class="file-empty">Click refresh to load reports</div>
+          </div>
+        </div>
+
         <!-- Files -->
         <div class="card" id="files-card">
           <div class="files-header">
@@ -545,6 +557,14 @@
       <div class="settings-page-inner">
         <h2 class="settings-page-title">⚙️ Settings</h2>
         <div id="settings-content" class="settings-content-full"></div>
+      </div>
+    </div>
+
+    <!-- Help tab -->
+    <div id="help-tab-content" class="settings-page hidden">
+      <div class="settings-page-inner" style="max-width: 1000px">
+        <h2 class="settings-page-title">❓ Help &amp; API Reference</h2>
+        <div id="help-content"></div>
       </div>
     </div>
   </main>

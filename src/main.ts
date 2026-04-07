@@ -21,6 +21,7 @@ import {
   toggleCameraOverlay,
   renderPrintHistory, bindHistoryControls, setHistoryClient, requestHistory,
   renderMaintenance, bindMaintenanceControls, setMaintenanceClient,
+  renderReports, bindReportControls,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
 
@@ -111,6 +112,7 @@ function scheduleRender(): void {
       renderLayerTimeChart(state);
       renderPrintHistory(state);
       renderMaintenance(state);
+      renderReports();
       renderLog(logStore);
       renderStructuredLog(logStore);
     }
@@ -155,6 +157,7 @@ function showDashboard(): void {
     $('timelapse-refresh').addEventListener('click', () => requestTimelapseList());
     bindHistoryControls();
     bindMaintenanceControls();
+    bindReportControls();
     $('timelapse-close').addEventListener('click', () => {
       const player = $('timelapse-player') as HTMLVideoElement;
       player.pause();
@@ -502,7 +505,7 @@ connectToService();
 // Tab navigation
 document.querySelectorAll('.main-tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    const tab = (btn as HTMLElement).dataset.tab as 'dashboard' | 'settings' | 'tools';
+    const tab = (btn as HTMLElement).dataset.tab as 'dashboard' | 'settings' | 'tools' | 'help';
     switchToTab(tab);
   });
 });

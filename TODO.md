@@ -2,19 +2,9 @@
 
 ## High Priority
 
-- [ ] Hvordan kan jeg laste opp filer?
-  - CC2 supports `PUT http://<printer_ip>:80/upload` (stock firmware). SDK sends `Content-Range`, `Content-Type: application/octet-stream`. Server needs a proxy endpoint to forward uploads to the printer.
-  - Newer SDK also sends `X-File-Name`, `X-File-MD5`, `X-Token` headers.
-- [ ] vi trenger et MCP server endpoint
-- [ ] vi trenger en octoprint emulator server 
-- [ ] vi trenger en moonraker emulator server
-- [ ] vi trenger å lage en summary rapport pr print, som viser stats fra print med all info og bilder vi har logget under print. Vi ønsker å lage en god PDF med fine grafer og screenshots og info.
-- [ ] Vi trenger en ny tab for Help som dokumenterer API, prom, MCP, octoprint, moonraker, command reference etc
-- [ ] thumbnail er vanskelig å se når vi har mørkt filament og mørk bakgrunn. Dette må automatisk justeres basert på fargen på bildet/filamentet i bildet. 
-
+- [x] ~~Print summary report per print — PDF with stats, charts, camera snapshots, and event log. Auto-generated on print completion. REST API + UI panel + PDFKit generation.~~
 
 ## Medium Priority
-
 
 
 ## Lower Priority / Nice-to-Have
@@ -40,6 +30,9 @@
 
 ## Completed
 
+- [x] **MCP server endpoint** — Full MCP server at `/mcp` with resources (printer-status, printer-files, printer-metrics) and tools (get_printer_status, temperatures, print control, fan/speed/LED, file list, raw command)
+- [x] **OctoPrint compatibility API** — Emulates OctoPrint REST API at `/octoprint/api/*` for compatible clients (version, printer state, job, temperatures, bed/tool/chamber, printhead, files, settings, printerprofiles, connection)
+- [x] **Moonraker compatibility API** — Emulates Moonraker REST API at `/moonraker/*` for Mainsail/Fluidd/KlipperScreen (server info, printer info, objects query/list, print control, gcode, files, temperature store, webcams)
 - [x] **Event Log panel** — Shows important events (print start/complete/fail, errors, milestones, layer changes every 10 layers) with icons, timestamps, and severity colors
 - [x] **AI label config page** — Settings modal section to customize CLIP/SigLIP classification labels, issue types, severity (OK/WARNING/CRITICAL), and warn/crit thresholds. Persisted to disk.
 - [x] Temperature display with live values and target bars
@@ -118,3 +111,6 @@
 - [x] **Self-check wizard** — Maintenance card with Self-Check (1035), Auto-Level (1032), Vibration (1033), PID (1034) buttons with status display
 - [x] vi trenger et api metrics endpoint med json data for stats
 - [x] vi trenger et prometheus metrics endpoint
+- [x] Vi trenger en ny tab for Help som dokumenterer API, prom, MCP, octoprint, moonraker, command reference etc
+- [x] thumbnail er vanskelig å se når vi har mørkt filament og mørk bakgrunn. Dette må automatisk justeres basert på fargen på bildet/filamentet i bildet. 
+- [x] Hvorfor har denne logentrien [Camera] prefix: "[svc] 2026-04-07 11:00:57 info [Camera] Download proxy: ECC2_0.4_Elegoo Nameplate_Elegoo PLA _0.2_17m28s.gcode from /download"

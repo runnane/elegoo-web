@@ -17,6 +17,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8088',
       },
+      '/mcp': {
+        target: 'http://localhost:8088',
+      },
+      '/octoprint': {
+        target: 'http://localhost:8088',
+      },
+      '/moonraker': {
+        target: 'http://localhost:8088',
+      },
+      '/webcam': {
+        target: 'http://localhost:8088',
+      },
     },
   },
 });

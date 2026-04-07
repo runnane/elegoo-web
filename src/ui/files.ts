@@ -1,6 +1,6 @@
 import type { PrinterState } from '../printer-state';
 import type { CommandSender } from '../ws-client';
-import { $, escapeHtml, escapeAttr, formatTime } from './helpers';
+import { $, escapeHtml, escapeAttr, formatTime, applyDarkThumbnailCheck } from './helpers';
 
 let currentSource: 'local' | 'u-disk' = 'local';
 let currentDir = '/';
@@ -53,7 +53,11 @@ function showThumbnailPopup(base64: string, anchor: HTMLElement): void {
   closeThumbnailPopup();
   const popup = document.createElement('div');
   popup.className = 'file-thumbnail-popup';
-  popup.innerHTML = `<img src="data:image/png;base64,${base64}" alt="Thumbnail">`;
+  const img = document.createElement('img');
+  img.src = `data:image/png;base64,${base64}`;
+  img.alt = 'Thumbnail';
+  popup.appendChild(img);
+  applyDarkThumbnailCheck(img, popup);
   document.body.appendChild(popup);
 
   // Position near anchor
@@ -184,7 +188,12 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
       const filename = item?.dataset.filename;
       if (filename && confirm(`Delete ${filename}?`)) {
         const fullPath = currentDir === '/' ? filename : currentDir.replace(/^\//, '') + '/' + filename;
-        client.sendCommand(1047, { storage_media: currentSource, file_path: fullPath });
+        client.sendCommand(1047, { storage_media: currentSource, file_path: [fullPath] });
+        // Refresh file list after delete
+        setTimeout(() => {
+          client.sendCommand(1044, { storage_media: currentSource, dir: currentDir, offset: 0, limit: 200 });
+          client.sendCommand(1048, { storage_media: currentSource });
+        }, 500);
       }
     });
   });

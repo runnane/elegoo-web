@@ -1,7 +1,7 @@
 import type { PrinterState } from '../printer-state';
 import type { CommandSender } from '../ws-client';
 import { STATUS_NAMES, SUB_STATUS_NAMES, EXCEPTION_NAMES, CRITICAL_EXCEPTIONS } from '../types';
-import { $, formatTime, formatClock, fanPct, escapeHtml } from './helpers';
+import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
 import { loadUISettings, saveUISettings } from './ui-settings';
 
 let lastThumbnailFile = '';
@@ -130,10 +130,12 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
     thumbImg.src = `data:image/png;base64,${state.thumbnail}`;
     thumbImg.classList.remove('hidden');
     thumbPlaceholder.classList.add('hidden');
+    applyDarkThumbnailCheck(thumbImg, $('print-thumbnail-wrap'));
   } else {
     thumbImg.classList.add('hidden');
     thumbPlaceholder.classList.remove('hidden');
     thumbPlaceholder.textContent = state.thumbnailFailed ? 'No preview' : '🖨️';
+    $('print-thumbnail-wrap').classList.remove('thumbnail-dark');
   }
 
   // Print filename

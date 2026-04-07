@@ -21,6 +21,9 @@ export interface ServiceConfig {
   // Data persistence
   dataDir: string;
 
+  // Moonraker compat server (optional)
+  moonrakerPort: number;
+
   // AI monitoring (optional)
   aiEnabled: boolean;
   aiVlmEnabled: boolean;
@@ -55,6 +58,7 @@ export function loadConfig(): ServiceConfig {
     telegramChatId,
     progressInterval: parseInt(env('PROGRESS_INTERVAL', '25'), 10) || 25,
     dataDir: env('DATA_DIR') || './data',
+    moonrakerPort: parseInt(env('MOONRAKER_PORT', '7125'), 10),
 
     // AI monitoring
     aiEnabled: env('AI_ENABLED') === 'true',
