@@ -2,7 +2,7 @@
  * Print Reports UI — lists saved print reports with download buttons.
  */
 
-import { $, escapeHtml, formatTime } from './helpers';
+import { $, escapeHtml, formatTime, fetchTimeout } from './helpers';
 
 interface ReportSummary {
   id: string;
@@ -27,7 +27,7 @@ async function loadReports(): Promise<void> {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/reports');
+    const res = await fetchTimeout('/api/reports');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json() as { reports: ReportSummary[]; active: boolean };
 
@@ -76,7 +76,7 @@ async function loadReports(): Promise<void> {
         const id = (btn as HTMLElement).dataset.reportId;
         if (!id || !confirm(`Delete report for this print?`)) return;
         try {
-          const res = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          const res = await fetchTimeout(`/api/reports/${encodeURIComponent(id)}`, { method: 'DELETE' });
           if (res.ok) {
             reportsLoaded = false;
             loadReports();

@@ -26,7 +26,8 @@ export type BridgeEvent =
   | { type: 'print_failed'; filename: string; reason: string }
   | { type: 'print_progress'; filename: string; progress: number; layer: number; totalLayers: number; remaining: number }
   | { type: 'error'; codes: number[]; names: string[] }
-  | { type: 'filament_runout' };
+  | { type: 'filament_runout' }
+  | { type: 'first_layer_complete'; filename: string; totalLayers: number; durationSec: number };
 
 /** Deep-merge delta into base (same logic as printer-state.ts) */
 function deepMerge(base: Record<string, unknown>, update: Record<string, unknown>): Record<string, unknown> {
@@ -63,6 +64,8 @@ export class MqttBridge extends EventEmitter {
   private lastExceptions: number[] = [];
   private wasFilamentDetected = true;
   private totalLayers = 0;
+  private lastLayer = 0;
+  private lastLayerTime = 0;
 
   constructor(
     private printerIp: string,
@@ -247,6 +250,8 @@ export class MqttBridge extends EventEmitter {
     // Print started
     if (machineStatus === 2 && this.lastMachineStatus !== 2) {
       this.lastProgressNotified = -1;
+      this.lastLayer = 0;
+      this.lastLayerTime = 0;
       this.totalLayers = ps?.total_layer ?? 0;
       // Request file detail to get total layers
       if (ps?.filename) {
@@ -280,8 +285,30 @@ export class MqttBridge extends EventEmitter {
       this.lastProgressNotified = -1;
     }
 
-    // Progress updates at configured intervals
+    // First layer complete detection + progress updates
     if (machineStatus === 2 && ps) {
+      const currentLayer = ps.current_layer ?? 0;
+      const now = Date.now();
+
+      // Detect first layer completion (transition from layer 1 to layer 2)
+      if (currentLayer > 1 && this.lastLayer === 1 && this.lastLayerTime > 0) {
+        const durationSec = (now - this.lastLayerTime) / 1000;
+        if (durationSec < 600) {
+          this.emit('event', {
+            type: 'first_layer_complete',
+            filename: ps.filename ?? 'unknown',
+            totalLayers: this.totalLayers || ps.total_layer || 0,
+            durationSec,
+          } satisfies BridgeEvent);
+        }
+      }
+
+      if (currentLayer !== this.lastLayer && currentLayer > 0) {
+        this.lastLayer = currentLayer;
+        this.lastLayerTime = now;
+      }
+
+      // Progress updates at configured intervals
       const progress = ms.progress ?? 0;
       const nextThreshold = this.lastProgressNotified + this.progressInterval;
       if (progress >= nextThreshold && progress < 100) {

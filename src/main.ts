@@ -13,7 +13,7 @@ import {
   renderBedMesh,
   renderGcodePreview,
   renderLayerTimeChart,
-  updateServiceStatus,
+  updateServiceStatus, fetchTimeout,
   handleAIAnalysis, handleAIAlert, updateAIStatus,
   openSettings, applyCardLayout, renderSettingsContent, switchToTab,
   currentFileSource, currentFileDir, handleThumbnailResponse,
@@ -22,6 +22,8 @@ import {
   renderPrintHistory, bindHistoryControls, setHistoryClient, requestHistory,
   renderMaintenance, bindMaintenanceControls, setMaintenanceClient,
   renderReports, bindReportControls,
+  handleFileDetailForPrint,
+  bindGcodePreviewControls,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
 
@@ -158,6 +160,7 @@ function showDashboard(): void {
     bindHistoryControls();
     bindMaintenanceControls();
     bindReportControls();
+    bindGcodePreviewControls();
     $('timelapse-close').addEventListener('click', () => {
       const player = $('timelapse-player') as HTMLVideoElement;
       player.pause();
@@ -172,7 +175,7 @@ function showDashboard(): void {
     $('btn-reset-layer-data').addEventListener('click', async () => {
       if (!confirm('Reset all layer duration data?')) return;
       try {
-        const res = await fetch('/api/layer-data', { method: 'DELETE' });
+        const res = await fetchTimeout('/api/layer-data', { method: 'DELETE' });
         if (res.ok) {
           toast('Layer data reset', 'success');
         } else {
@@ -222,7 +225,7 @@ function showDashboard(): void {
       toggleCameraOverlay();
     });
 
-    // Camera snapshot download
+    // Camera snapshot download with retry (max 3 attempts, exponential backoff)
     const snapshotBtn = $('camera-snapshot-btn') as HTMLButtonElement;
     snapshotBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -230,8 +233,20 @@ function showDashboard(): void {
       snapshotBtn.disabled = true;
       snapshotBtn.textContent = '⏳ ...';
       try {
-        const res = await fetch('/api/snapshot');
-        if (!res.ok) {
+        let res: Response | undefined;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            snapshotBtn.textContent = `⏳ retry ${attempt}...`;
+            await new Promise(r => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+          }
+          try {
+            res = await fetchTimeout('/api/snapshot');
+            if (res.ok) break;
+          } catch {
+            res = undefined;
+          }
+        }
+        if (!res || !res.ok) {
           toast('Snapshot failed', 'error');
           return;
         }
@@ -406,6 +421,29 @@ function connectToService(): void {
       if (method === 1045) {
         handleThumbnailResponse(state);
       }
+      if (method === 1046) {
+        handleFileDetailForPrint(state);
+      }
+      // After move/home, request fresh status and flash position
+      if ((method === 1026 || method === 1027) && client) {
+        client.sendCommand(1002, {});
+        const pos = state.gcode_move;
+        if (pos) {
+          const x = pos.x?.toFixed(1) ?? '--';
+          const y = pos.y?.toFixed(1) ?? '--';
+          const z = pos.z?.toFixed(1) ?? '--';
+          toast(`Position: X${x} Y${y} Z${z}`, 'success');
+        }
+        // Flash the position display
+        for (const id of ['pos-x', 'pos-y', 'pos-z']) {
+          const el = document.getElementById(id);
+          if (el) {
+            el.classList.remove('pos-flash');
+            void el.offsetWidth; // force reflow
+            el.classList.add('pos-flash');
+          }
+        }
+      }
       if (method === 1051) {
         requestAnimationFrame(() => renderTimelapse(state));
       }
@@ -501,6 +539,21 @@ $('connect-btn').addEventListener('click', () => {
 
 // Auto-connect on page load
 connectToService();
+
+// Ship uncaught client errors to server for logging
+function reportClientError(message: string, stack?: string, url?: string, line?: number, col?: number): void {
+  try {
+    navigator.sendBeacon('/api/client-error', JSON.stringify({ message, stack, url, line, col }));
+  } catch { /* ignore */ }
+}
+window.addEventListener('error', (e) => {
+  reportClientError(e.message, e.error?.stack, e.filename, e.lineno, e.colno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = e.reason instanceof Error ? e.reason.message : String(e.reason);
+  const stack = e.reason instanceof Error ? e.reason.stack : undefined;
+  reportClientError(msg, stack);
+});
 
 // Tab navigation
 document.querySelectorAll('.main-tab').forEach(btn => {

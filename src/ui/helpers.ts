@@ -2,6 +2,13 @@ export function $(id: string): HTMLElement {
   return document.getElementById(id)!;
 }
 
+/** Fetch with AbortController timeout (default 15s). Throws on timeout. */
+export function fetchTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 15_000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
+}
+
 export function formatTime(seconds: number): string {
   if (!seconds || seconds < 0) return '--';
   const h = Math.floor(seconds / 3600);

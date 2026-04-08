@@ -42,15 +42,42 @@ function env(key: string, fallback = ''): string {
   return process.env[key] || fallback;
 }
 
+const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+function validatePort(value: number, name: string): void {
+  if (!Number.isFinite(value) || value < 1 || value > 65535) {
+    throw new Error(`Invalid ${name}: ${value} (must be 1-65535)`);
+  }
+}
+
 export function loadConfig(): ServiceConfig {
   const printerIp = env('PRINTER_IP', '172.20.100.236');
+
+  // Validate required values
+  if (!printerIp || !IP_RE.test(printerIp)) {
+    throw new Error(`Invalid PRINTER_IP: "${printerIp}" (must be a valid IPv4 address)`);
+  }
+  const octets = printerIp.split('.').map(Number);
+  if (octets.some(o => o > 255)) {
+    throw new Error(`Invalid PRINTER_IP: "${printerIp}" (octet out of range)`);
+  }
+
+  const servicePort = parseInt(env('SERVICE_PORT', '8088'), 10);
+  validatePort(servicePort, 'SERVICE_PORT');
+
+  const moonrakerPort = parseInt(env('MOONRAKER_PORT', '7125'), 10);
+  validatePort(moonrakerPort, 'MOONRAKER_PORT');
+
   const telegramToken = env('TELEGRAM_BOT_TOKEN');
   const telegramChatId = env('TELEGRAM_CHAT_ID');
+  if (telegramChatId && !/^-?\d+$/.test(telegramChatId)) {
+    throw new Error(`Invalid TELEGRAM_CHAT_ID: "${telegramChatId}" (must be a numeric string)`);
+  }
 
   return {
     printerIp,
     printerPassword: env('PRINTER_PASSWORD', '123456'),
-    servicePort: parseInt(env('SERVICE_PORT', '8088'), 10),
+    servicePort,
     cameraEnabled: env('CAMERA_ENABLED') !== 'false',
     cameraUrl: env('CAMERA_URL') || `http://${printerIp}:8080`,
     telegramEnabled: !!(telegramToken && telegramChatId),
@@ -58,7 +85,7 @@ export function loadConfig(): ServiceConfig {
     telegramChatId,
     progressInterval: parseInt(env('PROGRESS_INTERVAL', '25'), 10) || 25,
     dataDir: env('DATA_DIR') || './data',
-    moonrakerPort: parseInt(env('MOONRAKER_PORT', '7125'), 10),
+    moonrakerPort,
 
     // AI monitoring
     aiEnabled: env('AI_ENABLED') === 'true',

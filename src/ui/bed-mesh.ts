@@ -34,15 +34,21 @@ export function renderBedMesh(state: PrinterState): void {
   const rows = mesh.length;
   const cols = mesh[0].length;
 
-  // Collect all values for min/max
+  // Validate: all rows must have same length
+  const expectedCols = mesh[0].length;
+  if (mesh.some(row => row.length !== expectedCols)) return;
+
+  // Collect all values for min/max, skipping NaN
   let minVal = Infinity;
   let maxVal = -Infinity;
   for (const row of mesh) {
     for (const val of row) {
+      if (!Number.isFinite(val)) continue;
       if (val < minVal) minVal = val;
       if (val > maxVal) maxVal = val;
     }
   }
+  if (!Number.isFinite(minVal)) return; // all NaN — nothing to render
 
   const range = maxVal - minVal || 0.1;
 
@@ -66,10 +72,23 @@ export function renderBedMesh(state: PrinterState): void {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const val = mesh[r][c];
-      const norm = (val - minVal) / range; // 0..1
-      const color = meshColor(norm);
       const x = pad.left + c * cellW;
       const y = pad.top + r * cellH;
+
+      if (!Number.isFinite(val)) {
+        // NaN / Infinity cell — draw grey with '?'
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x, y, cellW - 1, cellH - 1);
+        ctx.fillStyle = '#888';
+        ctx.font = `${Math.min(11, cellW / 4)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('?', x + cellW / 2, y + cellH / 2);
+        continue;
+      }
+
+      const norm = (val - minVal) / range; // 0..1
+      const color = meshColor(norm);
 
       ctx.fillStyle = color;
       ctx.fillRect(x, y, cellW - 1, cellH - 1);

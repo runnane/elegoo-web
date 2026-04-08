@@ -1090,6 +1090,7 @@ export class MoonrakerServer {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Key',
+        'Access-Control-Max-Age': '86400',
       });
       res.end();
       return;

@@ -29,6 +29,7 @@
     "@huggingface/transformers": "^4.0.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.0",
+    "gcode-preview": "^2.18.0",
     "grammy": "^1.35.0",
     "mqtt": "^5.10.0",
     "pdfkit": "^0.18.0",

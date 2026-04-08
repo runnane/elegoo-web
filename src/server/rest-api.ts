@@ -371,6 +371,7 @@ export function createRestRouter(store: StateStore, config: ServiceConfig, aiMon
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Max-Age', '86400');
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
@@ -950,9 +951,39 @@ export function createRestRouter(store: StateStore, config: ServiceConfig, aiMon
       return;
     }
 
+    // ── Client error reporting ───────────────────────────────────────
+    if (url === '/api/client-error' && req.method === 'POST') {
+      handleClientError(req, res);
+      return;
+    }
+
     // Not an API route — let ws-transport or 404 handle it
     res.writeHead(404);
     res.end('Not found');
+
+    function handleClientError(req: IncomingMessage, res: ServerResponse): void {
+      let body = '';
+      req.on('data', (chunk: Buffer) => {
+        if (body.length > 8192) return; // cap at 8KB
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body) as { message?: string; stack?: string; url?: string; line?: number; col?: number };
+          const msg = typeof data.message === 'string' ? data.message.slice(0, 500) : 'unknown';
+          const stack = typeof data.stack === 'string' ? data.stack.slice(0, 2000) : '';
+          const url = typeof data.url === 'string' ? data.url.slice(0, 200) : '';
+          const line = typeof data.line === 'number' ? data.line : 0;
+          const col = typeof data.col === 'number' ? data.col : 0;
+          log.warn(`[ClientError] ${msg} at ${url}:${line}:${col}${stack ? '\\n' + stack : ''}`);
+          res.writeHead(204);
+          res.end();
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+    }
   };
 }
 

@@ -1,21 +1,27 @@
 import type { CommandSender } from '../ws-client';
-import { $ } from './helpers';
+import { $, fetchTimeout } from './helpers';
 
 let controlsBound = false;
 
-/** Track in-flight commands by method → elements to re-enable */
-const inFlight = new Map<number, { elements: HTMLElement[]; timer: ReturnType<typeof setTimeout> }>();
+/** Track in-flight commands by unique ID → method + elements to re-enable */
+let nextCmdId = 0;
+const inFlight = new Map<number, { method: number; elements: HTMLElement[]; timer: ReturnType<typeof setTimeout> }>();
 
-/** Called when a command response is received — re-enables guarded buttons */
+/** Per-method throttle: timestamp of last command sent */
+const THROTTLE_MS = 100;
+const lastSentAt = new Map<number, number>();
+
+/** Called when a command response is received — re-enables all guarded buttons for that method */
 export function onCommandResponse(method: number): void {
-  const entry = inFlight.get(method);
-  if (!entry) return;
-  clearTimeout(entry.timer);
-  for (const el of entry.elements) {
-    (el as HTMLButtonElement).disabled = false;
-    el.classList.remove('cmd-pending');
+  for (const [id, entry] of inFlight) {
+    if (entry.method !== method) continue;
+    clearTimeout(entry.timer);
+    for (const el of entry.elements) {
+      (el as HTMLButtonElement).disabled = false;
+      el.classList.remove('cmd-pending');
+    }
+    inFlight.delete(id);
   }
-  inFlight.delete(method);
 }
 
 /** Send a command and disable the triggering element(s) until response or timeout */
@@ -25,6 +31,11 @@ function guardedSend(
   params: Record<string, unknown>,
   ...elements: HTMLElement[]
 ): void {
+  // Per-method throttle: drop if sent too recently
+  const now = Date.now();
+  if (now - (lastSentAt.get(method) ?? 0) < THROTTLE_MS) return;
+  lastSentAt.set(method, now);
+
   // Disable elements
   for (const el of elements) {
     (el as HTMLButtonElement).disabled = true;
@@ -46,25 +57,18 @@ function guardedSend(
   };
   const timeout = timeouts[method] ?? 10_000;
 
+  const cmdId = nextCmdId++;
   const timer = setTimeout(() => {
-    for (const el of elements) {
+    const entry = inFlight.get(cmdId);
+    if (!entry) return;
+    for (const el of entry.elements) {
       (el as HTMLButtonElement).disabled = false;
       el.classList.remove('cmd-pending');
     }
-    inFlight.delete(method);
+    inFlight.delete(cmdId);
   }, timeout);
 
-  // If there's already an in-flight for this method, clear old timer
-  const existing = inFlight.get(method);
-  if (existing) {
-    clearTimeout(existing.timer);
-    for (const el of existing.elements) {
-      (el as HTMLButtonElement).disabled = false;
-      el.classList.remove('cmd-pending');
-    }
-  }
-
-  inFlight.set(method, { elements, timer });
+  inFlight.set(cmdId, { method, elements, timer });
 }
 
 /** Bind all control event handlers */
@@ -212,11 +216,11 @@ export function bindControls(client: CommandSender): void {
     captureBtn.disabled = true;
     captureBtn.textContent = `⏳ ${duration}s...`;
     try {
-      const res = await fetch('/api/debug/capture', {
+      const res = await fetchTimeout('/api/debug/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ duration }),
-      });
+      }, 30_000);
       const data = await res.json() as { ok?: boolean; file?: string; error?: string };
       if (!res.ok) {
         captureBtn.textContent = '❌ ' + (data.error ?? 'Error');

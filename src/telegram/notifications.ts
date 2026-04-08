@@ -90,6 +90,12 @@ export function formatEvent(event: BridgeEvent): { text: string; urgent: boolean
         urgent: true,
       };
 
+    case 'first_layer_complete':
+      return {
+        text: `🥇 *First Layer Complete\!*\n📄 ${esc(event.filename)}\n⏱ Layer took: ${esc(formatDuration(event.durationSec))}`,
+        urgent: false,
+      };
+
     default:
       return { text: '', urgent: false };
   }

@@ -39,6 +39,10 @@ export class PrinterState {
   thumbnailFailed = false; // true when printer returns error (e.g. no embedded thumbnail)
   fileTotalLayers: number | null = null;
   fileFilamentUsed: number | null = null;
+  /** Color map from last file detail (method 1046) for multi-color printing */
+  colorMap: Array<{ t: number; color: string; name: string }> = [];
+  /** Full file detail from last 1046 response */
+  lastFileDetail: { filename?: string; print_time?: number; layer?: number; thumbnail?: string } | null = null;
   systemInfo: Record<string, unknown> | null = null;
   storageCapacity: { total: number; free: number; used: number } | null = null;
   monoFilament: Record<string, unknown> | null = null;
@@ -198,6 +202,14 @@ export class PrinterState {
         if (filament != null) {
           this.fileFilamentUsed = filament;
         }
+        const cm = result.color_map as Array<{ t: number; color: string; name: string }> | undefined;
+        this.colorMap = Array.isArray(cm) ? cm : [];
+        this.lastFileDetail = {
+          filename: result.filename as string | undefined,
+          print_time: (result.print_time ?? result.PrintTime) as number | undefined,
+          layer: layers ?? undefined,
+          thumbnail: result.thumbnail as string | undefined,
+        };
         this.notify();
         break;
       }

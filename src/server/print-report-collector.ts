@@ -135,6 +135,9 @@ export class PrintReportCollector extends EventEmitter {
       case 'filament_runout':
         this.recordEvent('Filament runout detected');
         break;
+      case 'first_layer_complete':
+        this.recordEvent(`First layer complete (${event.durationSec.toFixed(1)}s)`);
+        break;
       case 'layer_change':
         // Only log milestone layers
         if (event.layer % 50 === 0 || event.layer === event.totalLayers) {

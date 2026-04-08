@@ -1,6 +1,6 @@
 /** Settings panel — persistent card layout + Telegram config */
 
-import { $ } from './helpers';
+import { $, fetchTimeout } from './helpers';
 import { toast } from './toast';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
@@ -272,7 +272,7 @@ async function loadTelegramStatus(): Promise<void> {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/config/telegram');
+    const res = await fetchTimeout('/api/config/telegram');
     if (!res.ok) {
       container.innerHTML = '<span class="settings-hint">Could not load Telegram config</span>';
       return;
@@ -321,7 +321,7 @@ async function loadTelegramStatus(): Promise<void> {
         return;
       }
       try {
-        const saveRes = await fetch('/api/config/telegram', {
+        const saveRes = await fetchTimeout('/api/config/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ progressInterval: val }),
@@ -362,7 +362,7 @@ async function loadAILabels(): Promise<void> {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/config/ai-labels');
+    const res = await fetchTimeout('/api/config/ai-labels');
     if (!res.ok) {
       container.innerHTML = '<span class="settings-hint">Could not load AI label config</span>';
       return;
@@ -472,7 +472,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
       return;
     }
     try {
-      const res = await fetch('/api/config/ai-labels', {
+      const res = await fetchTimeout('/api/config/ai-labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ labels: updated }),
@@ -491,7 +491,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
   container.querySelector('#ai-labels-reset')?.addEventListener('click', async () => {
     if (!confirm('Reset all AI label configs to defaults?')) return;
     try {
-      const res = await fetch('/api/config/ai-labels', { method: 'DELETE' });
+      const res = await fetchTimeout('/api/config/ai-labels', { method: 'DELETE' });
       if (res.ok) {
         const data = await res.json() as { labels: AILabelConfig[] };
         renderAILabelEditor(container, data.labels);

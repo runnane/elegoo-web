@@ -187,12 +187,18 @@ export class WebSocketTransport {
     }
   }
 
+  /** Max queued bytes before dropping messages for a slow client */
+  private static readonly MAX_BUFFERED = 1024 * 1024; // 1 MB
+
   broadcast(data: unknown): void {
     const json = JSON.stringify(data);
     for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(json);
+      if (client.readyState !== WebSocket.OPEN) continue;
+      if (client.bufferedAmount > WebSocketTransport.MAX_BUFFERED) {
+        log.warn(`Dropping message for slow client (buffered: ${client.bufferedAmount})`);
+        continue;
       }
+      client.send(json);
     }
   }
 

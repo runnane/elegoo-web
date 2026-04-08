@@ -56,6 +56,12 @@ export function initCharts(chartStore: ChartStore): void {
   if (!interactionsBound) {
     interactionsBound = true;
     bindChartInteractions();
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !animating) {
+        animating = true;
+        drawLoop();
+      }
+    });
   }
   if (!animating) {
     animating = true;
@@ -159,6 +165,10 @@ function bindChartInteractions(): void {
 }
 
 function drawLoop(): void {
+  if (document.hidden) {
+    animating = false;
+    return;
+  }
   for (const [, config] of charts) {
     drawChart(config);
   }

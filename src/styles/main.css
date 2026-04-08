@@ -80,6 +80,13 @@ body {
 .status-badge.connecting { background: rgba(255, 167, 38, 0.15); color: var(--warning); }
 .status-badge.connected { background: rgba(102, 187, 106, 0.15); color: var(--success); }
 
+/* XYZ position flash after move */
+@keyframes pos-flash {
+  0% { color: var(--success); transform: scale(1.15); }
+  100% { color: inherit; transform: scale(1); }
+}
+.pos-flash { animation: pos-flash 0.6s ease-out; }
+
 #app { max-width: 1400px; margin: 0 auto; padding: 16px; }
 
 /* Cards */
@@ -640,10 +647,47 @@ body {
 }
 
 /* === Gcode Preview === */
+.gcode-preview-wrap {
+  position: relative;
+}
 .gcode-preview-canvas {
   width: 100%;
-  height: 220px;
+  height: 350px;
   display: block;
+  border-radius: 4px;
+}
+.gcode-preview-status {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(0,0,0,0.5);
+  padding: 2px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.gcode-preview-controls {
+  padding: 4px 0;
+}
+.gcode-layer-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.gcode-preview-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 2px 0;
+}
+.gcode-preview-actions {
+  display: flex;
+  gap: 4px;
+}
+.gcode-preview-actions .btn.active {
+  background: var(--accent);
+  color: #fff;
 }
 
 /* === Control / Toolhead === */
@@ -2261,4 +2305,191 @@ body {
 }
 .help-api tr:hover, .help-ports tr:hover {
   background: var(--bg-secondary);
+}
+
+/* ── Print confirmation dialog ─────────────────────────────── */
+.print-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+.print-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.print-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.print-dialog-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.print-dialog-close:hover { color: var(--text-primary); }
+.print-dialog-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.print-dialog-file-info {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.print-dialog-thumbnail {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.print-dialog-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.print-dialog-no-thumb {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.print-dialog-meta {
+  flex: 1;
+  min-width: 0;
+}
+.print-dialog-filename {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-word;
+  margin-bottom: 6px;
+}
+.print-dialog-meta-row {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.print-dialog-meta-row span + span::before {
+  content: ' · ';
+}
+.print-dialog-section {
+  margin-bottom: 14px;
+}
+.print-dialog-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+/* Filament mapping rows */
+.print-dialog-mappings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.print-mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.print-mapping-gcode {
+  width: 80px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+}
+.print-mapping-arrow {
+  color: var(--text-muted);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.print-mapping-tray {
+  flex: 1;
+  min-width: 0;
+}
+.print-mapping-select {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: auto;
+}
+.print-mapping-select:focus {
+  outline: 1px solid var(--accent);
+}
+/* Print settings */
+.print-dialog-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.print-dialog-setting label:first-child {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  display: block;
+}
+.print-dialog-radio-group {
+  display: flex;
+  gap: 12px;
+}
+.print-dialog-radio, .print-dialog-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.print-dialog-radio input, .print-dialog-checkbox input {
+  accent-color: var(--accent);
+}
+.print-dialog-checkboxes {
+  display: flex;
+  gap: 16px;
+}
+/* Footer */
+.print-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.print-dialog-footer .btn-primary {
+  min-width: 100px;
 }

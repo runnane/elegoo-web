@@ -74,8 +74,8 @@ function formatEvent(event: PrintEvent): { text: string; urgent: boolean } {
       return { text: `${hasCritical ? '🚨' : '⚠️'} *Printer Error*\n${lines.join('\n')}`, urgent: hasCritical };
     }
     case 'filament_runout':
-      return { text: '🧵 *Filament Runout Detected\\!*\nPrinter is paused, please load new filament\\.', urgent: true };
-    default:
+      return { text: '🧵 *Filament Runout Detected\\!*\nPrinter is paused, please load new filament\\.', urgent: true };    case 'first_layer_complete':
+      return { text: `🥇 *First Layer Complete\!*\n📄 ${esc(event.filename)}\n⏱ Layer took: ${esc(formatDuration(event.durationSec))}`, urgent: false };    default:
       return { text: '', urgent: false };
   }
 }
@@ -160,7 +160,7 @@ export class TelegramIntegration {
 
     try {
       const wantPhoto = this.config.cameraEnabled && [
-        'print_started', 'print_completed', 'print_failed', 'print_progress',
+        'print_started', 'print_completed', 'print_failed', 'print_progress', 'first_layer_complete',
       ].includes(event.type);
       const photo = wantPhoto ? await getSnapshot(this.config) : null;
 

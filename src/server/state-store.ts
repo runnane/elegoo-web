@@ -80,6 +80,7 @@ export type PrintEvent =
   | { type: 'error'; codes: number[]; names: string[] }
   | { type: 'filament_runout' }
   | { type: 'layer_change'; layer: number; totalLayers: number; durationSec: number }
+  | { type: 'first_layer_complete'; filename: string; totalLayers: number; durationSec: number }
   | { type: 'status_change'; from: string; to: string; fromCode: number; toCode: number }
   | { type: 'sub_status_change'; from: string; to: string; fromCode: number; toCode: number };
 
@@ -789,8 +790,17 @@ export class StateStore extends EventEmitter {
           // Broadcast to WS clients
           this.emit('layer_time', entry);
         }
-        // Emit layer_change event for milestone layers (every 10 layers or layer 1)
-        if (this.baselineReady && (layer === 1 || layer % 10 === 0)) {
+        // Emit first_layer_complete when layer 1 finishes
+        if (this.baselineReady && this._lastLayer === 1) {
+          this.emit('print_event', {
+            type: 'first_layer_complete',
+            filename: this.status?.print_status?.filename || '',
+            totalLayers: this.totalLayers || 0,
+            durationSec,
+          } satisfies PrintEvent);
+        }
+        // Emit layer_change event for milestone layers (every 10 layers)
+        if (this.baselineReady && layer % 10 === 0) {
           this.emit('print_event', {
             type: 'layer_change',
             layer,

@@ -36,6 +36,7 @@ function eventMeta(type: string): { icon: string; cls: string } {
     case 'error':           return { icon: '🚨', cls: 'event-error' };
     case 'filament_runout': return { icon: '🧵', cls: 'event-error' };
     case 'layer_change':        return { icon: '📏', cls: 'event-muted' };
+    case 'first_layer_complete': return { icon: '🥇', cls: 'event-success' };
     case 'status_change':       return { icon: '🔄', cls: 'event-info' };
     case 'sub_status_change':   return { icon: '↪️', cls: 'event-muted' };
     default:                    return { icon: '📋', cls: 'event-muted' };
@@ -82,6 +83,11 @@ function eventDescription(e: Record<string, unknown>): string {
       const total = e.totalLayers as number;
       const dur = typeof e.durationSec === 'number' ? ` (layer took ${fmtDuration(e.durationSec as number)})` : '';
       return `Layer ${layer}${total ? '/' + total : ''}${dur}`;
+    }
+    case 'first_layer_complete': {
+      const fn = escapeHtml(String(e.filename || 'unknown'));
+      const dur = typeof e.durationSec === 'number' ? ` (${fmtDuration(e.durationSec as number)})` : '';
+      return `First layer complete: ${fn}${dur}`;
     }
     case 'status_change':
       return `Status: ${escapeHtml(String(e.from))} → ${escapeHtml(String(e.to))}`;

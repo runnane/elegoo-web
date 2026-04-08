@@ -81,7 +81,7 @@ async function sendNotification(event: BridgeEvent): Promise<void> {
 
   try {
     const wantPhoto = config.cameraEnabled && [
-      'print_started', 'print_completed', 'print_failed', 'print_progress',
+      'print_started', 'print_completed', 'print_failed', 'print_progress', 'first_layer_complete',
     ].includes(event.type);
     const photo = wantPhoto ? await fetchSnapshot(config.cameraUrl) : null;
 

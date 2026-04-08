@@ -1,6 +1,7 @@
 import type { PrinterState } from '../printer-state';
 import type { CommandSender } from '../ws-client';
 import { $, escapeHtml, escapeAttr, formatTime, applyDarkThumbnailCheck } from './helpers';
+import { requestPrintDialog } from './print-dialog';
 
 let currentSource: 'local' | 'u-disk' = 'local';
 let currentDir = '/';
@@ -163,19 +164,9 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
       e.stopPropagation();
       const item = (e.target as HTMLElement).closest('.file-item') as HTMLElement;
       const filename = item?.dataset.filename;
-      if (filename && confirm(`Start printing ${filename}?`)) {
+      if (filename) {
         const fullPath = currentDir === '/' ? filename : currentDir.replace(/^\//, '') + '/' + filename;
-        client.sendCommand(1020, {
-          storage_media: currentSource,
-          filename: fullPath,
-          config: {
-            delay_video: false,
-            printer_check: true,
-            print_layout: 'A',
-            bedlevel_force: false,
-            slot_map: [],
-          },
-        });
+        requestPrintDialog(filename, fullPath, client, state);
       }
     });
   });
@@ -276,12 +267,32 @@ export function bindFileControls(client: CommandSender): void {
   }
 }
 
+const ALLOWED_EXTENSIONS = ['.gcode', '.3mf'];
+const MAX_UPLOAD_SIZE = 500 * 1024 * 1024; // 500 MB
+
 async function uploadFile(file: File, client: CommandSender): Promise<void> {
   const progressEl = document.getElementById('upload-progress');
   const fillEl = document.getElementById('upload-progress-fill');
   const textEl = document.getElementById('upload-progress-text');
   const labelEl = document.getElementById('file-upload-label');
   if (!progressEl || !fillEl || !textEl) return;
+
+  // Client-side validation
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    progressEl.classList.remove('hidden');
+    progressEl.classList.add('upload-error');
+    fillEl.style.width = '0%';
+    textEl.textContent = `✗ Invalid file type "${ext}" — only .gcode and .3mf allowed`;
+    return;
+  }
+  if (file.size > MAX_UPLOAD_SIZE) {
+    progressEl.classList.remove('hidden');
+    progressEl.classList.add('upload-error');
+    fillEl.style.width = '0%';
+    textEl.textContent = `✗ File too large (${(file.size / 1024 / 1024).toFixed(0)} MB) — max 500 MB`;
+    return;
+  }
 
   progressEl.classList.remove('hidden');
   fillEl.style.width = '0%';

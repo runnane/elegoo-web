@@ -28,7 +28,7 @@
       </nav>
     </div>
     <div class="header-right">
-      <span id="connection-status" class="status-badge disconnected">Disconnected</span>
+      <span id="connection-status" class="status-badge connecting">Connecting…</span>
     </div>
   </header>
 
@@ -272,10 +272,22 @@
         <!-- Gcode Preview -->
         <div class="card" id="gcode-preview-card">
           <div class="card-header">
-            <h3>📐 Layer Preview</h3>
-            <button id="btn-reset-layer-data" class="btn btn-sm btn-ghost" title="Reset layer duration data">🗑 Reset</button>
+            <h3>📐 Gcode Preview</h3>
+            <div class="gcode-preview-actions">
+              <button id="btn-gcode-follow" class="btn btn-sm btn-ghost active" title="Follow print progress">📍 Follow</button>
+              <button id="btn-load-gcode" class="btn btn-sm btn-ghost" title="Load gcode file">📂 Load</button>
+              <input type="file" id="gcode-file-input" accept=".gcode,.gco,.g" style="display:none">
+              <button id="btn-reset-layer-data" class="btn btn-sm btn-ghost" title="Reset layer duration data">🗑 Reset</button>
+            </div>
           </div>
-          <canvas id="gcode-preview-canvas" class="gcode-preview-canvas"></canvas>
+          <div class="gcode-preview-wrap">
+            <canvas id="gcode-preview-canvas" class="gcode-preview-canvas"></canvas>
+            <div id="gcode-preview-status" class="gcode-preview-status"></div>
+          </div>
+          <div class="gcode-preview-controls">
+            <input type="range" id="gcode-layer-slider" min="1" max="1" value="1" class="gcode-layer-slider">
+            <div id="gcode-preview-info" class="gcode-preview-info"></div>
+          </div>
           <div class="chart-wrap">
             <canvas id="chart-layer-time" class="live-chart"></canvas>
           </div>
