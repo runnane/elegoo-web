@@ -1,6 +1,14 @@
 import { defineConfig } from 'vite';
+import path from 'path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // Ensure only one copy of three.js is loaded (gcode-preview peer dep)
+      three: path.resolve(__dirname, 'node_modules/three'),
+    },
+    dedupe: ['three'],
+  },
   server: {
     allowedHosts: [
       'localhost',

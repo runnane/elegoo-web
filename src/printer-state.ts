@@ -54,7 +54,7 @@ export class PrinterState {
   videoUrl: string | null = null;
   bedMesh: number[][] | null = null;
   /** Print history from method 1036 */
-  printHistory: Array<{ uuid: string; filename: string; status: string; begin_time: number; end_time: number; timelapse_status: number; timelapse_url: string }> = [];
+  printHistory: Array<{ uuid: string; filename: string; status: string; begin_time: number; end_time: number; timelapse_status: number; timelapse_url: string; timelapse_duration: number }> = [];
   printHistoryTotal = 0;
   /** Auto-report sequence tracking for gap detection */
   private lastAutoReportId: number | null = null;
@@ -265,8 +265,10 @@ export class PrinterState {
       case 1051: { // EXPORT_TIMELAPSE
         const errorCode = result.error_code as number | undefined;
         const url = result.url as string | undefined;
-        if (errorCode === 0 && url) {
-          this.videoUrl = url;
+        if (errorCode === 0) {
+          if (url) {
+            this.videoUrl = url;
+          }
           this.notify();
         }
         break;
@@ -274,27 +276,30 @@ export class PrinterState {
       case 1036: { // PRINT_TASK_LIST
         const errorCode = result.error_code as number | undefined;
         if (errorCode === 0) {
-          const tasks = result.task_list as Array<Record<string, unknown>> | undefined;
+          const tasks = (result.history_task_list ?? result.task_list) as Array<Record<string, unknown>> | undefined;
           const total = result.total as number | undefined;
           if (tasks) {
             this.printHistory = tasks.map(t => ({
-              uuid: (t.uuid as string) || '',
-              filename: (t.filename ?? t.task_name ?? t.name ?? '') as string,
-              status: mapTaskStatus(t.status as number | string | undefined),
+              uuid: (t.task_id as string) || (t.uuid as string) || '',
+              filename: (t.task_name ?? t.filename ?? t.name ?? '') as string,
+              status: mapTaskStatus((t.task_status ?? t.status) as number | string | undefined),
               begin_time: (t.begin_time as number) || 0,
               end_time: (t.end_time as number) || 0,
-              timelapse_status: (t.time_lapse_video_status as number) || 0,
+              timelapse_status: (t.time_lapse_video_status as number) ?? 0,
               timelapse_url: (t.time_lapse_video_url as string) || '',
+              timelapse_duration: (t.time_lapse_video_duration as number) || 0,
             }));
             this.printHistoryTotal = total ?? this.printHistory.length;
             // Populate timelapse list from history entries with video data
             // Status: 0=NotCaptured, 1=NotExported, 2=Exported, 3=Failed
+            // Also include entries with non-zero duration (captured but status may vary)
             this.timelapseList = this.printHistory
-              .filter(t => t.timelapse_status === 1 || t.timelapse_status === 2)
+              .filter(t => t.timelapse_status > 0 || t.timelapse_duration > 0)
               .map(t => ({
                 filename: t.filename,
                 timelapse_status: t.timelapse_status,
                 timelapse_url: t.timelapse_url,
+                timelapse_duration: t.timelapse_duration,
                 begin_time: t.begin_time,
                 end_time: t.end_time,
               }));

@@ -34,13 +34,11 @@ export function renderTimelapse(state: PrinterState): void {
     const name = String(video.filename || 'Unknown');
     const status = video.timelapse_status as number;
     const videoUrl = video.timelapse_url as string || '';
+    const videoDuration = video.timelapse_duration as number || 0;
     const beginTime = video.begin_time as number | undefined;
-    const endTime = video.end_time as number | undefined;
     const time = beginTime ? new Date(beginTime * 1000).toLocaleString() : '';
-    const duration = beginTime && endTime && endTime > beginTime
-      ? formatDuration(endTime - beginTime)
-      : '';
-    const meta = [time, duration].filter(Boolean).join(' · ');
+    const durStr = videoDuration > 0 ? `${videoDuration}s` : '';
+    const meta = [time, durStr].filter(Boolean).join(' · ');
 
     // Status 2 = already exported (has URL), status 1 = captured but needs export
     const isExported = status === 2 && videoUrl;

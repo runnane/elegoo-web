@@ -427,7 +427,7 @@ function connectToService(): void {
       // After move/home, request fresh status and flash position
       if ((method === 1026 || method === 1027) && client) {
         client.sendCommand(1002, {});
-        const pos = state.gcode_move;
+        const pos = state.status?.gcode_move;
         if (pos) {
           const x = pos.x?.toFixed(1) ?? '--';
           const y = pos.y?.toFixed(1) ?? '--';
@@ -444,8 +444,22 @@ function connectToService(): void {
           }
         }
       }
-      if (method === 1051 && state.videoUrl) {
-        showTimelapsePlayer(state.videoUrl);
+      if (method === 1051) {
+        const r1051 = (data as Record<string, unknown>).result as Record<string, unknown> | undefined;
+        const err1051 = r1051?.error_code as number | undefined;
+        if (err1051 === 0) {
+          if (state.videoUrl) {
+            showTimelapsePlayer(state.videoUrl);
+          } else {
+            toast('Timelapse export started — video will be generated', 'info');
+          }
+        } else if (err1051 === 1009) {
+          toast('Cannot export timelapse — printer is busy. Try when idle.', 'warning');
+          requestAnimationFrame(() => renderTimelapse(state));
+        } else {
+          toast(`Timelapse export failed (error ${err1051})`, 'error');
+          requestAnimationFrame(() => renderTimelapse(state));
+        }
       }
       if (method === 1050 && state.videoUrl) {
         showTimelapsePlayer(state.videoUrl);
@@ -481,6 +495,14 @@ function connectToService(): void {
     },
     onStatusEvent(data) {
       state.handleStatusEvent(data as Record<string, unknown>);
+      // Auto-refresh timelapse list when video generation completes or fails
+      const ms = (data as Record<string, unknown>).result as Record<string, unknown> | undefined;
+      const subStatus = (ms?.machine_status as Record<string, unknown>)?.sub_status as number | undefined;
+      if (subStatus === 3021 || subStatus === 3022) {
+        // Timelapse generation complete/failed — refresh history to get updated URLs
+        toast(subStatus === 3021 ? 'Timelapse video ready' : 'Timelapse export failed', subStatus === 3021 ? 'success' : 'error');
+        requestTimelapseList();
+      }
     },
     onRawMessage(direction, topic, data) {
       logStore.add(direction, topic, data);

@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/pdfkit": "^0.17.5",
+    "@types/three": "^0.178.1",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.0",
@@ -28,12 +29,13 @@
   "dependencies": {
     "@huggingface/transformers": "^4.0.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "dotenv": "^16.4.0",
-    "gcode-preview": "^2.18.0",
+    "dotenv": "^17.4.1",
+    "gcode-preview": "3.0.0-alpha.4",
     "grammy": "^1.35.0",
     "mqtt": "^5.10.0",
     "pdfkit": "^0.18.0",
     "sharp": "^0.34.5",
+    "three": "^0.178.0",
     "winston": "^3.19.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
