@@ -12,6 +12,8 @@ A web frontend + backend service for Elegoo Centauri Carbon 2 (CC2) FDM printers
 - **State**: Service-side `StateStore` with delta merge; browser-side `PrinterState` hydrated from service
 - **Transport**: WebSocket (`/ws`) for real-time state, REST (`/api/*`) for snapshots/actions
 - **Rendering**: Direct DOM manipulation with `requestAnimationFrame` batching
+- **3D Preview**: gcode-preview (Three.js WebGL) for toolpath visualization — on-demand rendering only
+- **Charts**: Canvas 2D live charts via `setInterval` (10 FPS) — no `requestAnimationFrame`
 - **Styling**: Plain CSS with CSS custom properties (dark theme)
 
 ## Key Files
@@ -41,6 +43,10 @@ A web frontend + backend service for Elegoo Centauri Carbon 2 (CC2) FDM printers
 - `src/ui/files.ts` — File browser with print start action
 - `src/ui/controls.ts` — All control event handlers (move, temp, fans, LED, speed)
 - `src/ui/log.ts` — MQTT log panel with filter, auto-scroll, click-to-expand
+- `src/ui/charts.ts` — Canvas 2D live line charts (temps, fans, speed, AI, layers) with zoom/pan
+- `src/ui/gcode-preview.ts` — 3D gcode toolpath visualization (Three.js via gcode-preview library)
+- `src/chart-store.ts` — Ring-buffer time-series store for chart data
+- `src/persistence.ts` — Save/restore chart and layer data to localStorage
 - `src/styles/main.css` — Fluidd-inspired dark theme
 - `index.html` — Full page layout (single-page, no routing)
 
@@ -83,6 +89,23 @@ Reference: [CC2_PROTOCOL.md](https://github.com/danielcherubini/elegoo-homeassis
 - **Registration code 3**: Printer allows max 2 MQTT clients. If both slots are taken (e.g. Elegoo Slicer + another client), registration is rejected. The bridge retries on a slow 30s interval until a slot opens.
 - **mqtt.js `client.end(true)`**: Permanently destroys the client — no auto-reconnect. For forced reconnects, tear down the old client entirely and call `connect()` again to create a fresh one.
 - **Health check accuracy**: Use `bridge.isConnected` / `bridge.brokerConnected` for real MQTT state. Never use `store.attributes` presence as a proxy — persisted state survives disconnects.
+
+## Client Performance Pitfalls
+
+**WARNING**: The `gcode-preview` library (WebGLPreview) runs an internal 60fps `animate()` loop via `requestAnimationFrame` that calls `renderer.render(scene, camera)` every frame. With a loaded gcode model, this leaks ~23 MB/s of heap memory that GC can't reclaim fast enough, causing OOM crashes within minutes.
+- After calling `processGCode()`, immediately cancel the animate loop: access `(preview as any).animationFrameId`, call `cancelAnimationFrame()`, and override `animate` to a no-op
+- Render on-demand only: orbit controls `change` event for user interaction, throttled `render()` (≤2 FPS) for layer/nozzle updates
+- The library's `render()` rebuilds geometry (expensive) — for position-only changes (nozzle), use `renderer.render(scene, camera)` directly
+
+**WARNING**: Event listeners in render functions cause memory leaks:
+- Never add `addEventListener` inside functions called on every state update (e.g. `renderFiles()`, `renderStructuredLog()`, `renderCanvas()`)
+- Use event delegation: one listener on the container, dispatch via `e.target.closest('.selector')`
+- Guard with a `let bound = false` flag or bind in a one-time `init` function
+
+**WARNING**: `requestAnimationFrame` loops and Vite HMR don't mix:
+- HMR hot-reloads reset module-level `let animating = false` guards, creating duplicate rAF loops
+- Use `setInterval` with a stored timer handle instead — `clearInterval(handle)` works reliably across HMR
+- For the chart draw loop: `setInterval(drawAllCharts, 100)` (10 FPS) is plenty for 1 Hz sensor data
 
 ## Conventions
 

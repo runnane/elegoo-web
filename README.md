@@ -1,24 +1,34 @@
 # elegoo-web
 
-A Fluidd-inspired web frontend for Elegoo Centauri Carbon 2 (CC2) FDM printers. Connects directly to the printer's MQTT broker over WebSocket — no server or proxy required.
+A Fluidd-inspired web frontend + backend service for Elegoo Centauri Carbon 2 (CC2) FDM printers. The Node.js service maintains a single MQTT connection to the printer and exposes state to browsers via WebSocket, REST API, and Prometheus metrics.
 
 ## Features
 
-- **Real-time dashboard**: Print progress with thumbnail, temperatures (2 decimal places), fan speeds, toolhead position
+- **Real-time dashboard**: Print progress with thumbnail, temperatures, fan speeds, toolhead position
+- **3D gcode preview**: Three.js toolpath visualization with layer follow mode and nozzle tracking
+- **Live charts**: Temperature, fan speed, print speed, AI confidence, and layer time graphs
 - **Canvas/AMS display**: Spool-style filament slots with colors, types, and active tray indicator
 - **Camera feed**: Live MJPEG stream from the printer camera
-- **Printer control**: Temperature, fans (Model/Assistance/Case toggles + fine adjust), speed mode, LED toggle, XY/Z movement with 0.1/1/10/30mm distances
-- **Print management**: File browser, start/pause/resume/stop prints
-- **MQTT Log**: Real-time log panel showing all sent/received MQTT messages with filtering and click-to-expand
+- **Printer control**: Temperature, fans (Model/Assistance/Case toggles + fine adjust), speed mode, LED toggle, XY/Z movement
+- **Print management**: File browser with previews, start/pause/resume/stop prints
+- **MQTT Log**: Real-time structured log panel with filtering and click-to-expand
+- **Telegram notifications**: Print events, progress updates, camera snapshots
+- **AI print monitoring**: Motion detection, CLIP classification, VLM analysis for failure detection
+- **Moonraker/OctoPrint compatibility**: API compatibility layer for third-party integrations
+- **MCP server**: Model Context Protocol server for AI agent integration
+- **Prometheus metrics**: `/api/metrics` endpoint for monitoring
 - **Dark theme**: Fluidd/Elegoo-inspired UI with responsive layout
 
 ## How It Works
 
-The CC2 printer runs its own MQTT broker on two ports:
-- **Port 1883** — MQTT over TCP (used by ElegooSlicer)
-- **Port 9001** — MQTT over WebSocket (used by this web frontend)
+The Node.js backend service (`src/server/`) connects to the printer's MQTT broker over TCP:1883 and acts as a bridge:
+- **WebSocket** (`/ws`): Real-time state updates pushed to all connected browsers
+- **REST API** (`/api/*`): Snapshots, file operations, camera proxy, commands
+- **Prometheus** (`/api/metrics`): Printer telemetry for monitoring
 
-This app connects directly from the browser to `ws://<printer_ip>:9001` using [mqtt.js](https://github.com/mqttjs/MQTT.js), with no backend needed.
+The CC2 printer runs its own MQTT broker on two ports:
+- **Port 1883** — MQTT over TCP (used by the service)
+- **Port 9001** — MQTT over WebSocket (legacy direct-connect mode)
 
 ### Protocol
 
@@ -59,21 +69,36 @@ Output is in `dist/` — serve it with any static file server.
 
 ```
 src/
-├── main.ts           # Entry point, connect flow, render loop
-├── types.ts          # CC2 protocol types and status codes
-├── mqtt-client.ts    # MQTT WebSocket client with registration/heartbeat
-├── printer-state.ts  # State management with delta merge
-├── log-store.ts      # Ring buffer for MQTT message logging
+├── main.ts              # Entry point, WsClient connect, render loop
+├── ws-client.ts         # WebSocket client (connects to service, not printer)
+├── types.ts             # CC2 protocol types, status codes, helpers
+├── printer-state.ts     # Browser-side state with delta merge
+├── log-store.ts         # Ring buffer (500 entries) for MQTT log
+├── chart-store.ts       # Ring-buffer time-series store for charts
+├── persistence.ts       # Save/restore chart + layer data to localStorage
+├── server/
+│   ├── index.ts         # Service entry point
+│   ├── mqtt-bridge.ts   # Singleton MQTT connection to printer
+│   ├── state-store.ts   # Centralized state with event detection
+│   ├── ws-transport.ts  # WebSocket server for browsers
+│   ├── rest-api.ts      # REST API, camera proxy, Prometheus metrics
+│   ├── config.ts        # Environment-based configuration (.env)
+│   ├── telegram.ts      # Telegram bot notifications
+│   ├── ai-monitor.ts    # AI print monitoring (CLIP + VLM)
+│   ├── moonraker-compat.ts  # Moonraker API compatibility
+│   └── mcp-server.ts    # Model Context Protocol server
 ├── ui/
-│   ├── dashboard.ts  # Re-exports all UI modules
-│   ├── helpers.ts    # Shared DOM/formatting utilities
-│   ├── print-status.ts # Main dashboard + header rendering
-│   ├── canvas.ts     # Canvas/AMS spool visualization
-│   ├── files.ts      # File browser with print action
-│   ├── controls.ts   # All control event handlers
-│   └── log.ts        # MQTT log panel rendering
+│   ├── dashboard.ts     # Re-export barrel for all UI modules
+│   ├── helpers.ts       # Shared DOM/formatting utilities
+│   ├── print-status.ts  # Main dashboard rendering
+│   ├── canvas.ts        # Canvas/AMS spool visualization
+│   ├── files.ts         # File browser with popovers
+│   ├── controls.ts      # Control event handlers
+│   ├── charts.ts        # Canvas 2D live charts with zoom/pan
+│   ├── gcode-preview.ts # 3D gcode toolpath (Three.js)
+│   └── log.ts           # MQTT log panel rendering
 └── styles/
-    └── main.css      # Fluidd-inspired dark theme
+    └── main.css         # Fluidd-inspired dark theme
 ```
 
 ## Supported Printers
@@ -85,10 +110,9 @@ Resin printers (Mars, Saturn) use a different protocol (SDCP over WebSocket) and
 
 ## Limitations
 
-- **Max 4 connections**: The printer limits concurrent MQTT clients. This app uses one slot.
-- **No UDP discovery**: Browsers can't send UDP — printer IP must be entered manually.
-- **Camera CORS**: The MJPEG stream on port 8080 may be blocked by browser CORS policy depending on your setup. Works when served from the same network.
-- **No file upload**: File upload uses HTTP PUT on port 80, not yet implemented.
+- **Max 2 MQTT connections**: The printer limits concurrent MQTT clients. The service uses one slot.
+- **No UDP discovery**: Browsers can't send UDP — printer IP must be configured in `.env`.
+- **Camera CORS**: The MJPEG stream on port 8080 is proxied through the service to avoid CORS issues.
 - **LAN-only**: Cloud mode is not supported.
 
 ## Protocol Quirks
@@ -99,10 +123,11 @@ Resin printers (Mars, Saturn) use a different protocol (SDCP over WebSocket) and
 
 ## Credits
 
+- [gcode-preview](https://github.com/remcoder/gcode-preview) — Three.js gcode toolpath visualization
 - [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) — Elegoo's official C++ SDK
 - [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) — CC2 protocol documentation
 - [Fluidd](https://github.com/fluidd-core/fluidd) — UI design inspiration
-- [mqtt.js](https://github.com/mqttjs/MQTT.js) — MQTT client for the browser
+- [mqtt.js](https://github.com/mqttjs/MQTT.js) — MQTT client library
 
 ## License
 
