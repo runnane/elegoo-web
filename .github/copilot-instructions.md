@@ -2,22 +2,37 @@
 
 ## Project Overview
 
-A browser-based web frontend for Elegoo Centauri Carbon 2 (CC2) FDM printers. Connects directly to the printer's MQTT broker over WebSocket (port 9001) using mqtt.js. No backend server required.
+A web frontend + backend service for Elegoo Centauri Carbon 2 (CC2) FDM printers. The Node.js service maintains a single MQTT connection to the printer and exposes state to browsers via WebSocket, REST API, and Prometheus metrics. Integrations: Telegram notifications, AI print monitoring (CLIP + VLM), Moonraker/OctoPrint compatibility APIs, MCP server.
 
 ## Architecture
 
 - **Build**: Vite + TypeScript (vanilla, no framework)
-- **Protocol**: MQTT 3.1.1 over WebSocket via mqtt.js
-- **State**: Custom reactive state with delta merge (`printer-state.ts`)
+- **Service**: Node.js backend (`src/server/`) — single MQTT connection shared by all consumers
+- **Protocol**: MQTT 3.1.1 via mqtt.js (service connects TCP:1883, browsers connect via WS proxy)
+- **State**: Service-side `StateStore` with delta merge; browser-side `PrinterState` hydrated from service
+- **Transport**: WebSocket (`/ws`) for real-time state, REST (`/api/*`) for snapshots/actions
 - **Rendering**: Direct DOM manipulation with `requestAnimationFrame` batching
 - **Styling**: Plain CSS with CSS custom properties (dark theme)
 
 ## Key Files
 
-- `src/main.ts` — Entry point, connect flow, renders on state change
-- `src/types.ts` — TypeScript types for the CC2 protocol (status codes, data structures)
-- `src/mqtt-client.ts` — MQTT WebSocket client with registration, heartbeat, command sending, and raw message capture
-- `src/printer-state.ts` — Centralized state with deep-merge delta updates and subscriber pattern
+### Service (Backend)
+- `src/server/index.ts` — Service entry point, wires all components together
+- `src/server/mqtt-bridge.ts` — Singleton MQTT connection to printer (connect, register, heartbeat, commands)
+- `src/server/state-store.ts` — Centralized state with event detection (print events, filament, layers, errors)
+- `src/server/ws-transport.ts` — WebSocket server for browser clients (init, status, raw message relay)
+- `src/server/rest-api.ts` — REST API, camera proxy, Prometheus metrics, file upload/download proxy
+- `src/server/config.ts` — Environment-based configuration (`.env`)
+- `src/server/telegram.ts` — Telegram bot notifications (print events, progress, snapshots)
+- `src/server/ai-monitor.ts` — AI print monitoring (motion detection, CLIP classification, VLM)
+- `src/server/moonraker-compat.ts` — Moonraker API compatibility layer
+- `src/server/mcp-server.ts` — Model Context Protocol server
+
+### Client (Frontend)
+- `src/main.ts` — Entry point, WsClient connect flow, renders on state change
+- `src/ws-client.ts` — WebSocket client connecting to service (replaces old direct MQTT client)
+- `src/types.ts` — TypeScript types for the CC2 protocol (status codes, data structures, helpers)
+- `src/printer-state.ts` — Browser-side state with deep-merge delta updates and subscriber pattern
 - `src/log-store.ts` — Ring buffer (500 entries) for MQTT message logging
 - `src/ui/dashboard.ts` — Thin re-export barrel for all UI modules
 - `src/ui/helpers.ts` — Shared DOM helpers (`$`, `formatTime`, `fanPct`, `escapeHtml`)
@@ -53,7 +68,21 @@ Key methods: 1001 (attributes), 1002 (full status), 1020-1023 (print control), 1
 - Code normalizes `gcode_move_inf` → `gcode_move` at ingest for compatibility with older firmware
 - Always use the debug capture feature (`POST /api/debug/capture`) to verify actual field names
 
+**WARNING**: Sub-status 1066 is undocumented in the official app but observed on firmware 01.03.01.89 during Canvas filament swaps. It appears between nozzle preheat (1045) and return to printing (2075). We label it 'Filament Change' in `types.ts`.
+
+**WARNING**: Canvas/AMS filament swaps cause false positives:
+- The filament sensor reads "empty" during swaps (old filament retracts, new one loads)
+- Exception code 1211 (Canvas Filament Runout) fires during normal swaps
+- Sub-status stays as machine_status=2 (Printing) throughout the swap — only sub_status changes
+- Use `isFilamentChangeSubStatus()` from `types.ts` to suppress false runout/stall events during swap sub-statuses (1045, 1061-1066, 1133-1145, 1150-1166, 2505)
+
 Reference: [CC2_PROTOCOL.md](https://github.com/danielcherubini/elegoo-homeassistant/blob/main/docs/CC2_PROTOCOL.md)
+
+## MQTT Bridge Pitfalls
+
+- **Registration code 3**: Printer allows max 2 MQTT clients. If both slots are taken (e.g. Elegoo Slicer + another client), registration is rejected. The bridge retries on a slow 30s interval until a slot opens.
+- **mqtt.js `client.end(true)`**: Permanently destroys the client — no auto-reconnect. For forced reconnects, tear down the old client entirely and call `connect()` again to create a fresh one.
+- **Health check accuracy**: Use `bridge.isConnected` / `bridge.brokerConnected` for real MQTT state. Never use `store.attributes` presence as a proxy — persisted state survives disconnects.
 
 ## Conventions
 

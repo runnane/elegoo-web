@@ -5,7 +5,7 @@
 - [ ] **No test suite** — Zero tests in the entire project. Add at minimum: unit tests for state merging (`printer-state.ts` deep merge), time formatting helpers, server state-store logic, and integration tests for MQTT message parsing.
 - [ ] tiemlapse module is always empty? it does not show any time lapses. 
 - [ ] we need to ignore "paused"/"stopped" AI analysis while printer is warming up. So unless it has status printing we should ignore the stationary state. 
-
+- [ ] full debug panel with live status of ALL variables. Option to enable logging so we can see changes for each value. Should have a timeout for autodisabling. 
 
 ## Medium Priority
 
