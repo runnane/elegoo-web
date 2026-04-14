@@ -117,8 +117,8 @@ const DEFAULT_LABEL_ISSUE_MAP: Record<number, { type: string; severity: 'warning
   8: { type: 'empty_bed', severity: 'critical' },
 };
 
-const DEFAULT_WARN_THRESHOLD = 0.10;
-const DEFAULT_CRIT_THRESHOLD = 0.22;
+const DEFAULT_WARN_THRESHOLD = 0.25;
+const DEFAULT_CRIT_THRESHOLD = 0.40;
 
 // ---- AI Label Configuration (persisted to disk) ----
 
@@ -308,6 +308,15 @@ class LocalAnalyzer {
       const groupScores: Record<string, number> = {};
       for (const g of CLASSIFICATION_GROUPS) groupScores[g] = 0;
 
+      // Find the best "ok" label score — defects must exceed this to trigger.
+      // This prevents false positives when CLIP spreads residual probability
+      // across defect labels while the top match is clearly a normal print.
+      const bestOkScore = results.reduce((max, r) => {
+        const idx = labels.indexOf(r.label);
+        const c = idx >= 0 ? labelConfigs[idx] : undefined;
+        return (c?.severity === 'ok' && r.score > max) ? r.score : max;
+      }, 0);
+
       // Check all results for issue labels above confidence threshold
       for (const r of results) {
         const cfgIdx = labels.indexOf(r.label);
@@ -317,7 +326,8 @@ class LocalAnalyzer {
         const group = cfg?.group ?? categorizeLabel(r.label);
         groupScores[group] = (groupScores[group] || 0) + r.score * 100;
 
-        if (cfg && cfg.severity !== 'ok' && r.score > cfg.warnThreshold) {
+        // Defect must exceed both its configured threshold AND the best "ok" label score
+        if (cfg && cfg.severity !== 'ok' && r.score > cfg.warnThreshold && r.score > bestOkScore) {
           issues.push({
             type: cfg.issueType,
             description: r.label,
