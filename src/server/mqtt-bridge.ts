@@ -5,6 +5,7 @@
 
 import mqtt from 'mqtt';
 import { EventEmitter } from 'events';
+import WebSocket from 'ws';
 import { getLogger } from './logger.js';
 
 const log = getLogger('MQTT');
@@ -134,6 +135,7 @@ export class MqttBridge extends EventEmitter {
         this.sendCommand(1002, {}); // GET_STATUS
         this.sendCommand(2005, {}); // GET_CANVAS_STATUS
         this.sendCommand(1044, { storage_media: 'udisk', dir: '', offset: 0, limit: 200 }); // GET_FILE_LIST
+        this.enableVideoStream(); // Enable camera via SDCP + MQTT
         this.emit('connected', this.sn);
       } else if ((data.code as number) === 3) {
         log.warn('Registration rejected: too many clients (max 2). Will retry every 30s...');
@@ -256,6 +258,92 @@ export class MqttBridge extends EventEmitter {
     this._brokerConnected = false;
     log.info('Reconnecting in 5s...');
     setTimeout(() => this.connect(), 5000);
+  }
+
+  /**
+   * Enable video streaming on the printer camera.
+   * Tries both approaches in parallel — the official app uses SDCP (Option 1a),
+   * and we also try MQTT method 1054 (Option 1b) as a fallback.
+   */
+  private enableVideoStream(): void {
+    log.info('Enabling video stream...');
+    this.enableVideoStreamSDCP();
+    this.enableVideoStreamMQTT();
+  }
+
+  /**
+   * Option 1a: Send CmdVideoStreamControl via SDCP WebSocket (port 3030).
+   * This is what the official Elegoo app does on every connect.
+   */
+  private enableVideoStreamSDCP(): void {
+    const url = `ws://${this.printerIp}:3030/websocket`;
+    log.info(`[VideoStream] SDCP: connecting to ${url}`);
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url, { handshakeTimeout: 5000 });
+    } catch (err: any) {
+      log.warn(`[VideoStream] SDCP: failed to create WebSocket: ${err.message}`);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      log.warn('[VideoStream] SDCP: timed out after 10s');
+      ws.terminate();
+    }, 10_000);
+
+    ws.on('open', () => {
+      const msg = {
+        Id: '',
+        Topic: '',
+        Data: {
+          Cmd: 386,
+          Data: { Enable: 1 },
+          MainboardID: '',
+          RequestID: this.generateId(26),
+          TimeStamp: Math.floor(Date.now() / 1000),
+          From: 2, // SDCPFromWeb
+        },
+      };
+      ws.send(JSON.stringify(msg));
+      log.info('[VideoStream] SDCP: sent CmdVideoStreamControl Enable=1');
+    });
+
+    ws.on('message', (data: Buffer) => {
+      try {
+        const resp = JSON.parse(data.toString());
+        const ack = resp?.Data?.Data?.Ack ?? resp?.Data?.Ack ?? resp?.Ack;
+        const videoUrl = resp?.Data?.Data?.VideoUrl ?? resp?.Data?.VideoUrl ?? resp?.VideoUrl;
+        if (ack === 0) {
+          log.info(`[VideoStream] SDCP: success — VideoUrl: ${videoUrl || '(not returned)'}`);
+        } else {
+          log.warn(`[VideoStream] SDCP: response Ack=${ack}`);
+        }
+      } catch {
+        log.debug('[VideoStream] SDCP: non-JSON response');
+      }
+      clearTimeout(timeout);
+      ws.close();
+    });
+
+    ws.on('error', (err: Error) => {
+      log.warn(`[VideoStream] SDCP: error: ${err.message}`);
+      clearTimeout(timeout);
+    });
+
+    ws.on('close', () => {
+      clearTimeout(timeout);
+    });
+  }
+
+  /**
+   * Option 1b: Send method 1054 (CTRL_LIVE_STREAM) via MQTT.
+   * Simpler since we already have the MQTT connection, but the handler
+   * may not be implemented on all firmware versions.
+   */
+  private enableVideoStreamMQTT(): void {
+    log.info('[VideoStream] MQTT: sending method 1054 (CTRL_LIVE_STREAM) Enable=1');
+    this.sendCommand(1054, { Enable: 1 });
   }
 
   disconnect(): void {
