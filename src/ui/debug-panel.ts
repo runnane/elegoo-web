@@ -10,7 +10,7 @@
  * - Search/filter across all fields
  */
 
-import { $ } from './helpers';
+import { $, fetchTimeout } from './helpers';
 import { PrinterState } from '../printer-state';
 import { STATUS_NAMES, SUB_STATUS_NAMES, EXCEPTION_NAMES, SPEED_MODE_NAMES } from '../types';
 
@@ -529,4 +529,44 @@ export function bindDebugPanel(): void {
 
   updateLoggingUI();
   renderWatchedPaths();
+
+  // Video stream debug buttons
+  const resultSpan = document.getElementById('debug-videostream-result');
+  const sdcpBtn = document.getElementById('debug-videostream-sdcp') as HTMLButtonElement | null;
+  if (sdcpBtn) {
+    sdcpBtn.addEventListener('click', async () => {
+      sdcpBtn.disabled = true;
+      if (resultSpan) resultSpan.textContent = 'SDCP: connecting...';
+      try {
+        const resp = await fetchTimeout('/api/debug/videostream/sdcp', { method: 'POST' }, 15_000);
+        const data = await resp.json();
+        if (resultSpan) resultSpan.textContent = data.success
+          ? `SDCP: ✓ ${data.videoUrl ? `VideoUrl: ${data.videoUrl}` : 'OK'}`
+          : `SDCP: ✗ ${data.error || 'Failed'}`;
+      } catch (err: any) {
+        if (resultSpan) resultSpan.textContent = `SDCP: ✗ ${err.message}`;
+      } finally {
+        sdcpBtn.disabled = false;
+      }
+    });
+  }
+
+  const mqttBtn = document.getElementById('debug-videostream-mqtt') as HTMLButtonElement | null;
+  if (mqttBtn) {
+    mqttBtn.addEventListener('click', async () => {
+      mqttBtn.disabled = true;
+      if (resultSpan) resultSpan.textContent = 'MQTT: sending...';
+      try {
+        const resp = await fetchTimeout('/api/debug/videostream/mqtt', { method: 'POST' }, 15_000);
+        const data = await resp.json();
+        if (resultSpan) resultSpan.textContent = data.success
+          ? `MQTT 1054: ✓ sent — check log for response`
+          : `MQTT 1054: ✗ ${data.error || 'Failed'}`;
+      } catch (err: any) {
+        if (resultSpan) resultSpan.textContent = `MQTT 1054: ✗ ${err.message}`;
+      } finally {
+        mqttBtn.disabled = false;
+      }
+    });
+  }
 }

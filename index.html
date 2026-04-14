@@ -611,6 +611,12 @@
               <span class="debug-empty-inline">Click ○ on any value to watch it</span>
             </div>
           </div>
+          <div class="debug-actions" style="display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <span style="font-size: 12px; color: var(--text-muted); align-self: center;">Video Stream:</span>
+            <button class="btn btn-sm" id="debug-videostream-sdcp" title="Send CmdVideoStreamControl Enable=1 via SDCP WebSocket (port 3030) — matches official app">📡 SDCP Enable</button>
+            <button class="btn btn-sm" id="debug-videostream-mqtt" title="Send method 1054 (CTRL_LIVE_STREAM) Enable=1 via MQTT">📡 MQTT 1054</button>
+            <span id="debug-videostream-result" style="font-size: 12px; color: var(--text-muted); align-self: center;"></span>
+          </div>
           <div class="debug-split">
             <div class="debug-state-section">
               <h3>Live State <span class="debug-hint">(○ = watch, ▶ = expand)</span></h3>

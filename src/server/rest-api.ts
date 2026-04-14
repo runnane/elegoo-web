@@ -952,6 +952,36 @@ export function createRestRouter(store: StateStore, config: ServiceConfig, aiMon
       return;
     }
 
+    // Enable video stream via SDCP WebSocket (port 3030) — what the official app does
+    if (url === '/api/debug/videostream/sdcp' && req.method === 'POST') {
+      if (!bridge) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bridge not available' }));
+        return;
+      }
+      bridge.enableVideoStreamSDCP().then(result => {
+        res.writeHead(result.success ? 200 : 502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      }).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      });
+      return;
+    }
+
+    // Enable video stream via MQTT method 1054 (CTRL_LIVE_STREAM)
+    if (url === '/api/debug/videostream/mqtt' && req.method === 'POST') {
+      if (!bridge) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bridge not available' }));
+        return;
+      }
+      bridge.enableVideoStreamMQTT();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, note: 'Sent method 1054 Enable=1 — check MQTT log for response' }));
+      return;
+    }
+
     // Reset layer duration data
     if (url === '/api/layer-data' && req.method === 'DELETE') {
       store.clearLayerData();
