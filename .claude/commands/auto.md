@@ -103,8 +103,8 @@ Announce the order and the split/skip intentions before starting, then work it.
   otherwise is the main risk of an unattended pass.** There are **six tests** covering
   two pure functions; the MQTT bridge, the state store, every REST route, `/mcp`, both
   compat layers, Telegram, the AI monitor and the entire frontend have **no test at
-  all**, and there is no browser check. CI runs the same tests, so it adds nothing here
-  — and it also does not run the service typecheck. Five items, seconds each:
+  all**, and there is no browser check. CI runs `pnpm gates` — the same gates you just
+  ran locally — so a green CI adds confirmation, not coverage. Five items, seconds each:
 
   1. **Break the invariant and watch the named test go red.** If no test covers it —
      which is the common case — **write that sentence in the closing comment** rather

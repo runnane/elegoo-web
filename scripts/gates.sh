@@ -4,12 +4,17 @@
 #   pnpm gates          # everything
 #   pnpm gates --fix    # `biome check --write` first, then everything
 #
-# These are the checks .github/workflows/ci.yml runs, in the same order, PLUS ONE:
-# `service:check`. That is not an accident — tsconfig.json excludes src/server and
-# src/telegram, and CI only ever runs the build (which uses that config), so the
-# entire backend is typechecked by nothing in CI. Production runs the TypeScript
-# directly under `node --import tsx`, so a type error there reaches the running
-# service without a compile step in between.
+# THIS FILE IS WHAT CI RUNS (ELEG-5). .github/workflows/ci.yml is one step,
+# `pnpm gates`, so this script is the single list of what has to pass and the two
+# cannot drift apart. Add a gate here and CI picks it up with no workflow edit.
+#
+# It used to be four hand-listed steps in ci.yml, which is how `service:check` came
+# to be missing from them: tsconfig.json excludes src/server and src/telegram, CI only
+# ran the build (which uses that config), and so the entire backend was typechecked by
+# nothing in CI. Measured at the time — a deliberate type error in src/server/config.ts
+# left `pnpm build` PASSING and only `service:check` caught it. Production runs the
+# TypeScript directly under `node --import tsx`, so such an error reaches the running
+# service with no compile step in between.
 #
 # On biome: CI runs the NON-writing `biome ci`. `pnpm check` auto-fixes and exits 0,
 # so an auto-fix you did not commit still fails CI's lint step — hence --fix runs the
@@ -55,7 +60,7 @@ fi
 # Order mirrors ci.yml: cheapest signal first.
 run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci src/
 run 'typecheck: browser half (tsconfig.json)' pnpm exec tsc
-run 'typecheck: service + telegram (NOT run by CI)' pnpm run service:check
+run 'typecheck: service + telegram' pnpm run service:check
 run 'build (vite)' pnpm exec vite build
 run 'unit tests (vitest)' pnpm exec vitest run
 
