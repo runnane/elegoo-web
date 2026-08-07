@@ -1,0 +1,20 @@
+# pnpm settings. These lived in package.json's "pnpm" field until pnpm 11 stopped
+# reading it ("The `pnpm` field in package.json is no longer read by pnpm"), which
+# left the effective overrides empty while pnpm-lock.yaml still recorded them — and
+# --frozen-lockfile correctly refused the mismatch (ELEG-4). This file is the
+# documented new home and is read by both 10.x and 11.x.
+
+# Security pin, not a compatibility shim — keep it.
+overrides:
+  undici: '>=6.24.0'
+
+onlyBuiltDependencies:
+  - esbuild
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+
+updateConfig:
+  ignoreDependencies:
+    - three
+    - '@types/three'
