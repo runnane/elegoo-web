@@ -1,26 +1,45 @@
 # Testing — what is covered, and what nothing covers
 
-Be honest about the starting point: **the suite is six files, 39 tests**, all but three
-over pure functions.
+Be honest about the starting point: **the suite is small and almost entirely pure
+functions.** `pnpm exec vitest list` prints the current set; the list below describes what
+each file is *for*, and quotes no totals on purpose (ELEG-15 — a count in prose only ever
+drifts).
 
 - `src/__tests__/types.test.ts` — `detectZone`, `isFilamentChangeSubStatus`.
 - `src/__tests__/layer-chart.test.ts` — the layer chart's window selection and domain
-  arithmetic (ELEG-16).
+  arithmetic (ELEG-16/18).
 - `src/__tests__/layer-chart-render.test.ts` — the only tests that run drawing code, via
   a recording 2D-context stub (ELEG-16). See below.
 - `src/server/__tests__/layer-tracking.test.ts` — the print-boundary rule for the
-  layer-time series (ELEG-16).
+  layer-time series (ELEG-16/18).
+- `src/server/__tests__/state-store-restore.test.ts` — the only test that stands up a real
+  `StateStore` (ELEG-18). See below.
+- `src/server/__tests__/telegram-allowlist.test.ts` — who may issue bot commands (ELEG-3).
 - `src/server/__tests__/mcp-doc-parity.test.ts` — `MCP.md` matches the registered tools
   and resources (ELEG-7). A *documentation* check.
 - `src/server/__tests__/build-info.test.ts` — the deployed-commit stamp (ELEG-6).
 
-Everything else in this repo — the MQTT bridge, the state store's wiring, every REST
-route, the MCP server's behaviour, both compatibility layers, the Telegram bot and the
-AI monitor — has **no test at all**.
+Everything else in this repo — the MQTT bridge, the state store's *event* handling, every
+REST route, the MCP server's behaviour, both compatibility layers, the Telegram middleware
+wiring and the AI monitor — has **no test at all**.
 
 So `pnpm gates` green means: it compiles, it is formatted, some pure functions still
 work, and one chart still puts its ink inside its own axes. Read that sentence again
 before quoting a green run as evidence in a closing comment.
+
+## The state store is reachable after all
+
+`.agents/testing.md` long said the store was the most bug-prone untested code here, with
+the MQTT bridge as the obstacle. It is not one:
+`src/server/__tests__/state-store-restore.test.ts` constructs a real `StateStore` with an
+`EventEmitter` stub in place of the bridge — the constructor only registers listeners, and
+nothing on the restore path calls it. No printer, no network, no MQTT.
+
+One trap: the constructor starts a chart-sampling `setInterval`, so a test must call
+`store.destroy()` (an `afterEach` is the obvious home) or vitest will never exit.
+
+That opens the delta-merge tests this page has been asking for — a field absent from a
+printer delta means *unchanged*, not *cleared*, and nothing enforces it.
 
 ## Testing canvas code without a browser
 

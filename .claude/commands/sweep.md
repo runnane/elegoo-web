@@ -116,9 +116,9 @@ When both agents of a pair report back — never while one is still running:
    `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` that forced a plain `pnpm install` was fixed by
    ELEG-4. See [`local/gates.md`](local/gates.md).
 2. **Re-run the verification yourself, and correct the subagent's account of what it
-   proves.** Green gates in this repo mean "it compiles, it is formatted, and two pure
-   functions still work" — six tests, no browser check, no server-side coverage at all. A
-   subagent's report of "verified" is very often just that. Five items:
+   proves.** Green gates in this repo mean "it compiles, it is formatted, and some pure
+   functions still work" — a small suite, no browser check, almost no server-side
+   coverage. A subagent's report of "verified" is very often just that. Five items:
 
    1. **Break the invariant and watch the named test go red** — and where no test covers
       it, make sure the closing comment *says* so instead of implying coverage.
