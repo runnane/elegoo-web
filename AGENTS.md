@@ -286,7 +286,7 @@ its own reviewer, and quite possibly its own agent working in it right now.
 | Shared types | `src/types.ts` |
 | Tests | `src/__tests__/**` |
 | systemd unit + installer | `contrib/` |
-| Roadmap | `TODO.md` |
+| Roadmap | the **ELEG tracker** — there is no roadmap file |
 
 ## Deep dives
 
@@ -304,6 +304,5 @@ its own reviewer, and quite possibly its own agent working in it right now.
 ## Definition of done
 
 `pnpm gates` green (biome + both typechecks + build + tests), `MCP.md` / `README.md`
-updated if a documented surface changed, `TODO.md` updated if a roadmap item moved, a
-conventional commit subject that reads as a release note, no secrets committed, the
-issue commented and its PR open.
+updated if a documented surface changed, a conventional commit subject that reads as a
+release note, no secrets committed, the issue commented and its PR open.
