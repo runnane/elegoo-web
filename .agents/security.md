@@ -32,6 +32,11 @@ Three things make this sharper than a typical "no auth" note:
    `/moonraker/*`. With no credentials to withhold, that means **any web page a browser
    visits can issue those requests** from inside the network the browser is on. A
    `SameSite` cookie does not help, because there is no cookie.
+
+   This is the one that survives a LAN-only deployment intact, and it is easy to
+   under-rate: the attacker does not need to reach the network, only to get someone who is
+   already on it to load a page. "It is not exposed" is an answer about inbound routing,
+   not about this.
 3. **The compat layers advertise auth they do not have.** `octoprint-compat.ts` returns
    a fixed `apikey: 'elegoo-cc2-compat'` and the Moonraker layer answers
    `access.get_api_key` — so a client shows "connected, authenticated" while nothing was
@@ -41,6 +46,13 @@ Three things make this sharper than a typical "no auth" note:
 never add one that widens the write surface without saying so on the issue. Adding an
 authentication layer is a *feature* someone has to decide on — file it, don't smuggle it
 in, and don't design new endpoints as though it were already there.
+
+**And before claiming this service is or is not exposed, measure it properly.** A `curl`
+from the host resolves and routes from inside the network, so a `200` proves the service is
+up and nothing else — that mistake was made while writing these docs (2026-08-07) and
+produced two URGENT issues on a false premise. The honest check is: what does a *public*
+resolver return for the name (a routable address, or an RFC1918 one?), and does a client
+genuinely off the network reach it? See [deployment.md](deployment.md).
 
 ## The camera and the print data are not neutral either
 
