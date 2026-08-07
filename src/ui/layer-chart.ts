@@ -8,6 +8,69 @@ const GRID_COLOR = 'rgba(160, 160, 184, 0.12)';
 const LABEL_COLOR = '#a0a0b8';
 const LABEL_FONT = '10px -apple-system, BlinkMacSystemFont, sans-serif';
 const SERIES_COLOR = '#ab47bc';
+const MAX_VISIBLE = 200;
+
+/** One entry of the layer-time series, as the server sends it over `/ws`. */
+export interface LayerTimePoint {
+  layer: number;
+  duration: number;
+  timestamp: number;
+}
+
+/**
+ * Pick the window to plot: the last `maxVisible` entries of the **trailing
+ * strictly-increasing run**.
+ *
+ * The series is not guaranteed monotonic. The printer reports the finished job's
+ * `current_layer` for a moment after a print ends, so an entry belonging to the previous
+ * print can sit in front of the new one (ELEG-16 — the server no longer creates those,
+ * but a persisted series from before the fix still has one). Anything at or before the
+ * last decrease belongs to a different print, so plotting it would mix two jobs on one
+ * axis — and its duration spans the gap between them, which flattens every real layer
+ * against the baseline.
+ */
+export function selectVisibleLayers(
+  layerTimes: readonly LayerTimePoint[],
+  maxVisible = MAX_VISIBLE,
+): LayerTimePoint[] {
+  let start = 0;
+  for (let i = 1; i < layerTimes.length; i++) {
+    if (layerTimes[i].layer <= layerTimes[i - 1].layer) start = i;
+  }
+  const run = layerTimes.slice(start);
+  return run.length > maxVisible ? run.slice(-maxVisible) : run;
+}
+
+/**
+ * The plot's domain, from the **actual** min/max rather than the first and last entries.
+ * Taking the endpoints assumes the window is sorted; when it is not, out-of-domain points
+ * map to negative X and paint over the axis gutter instead of staying in the plot.
+ */
+export function computeDomain(visible: readonly LayerTimePoint[]): {
+  xMin: number;
+  xMax: number;
+  xRange: number;
+  yMax: number;
+} {
+  let xMin = Number.POSITIVE_INFINITY;
+  let xMax = Number.NEGATIVE_INFINITY;
+  let peak = 0;
+  for (const lt of visible) {
+    if (lt.layer < xMin) xMin = lt.layer;
+    if (lt.layer > xMax) xMax = lt.layer;
+    if (lt.duration > peak) peak = lt.duration;
+  }
+  if (!Number.isFinite(xMin)) {
+    xMin = 0;
+    xMax = 0;
+  }
+  return {
+    xMin,
+    xMax,
+    xRange: Math.max(1, xMax - xMin),
+    yMax: peak * 1.15 || 10, // 15% headroom
+  };
+}
 
 let lastDataLen = -1;
 let hoverX = -1; // CSS pixels relative to canvas, -1 = not hovering
@@ -63,7 +126,9 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  if (layerTimes.length < 2) {
+  // Determine visible range — the current print's last N layers
+  const visible = selectVisibleLayers(layerTimes);
+  if (visible.length < 2) {
     ctx.fillStyle = LABEL_COLOR;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
@@ -72,24 +137,10 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
     return;
   }
 
-  // Determine visible range — show last N layers that fit, or all
-  const maxVisible = Math.min(layerTimes.length, 200);
-  const visible = layerTimes.slice(-maxVisible);
-
   const plotW = w - PADDING.left - PADDING.right;
   const plotH = h - PADDING.top - PADDING.bottom;
 
-  // X: layer numbers
-  const xMin = visible[0].layer;
-  const xMax = visible[visible.length - 1].layer;
-  const xRange = Math.max(1, xMax - xMin);
-
-  // Y: duration in seconds
-  let yMax = 0;
-  for (const lt of visible) {
-    if (lt.duration > yMax) yMax = lt.duration;
-  }
-  yMax = yMax * 1.15 || 10; // 15% headroom
+  const { xMin, xRange, yMax } = computeDomain(visible);
 
   const xMap = (layer: number) => PADDING.left + ((layer - xMin) / xRange) * plotW;
   const yMap = (dur: number) => PADDING.top + plotH - (dur / yMax) * plotH;
@@ -129,6 +180,14 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
     ctx.fillText(`L${layer}`, x, PADDING.top + plotH + 4);
   }
 
+  // Series, fill and dots are clipped to the plot rect — the domain above keeps every
+  // point inside it, and this keeps that true for any data shape we have not thought of
+  // rather than letting a stray point paint over the axis labels.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(PADDING.left, PADDING.top, plotW, plotH);
+  ctx.clip();
+
   // Draw line
   ctx.strokeStyle = SERIES_COLOR;
   ctx.lineWidth = 1.5;
@@ -146,17 +205,15 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   ctx.stroke();
 
   // Fill area under the curve
-  if (visible.length >= 2) {
-    ctx.fillStyle = 'rgba(171, 71, 188, 0.12)';
-    ctx.beginPath();
-    ctx.moveTo(xMap(visible[0].layer), yMap(0));
-    for (const lt of visible) {
-      ctx.lineTo(xMap(lt.layer), yMap(lt.duration));
-    }
-    ctx.lineTo(xMap(visible[visible.length - 1].layer), yMap(0));
-    ctx.closePath();
-    ctx.fill();
+  ctx.fillStyle = 'rgba(171, 71, 188, 0.12)';
+  ctx.beginPath();
+  ctx.moveTo(xMap(visible[0].layer), yMap(0));
+  for (const lt of visible) {
+    ctx.lineTo(xMap(lt.layer), yMap(lt.duration));
   }
+  ctx.lineTo(xMap(visible[visible.length - 1].layer), yMap(0));
+  ctx.closePath();
+  ctx.fill();
 
   // Draw dots on data points (only if not too many)
   if (visible.length <= 80) {
@@ -170,17 +227,23 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
     }
   }
 
-  // Current value label at rightmost point
+  ctx.restore();
+
+  // Current value label at rightmost point. The last point sits on the plot's right
+  // edge, so the label only ever fits to its left.
   const last = visible[visible.length - 1];
   ctx.fillStyle = SERIES_COLOR;
   ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(
-    `L${last.layer}: ${last.duration.toFixed(1)}s`,
-    xMap(last.layer) + 6,
-    yMap(last.duration),
-  );
+  const lastLabel = `L${last.layer}: ${last.duration.toFixed(1)}s`;
+  const lastX = xMap(last.layer);
+  if (lastX + 6 + ctx.measureText(lastLabel).width <= w) {
+    ctx.textAlign = 'left';
+    ctx.fillText(lastLabel, lastX + 6, yMap(last.duration));
+  } else {
+    ctx.textAlign = 'right';
+    ctx.fillText(lastLabel, lastX - 6, yMap(last.duration));
+  }
 
   // Average line
   const avgDuration = visible.reduce((s, lt) => s + lt.duration, 0) / visible.length;

@@ -1,14 +1,45 @@
 # Testing — what is covered, and what nothing covers
 
-Be honest about the starting point: **the suite is one file, six tests.**
-`src/__tests__/types.test.ts` covers two pure functions from `src/types.ts`
-(`detectZone`, `isFilamentChangeSubStatus`). Everything else in this repo — the MQTT
-bridge, the state store, every REST route, the MCP server, both compatibility layers,
-the Telegram bot, the AI monitor and the entire frontend — has **no test at all**.
+Be honest about the starting point: **the suite is six files, 39 tests**, all but three
+over pure functions.
 
-So `pnpm gates` green means: it compiles, it is formatted, and two pure functions still
-work. Read that sentence again before quoting a green run as evidence in a closing
-comment.
+- `src/__tests__/types.test.ts` — `detectZone`, `isFilamentChangeSubStatus`.
+- `src/__tests__/layer-chart.test.ts` — the layer chart's window selection and domain
+  arithmetic (ELEG-16).
+- `src/__tests__/layer-chart-render.test.ts` — the only tests that run drawing code, via
+  a recording 2D-context stub (ELEG-16). See below.
+- `src/server/__tests__/layer-tracking.test.ts` — the print-boundary rule for the
+  layer-time series (ELEG-16).
+- `src/server/__tests__/mcp-doc-parity.test.ts` — `MCP.md` matches the registered tools
+  and resources (ELEG-7). A *documentation* check.
+- `src/server/__tests__/build-info.test.ts` — the deployed-commit stamp (ELEG-6).
+
+Everything else in this repo — the MQTT bridge, the state store's wiring, every REST
+route, the MCP server's behaviour, both compatibility layers, the Telegram bot and the
+AI monitor — has **no test at all**.
+
+So `pnpm gates` green means: it compiles, it is formatted, some pure functions still
+work, and one chart still puts its ink inside its own axes. Read that sentence again
+before quoting a green run as evidence in a closing comment.
+
+## Testing canvas code without a browser
+
+`src/__tests__/layer-chart-render.test.ts` is the pattern, and it needs no new
+dependency: hand the render function a stub `getContext('2d')` that pushes every call
+into an array, stub `document.getElementById` and `window.devicePixelRatio`, then assert
+on the *operations*. It catches the things that are cheap to get wrong and invisible in a
+diff — a missing `ctx.clip()`, a coordinate outside the plot rect, a label drawn past the
+canvas edge (ELEG-16 had all three).
+
+What it cannot tell you is whether the result **looks** right: colour, font, overlap and
+layout need eyes on `pnpm dev:web`. Reach for jsdom only if you need real layout — it is
+a dependency and an environment switch, not a free upgrade.
+
+**Where a new test file goes is decided by the typechecks, not by taste.** A test that
+imports `src/server/**` belongs under `src/server/__tests__/` — `tsconfig.json` excludes
+that directory, so importing server code from `src/__tests__/` drags Node-only modules
+into the browser typecheck. Frontend tests go in `src/__tests__/`. `vitest.config.ts`
+picks up both.
 
 ```bash
 pnpm test              # vitest run
@@ -38,7 +69,7 @@ The high-value, low-friction targets are the pure and near-pure functions that a
 carry the protocol's hard-won knowledge:
 
 - **`src/types.ts`** — zone detection, status/sub-status classification, unit
-  conversions. Cheap to test, and the existing six tests are the pattern to copy.
+  conversions. Cheap to test, and `types.test.ts` is the pattern to copy.
 - **`src/server/state-store.ts` / `src/printer-state.ts`** — the delta **merge**. Feed
   it a sequence of captured status payloads and assert the merged result. This is the
   most bug-prone code in the repo (a field missing from a delta means *unchanged*, not
