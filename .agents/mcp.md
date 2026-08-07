@@ -28,12 +28,28 @@ claude mcp add --transport http elegoo http://localhost:8088/mcp
 
 ## Two rules
 
-**1. `MCP.md` and `mcp-server.ts` change in the same commit.** The doc is the contract:
-it is what an agent reads to decide what to call, and **nothing verifies it** — no test
-compares the registered tool list to the tables in `MCP.md`, so a renamed tool, a new
-parameter or a dropped resource is drift that no gate catches and no reviewer is likely
-to notice. Update both, and update the tool/resource counts in `MCP.md` and `README.md`
-when they change.
+**1. `MCP.md` and `mcp-server.ts` change in the same commit.** The doc is the contract —
+it is what an agent reads to decide what to call.
+
+**A test now enforces the name half of this** (ELEG-7):
+`src/server/__tests__/mcp-doc-parity.test.ts` stands the server up over an in-memory
+transport, asks it for its tools and resources exactly as a client would, and compares
+that against the tables in `MCP.md` **in both directions** — a tool missing from the doc
+fails, and a doc row with no tool behind it fails too. It also checks the counts quoted in
+`README.md` and in this file. So adding a tool without touching the doc is now a red gate
+rather than silent drift, and the counts cannot rot.
+
+It lives under `src/server/` deliberately: `tsconfig.json` excludes that directory, so a
+test importing server code from `src/__tests__/` would drag Node-only modules into the
+browser typecheck. Being there means it is typechecked by `pnpm service:check` rather than
+by `pnpm build`, which never sees `src/server`. Both run in `pnpm gates`, and since ELEG-5
+`pnpm gates` is what CI runs — so the test executes on every PR.
+
+**What the test still does not check: parameters, types and bounds.** It compares *names*.
+A changed clamp (`0-300°C`), a new optional parameter, a renamed argument or a wrong
+default is drift it will not catch, and that is the drift most likely to mislead an agent —
+a documented bound that is no longer enforced is worse than an undocumented one. Keep
+updating those by hand.
 
 **2. A tool that commands the printer is a physical action.** `set_temperature`, `fan`,
 `led`, `home`, `move`, `start_print`, `pause_print`, `resume_print`, `stop_print` and
