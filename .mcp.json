@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "respawn-control": {
+      "type": "http",
+      "url": "${RESPAWN_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${RESPAWN_MCP_TOKEN}"
+      }
+    }
+  }
+}
