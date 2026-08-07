@@ -116,6 +116,7 @@ docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/run
 | `MOONRAKER_PORT` | `7125` | Moonraker compatibility API port |
 | `CAMERA_ENABLED` | `true` | Enable camera MJPEG proxy |
 | `CAMERA_URL` | `http://<PRINTER_IP>:8080` | Override camera URL |
+| `CORS_ALLOWED_ORIGINS` | — (same-origin) | Comma-separated origins allowed to make cross-origin requests to `/api/*`, `/mcp`, `/moonraker/*`, `/octoprint/*` and `:7125`. Unset means **no cross-origin access**. `*` restores the old allow-everything behaviour |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (enables notifications) |
 | `TELEGRAM_CHAT_ID` | — | Telegram chat ID — where notifications are **sent** |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | `TELEGRAM_CHAT_ID` | Comma-separated numeric sender ids permitted to **issue** bot commands. Anyone else is ignored silently |

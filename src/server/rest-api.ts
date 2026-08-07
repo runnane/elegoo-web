@@ -28,6 +28,7 @@ import type { PrintReportCollector } from './print-report-collector.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import { generateReportPDF } from './print-report-pdf.js';
 import { getBuildInfo } from './build-info.js';
+import { applyCors, corsHeaders } from './cors.js';
 import { getLogger } from './logger.js';
 import { STATUS_NAMES, SUB_STATUS_NAMES, SPEED_MODE_NAMES, EXCEPTION_NAMES } from '../types.js';
 import type { FanInfo } from '../types.js';
@@ -718,12 +719,14 @@ export function createRestRouter(
   return (req: IncomingMessage, res: ServerResponse) => {
     const url = req.url || '';
 
-    // CORS headers for API routes
+    // CORS headers for API routes — same-origin unless CORS_ALLOWED_ORIGINS says
+    // otherwise (ELEG-24). This is the surface that serves /api/snapshot, /api/stream
+    // and the control routes, so the wildcard mattered most here.
     if (url.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Access-Control-Max-Age', '86400');
+      applyCors(
+        res,
+        corsHeaders(config.corsPolicy, req.headers.origin, 'GET, POST, OPTIONS', 'Content-Type'),
+      );
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();

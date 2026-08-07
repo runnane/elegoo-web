@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { parseAllowedChatIds } from '../telegram/allowlist.js';
+import { type CorsPolicy, parseCorsPolicy } from './cors.js';
 
 export interface ServiceConfig {
   // Printer
@@ -12,6 +13,9 @@ export interface ServiceConfig {
   // Camera
   cameraEnabled: boolean;
   cameraUrl: string;
+
+  /** Cross-origin policy for every HTTP surface; defaults to same-origin (ELEG-24) */
+  corsPolicy: CorsPolicy;
 
   // Telegram (optional)
   telegramEnabled: boolean;
@@ -95,6 +99,7 @@ export function loadConfig(): ServiceConfig {
     servicePort,
     cameraEnabled: env('CAMERA_ENABLED') !== 'false',
     cameraUrl: env('CAMERA_URL') || `http://${printerIp}:8080`,
+    corsPolicy: parseCorsPolicy(env('CORS_ALLOWED_ORIGINS')),
     telegramEnabled: !!(telegramToken && telegramChatId),
     telegramToken,
     telegramChatId,

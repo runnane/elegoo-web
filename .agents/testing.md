@@ -114,7 +114,7 @@ motors into whatever is on the bed, or abort a job that has been running for hou
 Verifying one of those is operator work: give the exact command, ask for the output,
 interpret it. See [`AGENTS.md`](../AGENTS.md).
 
-## `pnpm dev` on this host collides with production — twice
+## `pnpm dev` on this host collides with production — three ways
 
 Production runs on this same machine (see [deployment.md](deployment.md)), and it holds
 **both** service ports:
@@ -130,12 +130,43 @@ MQTT broker means **two registrations for one printer**. The broker is small and
 two clients fight — which looks like flapping state or dropped updates in *production*,
 not in your dev window.
 
-To run the service locally, override both ports in your checkout's `.env`
-(e.g. `SERVICE_PORT=8188`, `MOONRAKER_PORT=7225`) and accept that you are still opening
-a second MQTT connection — so keep it short, and prefer `pnpm dev:web` (vite on :5173,
-frontend only) whenever the change is frontend-only. `vite.config.ts` proxies the API
-to the running service, which means **the dev frontend can be pointed at production
-state without a second connection at all.** That is the safest way to work here.
+**The third collision is the Telegram bot, and it bites even on free ports.** Your
+checkout's `.env` holds the **production** `TELEGRAM_BOT_TOKEN`, and a bot token supports
+exactly one long-poller. Start the service locally and grammy dies with:
+
+```
+GrammyError: Call to 'getUpdates' failed! (409: Conflict: terminated by other getUpdates
+request; make sure that only one bot instance is running)
+```
+
+— but not before *your* poller has kicked the production one off the token. The live
+service recovers (`Restart=always`, and grammy retries), so the damage is a gap in
+notifications rather than anything lasting. It also takes your dev process down, which is
+how you find out. Measured while verifying ELEG-24.
+
+So when you must run the service locally, blank the integrations rather than only moving
+the ports:
+
+```bash
+TELEGRAM_BOT_TOKEN= TELEGRAM_CHAT_ID= AI_ENABLED=false CAMERA_ENABLED=false \
+  SERVICE_PORT=18096 MOONRAKER_PORT=17122 PRINTER_IP=192.0.2.99 DATA_DIR=/tmp/probe \
+  pnpm exec tsx src/server/index.ts
+```
+
+`PRINTER_IP` on TEST-NET (`192.0.2.0/24`) is the important part: it means the MQTT
+connection attempt goes nowhere instead of becoming the second registration described
+above. The service starts and serves HTTP happily without a printer, which is enough to
+probe headers, routes and status codes.
+
+Prefer `pnpm dev:web` (vite on :5173, frontend only) whenever the change is frontend-only.
+`vite.config.ts` proxies the API to the running service, which means **the dev frontend
+can be pointed at production state without a second connection at all.** That is the
+safest way to work here.
+
+**When you do probe a local server, prove the request landed.** `curl … | grep -i
+'^access-control-allow-origin'` printing nothing means "header absent" *or* "server never
+came up", and those look identical. Print the status line too — a check that passes
+because nothing answered is worse than no check.
 
 ## What nothing checks — say so instead of implying otherwise
 
