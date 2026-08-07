@@ -1,4 +1,5 @@
 import type { PrinterAttributes, PrinterStatus, CanvasInfo, FileEntry, ZoneState } from './types';
+import { trailingLayerRun } from './types';
 
 export type StateListener = () => void;
 
@@ -390,13 +391,19 @@ export class PrinterState {
     this.notify();
   }
 
-  /** Restore layer data from persistence (init snapshot from server) */
+  /**
+   * Restore layer data from persistence (init snapshot from server).
+   *
+   * Sanitised on the way in, the same way the server does it (ELEG-18) — an older service
+   * can still send a series carrying an entry from a previous print, and anything reading
+   * `layerTimes` directly rather than going through the chart would inherit it.
+   */
   restoreLayerData(
     layerTimes: Array<{ layer: number; duration: number; timestamp: number }>,
     _lastLayer: number,
     _lastLayerTime: number,
   ): void {
-    this.layerTimes = layerTimes;
+    this.layerTimes = trailingLayerRun(layerTimes);
   }
 
   /** Register callback to request full status refresh (method 1002) on auto-report gaps */

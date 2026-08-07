@@ -18,6 +18,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { classifyLayerReport } from '../state-store.js';
+import { trailingLayerRun } from '../../types.js';
 
 const T0 = 1_786_110_795_370;
 
@@ -63,5 +64,36 @@ describe('classifyLayerReport', () => {
     ]) {
       expect(r.durationSec).toBe(0);
     }
+  });
+});
+
+describe('trailingLayerRun', () => {
+  const e = (layer: number, duration = 10) => ({ layer, duration, timestamp: T0 + layer });
+
+  it('leaves a healthy monotonic series alone', () => {
+    const series = [e(1), e(2), e(3)];
+    expect(trailingLayerRun(series)).toEqual(series);
+  });
+
+  it('drops a previous print left in front of the current one', () => {
+    // The live repro: one 155s cross-print entry ahead of L1.
+    const restored = [e(29, 155.259), e(1, 33), e(2, 24), e(3, 20)];
+    expect(trailingLayerRun(restored).map((x) => x.layer)).toEqual([1, 2, 3]);
+  });
+
+  it('never drops from the tail — the newest entry always survives', () => {
+    const restored = [e(29), e(1), e(2), e(3)];
+    const run = trailingLayerRun(restored);
+    expect(run[run.length - 1]).toEqual(restored[restored.length - 1]);
+  });
+
+  it('handles an empty series', () => {
+    expect(trailingLayerRun([])).toEqual([]);
+  });
+
+  it('keeps the newest run when several prints are stacked up', () => {
+    expect(trailingLayerRun([e(9), e(1), e(2), e(40), e(1), e(2)]).map((x) => x.layer)).toEqual([
+      1, 2,
+    ]);
   });
 });
