@@ -71,6 +71,50 @@ cp "$SCRIPT_DIR/tsconfig.json" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/tsconfig.server.json" "$INSTALL_DIR/" 2>/dev/null || true
 cp -r "$SCRIPT_DIR/public" "$INSTALL_DIR/" 2>/dev/null || true
 
+# Stamp the deploy — $INSTALL_DIR is not a git checkout, so this file is the only way
+# to ask what is actually running. Read back by src/server/build-info.ts and reported
+# from /api/health.
+#
+# Everything here degrades to null rather than failing the install: $SCRIPT_DIR may be
+# an unpacked tarball rather than a checkout, and git may be absent from the PATH under
+# sudo. `set -e` is active, so every capture is guarded.
+#
+# It lands at the install root, deliberately outside src/, dist/ and public/ — those are
+# wholly owned by the repo and are the directories a delete-consistent copy sweeps.
+log_info "Stamping deploy..."
+GIT_COMMIT=""
+GIT_SHORT=""
+GIT_DESCRIBE=""
+# -c safe.directory: the installer runs as root over a checkout owned by someone else,
+# which git otherwise refuses as "dubious ownership" — that would silently produce an
+# unstamped install in the one case this feature exists for.
+GIT_CMD=(git -c "safe.directory=$SCRIPT_DIR" -C "$SCRIPT_DIR")
+if command -v git &> /dev/null && "${GIT_CMD[@]}" rev-parse --git-dir &> /dev/null; then
+    GIT_COMMIT="$("${GIT_CMD[@]}" rev-parse HEAD 2>/dev/null || true)"
+    GIT_SHORT="$("${GIT_CMD[@]}" rev-parse --short HEAD 2>/dev/null || true)"
+    GIT_DESCRIBE="$("${GIT_CMD[@]}" describe --tags --always --dirty 2>/dev/null || true)"
+else
+    log_warn "  Source is not a git checkout — /api/health will report an unknown build"
+fi
+PKG_VERSION="$(node -p "require('$SCRIPT_DIR/package.json').version" 2>/dev/null || true)"
+
+# Serialised by node rather than by hand: it is already a hard dependency (checked
+# above) and it cannot mis-escape a value the way a printf template can.
+if BUILD_COMMIT="$GIT_COMMIT" BUILD_SHORT="$GIT_SHORT" BUILD_DESCRIBE="$GIT_DESCRIBE" \
+   BUILD_VERSION="$PKG_VERSION" BUILD_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+   node -e 'const f = (v) => (v ? v : null);
+process.stdout.write(JSON.stringify({
+  commit: f(process.env.BUILD_COMMIT),
+  shortCommit: f(process.env.BUILD_SHORT),
+  describe: f(process.env.BUILD_DESCRIBE),
+  version: f(process.env.BUILD_VERSION),
+  installedAt: f(process.env.BUILD_AT),
+}, null, 2) + "\n");' > "$INSTALL_DIR/build-info.json"; then
+    log_info "  Deployed build: ${GIT_DESCRIBE:-unknown} (${GIT_COMMIT:-no commit})"
+else
+    log_warn "  Could not write $INSTALL_DIR/build-info.json — build will report unknown"
+fi
+
 # Create .env if it doesn't already exist (preserve existing config on upgrades)
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     log_info "Creating default .env configuration..."

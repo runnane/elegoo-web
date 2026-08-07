@@ -8,7 +8,7 @@
  *   GET /api/snapshot  — Camera JPEG snapshot (proxied + cached)
  *   GET /api/stream    — MJPEG stream proxy (single upstream, fan-out to all clients)
  *   GET /api/stream/overlay — MJPEG stream with status text overlay
- *   GET /api/health    — Service health check
+ *   GET /api/health    — Service health check (incl. the deployed build stamp)
  *   GET /api/files/download — Proxy file download from printer
  *   POST /api/files/upload  — Proxy file upload to printer (chunked PUT)
  */
@@ -27,6 +27,7 @@ import type { AIMonitor, AILabelConfig } from './ai-monitor.js';
 import type { PrintReportCollector } from './print-report-collector.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import { generateReportPDF } from './print-report-pdf.js';
+import { getBuildInfo } from './build-info.js';
 import { getLogger } from './logger.js';
 import { STATUS_NAMES, SUB_STATUS_NAMES, SPEED_MODE_NAMES, EXCEPTION_NAMES } from '../types.js';
 import type { FanInfo } from '../types.js';
@@ -741,6 +742,9 @@ export function createRestRouter(
               ? 'broker_only'
               : 'disconnected',
           clients: 0, // filled in by ws-transport if needed
+          // Which commit is serving this. All-null on an unstamped deploy or a dev
+          // run; cached, because this endpoint is polled.
+          build: getBuildInfo(),
         }),
       );
       return;
