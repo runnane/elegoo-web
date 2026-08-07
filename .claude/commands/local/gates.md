@@ -1,5 +1,5 @@
 ---
-description: LOCAL to elegoo-web — the gate command, the typecheck CI does not run, why green means very little here, the red main, and the printer boundary no gate can enforce.
+description: LOCAL to elegoo-web — the gate command (which is what CI runs), why green still means very little here, and the printer boundary no gate can enforce.
 ---
 
 # local: this repo's gates
@@ -16,39 +16,55 @@ pnpm gates          # scripts/gates.sh — the whole set, with a ✓/✗ summary
 pnpm gates --fix    # biome check --write first; commit what it rewrites
 ```
 
-Five checks, in CI's order, plus one CI does not run:
+Five checks — and since ELEG-5, **`ci.yml` runs this exact script as its only step**, so
+this table is CI's step list too. Add a gate here and CI picks it up with no workflow edit.
 
 | # | Check | Command | Notes |
 | --- | --- | --- | --- |
-| 1 | lint | `biome ci src/` | **non-writing**, as CI does it |
+| 1 | lint | `biome ci src/` | **non-writing**, as CI does it; covers formatting as well as lint |
 | 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`, `src/telegram`** |
-| 3 | typecheck (service) | `tsc -p tsconfig.server.json` | **CI does not run this.** See below |
+| 3 | typecheck (service) | `tsc -p tsconfig.server.json` | `tsconfig.server.json` — the other half. See below |
 | 4 | build | `vite build` | writes `dist/`, which is gitignored |
 | 5 | tests | `vitest run` | 6 tests, ~150 ms |
 
 Grep the log for `✗` to get the failing gate, then read upward for that check's own
 output.
 
-## The whole backend is outside the typecheck CI runs
+## There are two typechecks, and `pnpm build` is only one of them
 
-`tsconfig.json` **excludes `src/server` and `src/telegram`**, and `pnpm build` runs only
-that config. CI runs `lint`, `format:check`, `build`, `test` — so **`src/server/**` and
-`src/telegram/**` are typechecked by nothing in CI at all**, and a type-broken service
-merges green.
+`tsconfig.json` **excludes `src/server` and `src/telegram`**, and `pnpm build` (`tsc &&
+vite build`) runs only that config. So `pnpm build` passing says **nothing** about the
+backend. Measured, by appending `const __probe: number = "not a number"` to
+`src/server/config.ts`:
 
-That is why `pnpm gates` runs `service:check` even though CI does not: a green CI on a
-backend change is close to meaningless without it. If you are running single checks by
-hand rather than `pnpm gates`, run both typechecks.
+```
+pnpm exec tsc        -> PASS   (the browser config never sees src/server)
+pnpm build           -> PASS   (same config, so also blind)
+pnpm service:check   -> FAIL   caught
+pnpm gates           -> FAIL   caught
+```
 
-Production makes this worse rather than better: the service runs the TypeScript
-**directly** under `node --import tsx`, so there is no compile step between a type error
-and the running service — the process just throws at runtime, restarts (`Restart=always`),
-and throws again.
+**This used to be a hole in CI and is not any more** (ELEG-5): CI ran `lint`,
+`format:check`, `build`, `test`, so the entire backend was typechecked by nothing and a
+type-broken service merged green. `ci.yml` now runs `pnpm gates`, which includes
+`service:check`.
 
-## `main` is red right now, and not because of you
+The trap that remains is the one the table above encodes: **`pnpm build` is not a
+typecheck of the backend.** If you are running single checks by hand rather than
+`pnpm gates`, run both typechecks — the second is the one that matters for
+`src/server/**` and `src/telegram/**`.
 
-Two independent failures, both pre-existing. Check whether they still are before
-attributing a red check to your branch — the last CI run to be green was in July.
+Production is why this bites: the service runs the TypeScript **directly** under
+`node --import tsx`, so there is no compile step between a type error and the running
+service — the process just throws at runtime, restarts (`Restart=always`), and throws
+again.
+
+## `main` is green again — the two reds that used to be here are both fixed
+
+**As of ELEG-4, CI passes on `main` for the first time since July** (run 31176229965,
+`✓ ci in 8m57s`). So the old advice — "a red check is probably not yours" — no longer
+applies by default: **a red check on your branch is now most likely yours.** Both
+historical reds are kept below because their shapes recur, not because they are live.
 
 1. ~~**`pnpm install --frozen-lockfile` fails in CI**~~ — **fixed in ELEG-4.** The cause
    was never really the `overrides` block: it was that `ci.yml` asked
@@ -75,9 +91,13 @@ attributing a red check to your branch — the last CI run to be green was in Ju
    **no `✖` marker and no rule name**, which reads like a crash. `--reporter=summary`
    names the file.
 
-So on this repo, right now: **a red CI check is not evidence about your change** until
-you have looked at *which* step failed. And a green local `pnpm gates` is the substantive
-evidence — say so explicitly in the closing comment rather than implying CI ran.
+Either way the habit stands: **read which step failed before attributing a red check** to
+your branch or dismissing it. What has changed is the prior — a red check is now evidence
+about your change rather than background noise.
+
+One thing that did **not** change: the install step takes **~9 minutes** on a cold cache,
+because `onlyBuiltDependencies` lets `onnxruntime-node`, `sharp`, `protobufjs` and
+`esbuild` run native build scripts. A long-running install is not a hang.
 
 ## CI works here, unlike in the private siblings
 

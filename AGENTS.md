@@ -51,15 +51,21 @@ Node ≥ 22, pnpm 10.x. There is no database and no container needed for develop
 ## Build / test / lint (run before finishing any change)
 
 ```bash
-pnpm gates          # ⭐ everything, in CI's order (scripts/gates.sh)
+pnpm gates          # ⭐ everything (scripts/gates.sh) — and this is literally what CI runs
 pnpm gates --fix    # biome --write first, then the gates — commit what it rewrites
 ```
 
 `pnpm gates` is the one to run: `biome ci src/` (**non-writing**, as CI does it),
-`tsc` (the browser half), **`pnpm service:check`** (the server + telegram half —
-the typecheck CI does *not* run), `vite build`, and `vitest run`. The individual
-scripts still exist for a tight inner loop; details, traps and the known gaps are in
+`tsc` (the browser half), **`pnpm service:check`** (the server + telegram half),
+`vite build`, and `vitest run`. The individual scripts still exist for a tight inner
+loop; details, traps and the known gaps are in
 [`.claude/commands/local/gates.md`](.claude/commands/local/gates.md).
+
+**`ci.yml` runs `pnpm gates` as a single step** (ELEG-5), so the gate list lives in one
+place and CI cannot fall behind it — adding a gate to `scripts/gates.sh` needs no
+workflow edit. It used to be four hand-listed steps, which is precisely how the backend
+came to be typechecked by nothing in CI. A green CI now means the same thing a green
+local run means; what that still does *not* prove is in `local/gates.md`.
 
 CI is [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `ubuntu-latest` —
 which works here because **this repo is public** and public repos get free hosted

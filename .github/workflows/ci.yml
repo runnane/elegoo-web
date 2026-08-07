@@ -25,7 +25,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm lint
-      - run: pnpm format:check
-      - run: pnpm build
-      - run: pnpm test
+      # One step, not four. `scripts/gates.sh` is the single list of what has to pass,
+      # so a gate can no longer exist in the repo but be missing from CI — which is
+      # exactly how the backend went unchecked (ELEG-5).
+      #
+      # It is a strict superset of the four steps it replaced: `biome ci src/` covers
+      # both `lint` and `format:check`, `tsc` + `vite build` is `build`, `vitest run`
+      # is `test` — PLUS `service:check`, the typecheck of src/server and src/telegram
+      # that tsconfig.json excludes and CI therefore never ran.
+      #
+      # It also reports every failing gate in one run rather than stopping at the first.
+      - run: pnpm gates
