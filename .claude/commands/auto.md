@@ -41,7 +41,7 @@ git rev-parse --abbrev-ref HEAD    # must be main — see below before you switc
 git status --porcelain             # whose changes are these?
 git worktree list                  # who else is in this repo right now?
 git switch main && git pull --ff-only
-pnpm install --frozen-lockfile     # see the note below — this currently fails
+pnpm install --frozen-lockfile     # works again as of ELEG-4 — see the note below
 gh pr list --state open            # anything already in flight?
 gh pr list --state merged --limit 10 --json number,baseRefName,mergeCommit
 ```
@@ -55,12 +55,16 @@ Same for overlap: a dirty file that one of the listed issues will touch is a rea
 stop. Unrelated dirt is fine and gets left alone. See
 [`shared/agent-isolation.md`](shared/agent-isolation.md).
 
-**`pnpm install --frozen-lockfile` fails on `main` today** —
-`ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`, because newer pnpm ignores the `pnpm` field in
-`package.json` and the lockfile's recorded `overrides` no longer match. Use a plain
-`pnpm install` locally, note it, and do not "fix" it by deleting the lockfile; it is
-filed as its own issue and it is also why **CI is red before it runs a single gate**.
-[`local/gates.md`](local/gates.md) has both known reds.
+**`main` is green, and that changes what a red check means.** `--frozen-lockfile` used to
+fail with `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` — newer pnpm ignores the `pnpm` field in
+`package.json`, so the lockfile's recorded `overrides` no longer matched — and that
+failed CI *before it ran a single gate*. **ELEG-4 fixed it**, so the install is clean and
+CI runs the gate set. Keep the lesson (CI can be red for a reason no gate would ever
+show you) and drop the licence that came with it: **a red check on your branch is yours
+until you have read which step failed and shown otherwise.** Never dismiss one on the
+strength of a note in a command file — this paragraph was that note, and it outlived the
+bug by a month. [`local/gates.md`](local/gates.md) keeps the history and the current
+gaps, and it is still true that green there proves very little.
 
 **Check that recently-merged PRs actually reached `main`.** A PR reading `MERGED` only
 means it merged into *its own base* — verify with
@@ -126,15 +130,14 @@ Announce the order and the split/skip intentions before starting, then work it.
 
 - **Merging as you go is part of this mode**, because later issues need the earlier work
   on `main`. List every merge in the final report. Check `gh pr checks` before merging —
-  but see the pre-flight: a red check on this repo is currently pre-existing and **not**
-  yours, so read which step failed rather than either dismissing it or blaming your
-  branch.
+  and since ELEG-4 landed there is **no standing pre-existing red to hide behind**, so
+  treat a failure as yours and read which step failed before concluding anything else.
 - **Read the two reference files on demand.** They are deliberately *not* inlined here:
 
   | Read | When |
   | --- | --- |
   | [`shared/gate-failures.md`](shared/gate-failures.md) | the **first time a gate goes red** in the pass, before you re-run anything |
-  | [`local/gates.md`](local/gates.md) | alongside it — this repo's exact commands, the two known reds, and why green means little |
+  | [`local/gates.md`](local/gates.md) | alongside it — this repo's exact commands, the reds that have since been fixed, and why green means little |
   | [`shared/pr-hygiene.md`](shared/pr-hygiene.md) | before opening the **first PR** of the pass, and again before any PR that only *partly* completes an issue |
 
   `shared/*` is byte-identical across the sibling repos and names no tool; `local/*` is
