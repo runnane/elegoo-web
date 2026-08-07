@@ -183,8 +183,14 @@ else
 fi
 
 # Create .env if it doesn't already exist (preserve existing config on upgrades)
+#
+# `umask 077` around the redirect, not a chmod after it: the file is the only copy of
+# PRINTER_PASSWORD, TELEGRAM_BOT_TOKEN and AI_VLM_API_KEY, and a chmod afterwards leaves a
+# window — however short — where it exists world-readable. Create it right instead.
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
     log_info "Creating default .env configuration..."
+    (
+    umask 077
     cat > "$INSTALL_DIR/.env" << EOF
 # Elegoo Web — Service Configuration
 # See README.md for all available options
@@ -219,6 +225,7 @@ DATA_DIR=/opt/elegooweb/data
 # AI_LOCAL_MODEL=Xenova/siglip-base-patch16-224
 # AI_INTERVAL=60
 EOF
+    )
     log_info "  Edit $INSTALL_DIR/.env to configure your printer IP and options"
 else
     log_info "Keeping existing .env configuration"
@@ -232,9 +239,26 @@ log_info "Installing production dependencies..."
 cd "$INSTALL_DIR"
 pnpm install --prod
 
-# Set ownership
-log_info "Setting permissions..."
+# Set ownership and modes.
+#
+# The modes are stated, not inherited. `cp` onto an existing file keeps that file's mode,
+# so an install directory that was once chmod'ed 777 by hand stayed 777 through every
+# later deploy and nothing here ever disagreed (ELEG-20). The service runs the TypeScript
+# directly under `node --import tsx`, so a world-writable tree is arbitrary code execution
+# as $SERVICE_USER, and a world-readable .env is every secret the service holds.
+#
+# chmod must come AFTER the chown -R: chown does not clear the bits, but doing it in this
+# order means the final state is the one written here regardless of what chown found.
+log_info "Setting ownership and permissions..."
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+chmod 750 "$INSTALL_DIR"
+chmod 750 "$INSTALL_DIR/data"
+chmod 600 "$INSTALL_DIR/.env"
+# The individually-copied files at the install root — package.json, pnpm-lock.yaml, the
+# tsconfigs, build-info.json. -maxdepth 1 on purpose: src/, dist/ and public/ carry their
+# modes from `rsync -a` and are already correct, and a recursive chmod over node_modules/
+# would strip the executable bit from package binaries.
+find "$INSTALL_DIR" -maxdepth 1 -type f ! -name .env -exec chmod 640 {} +
 
 # Install systemd service
 log_info "Installing systemd service..."

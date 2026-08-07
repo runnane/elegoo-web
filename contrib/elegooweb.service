@@ -25,6 +25,10 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/opt/elegooweb
+# Anything the service creates under /opt/elegooweb — data/state.json, logs, cached
+# gcode — is owner+group only. Without this the process umask decides, and the default
+# 022 would write a world-readable state file (ELEG-20).
+UMask=0027
 
 # Environment
 Environment=NODE_ENV=production

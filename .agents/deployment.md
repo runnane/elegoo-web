@@ -14,8 +14,17 @@ are different trees that can silently disagree.
 | exec | `/usr/bin/node --import tsx src/server/index.ts` — the **TypeScript is run directly**, so `src/**` in that directory *is* the production code |
 | env | `EnvironmentFile=/opt/elegooweb/.env` (separate from the checkout's `.env`) |
 | ports | `SERVICE_PORT` 8088 (web + API + `/ws` + `/mcp`), `MOONRAKER_PORT` 7125 |
-| hardening | `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp`, `ReadWritePaths=/opt/elegooweb` |
+| hardening | `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp`, `ReadWritePaths=/opt/elegooweb`, `UMask=0027` |
 | restart | `Restart=always`, `RestartSec=5` |
+| modes | `750` on the tree, **`600` on `.env`**, `750` on `data/`, `640` on the root-level files — set by the installer, not inherited |
+
+**The modes are stated by the installer on every run, deliberately.** They were `777` for
+a long time, which meant any local account could read `PRINTER_PASSWORD`,
+`TELEGRAM_BOT_TOKEN` and `AI_VLM_API_KEY`, and — because the service runs the TypeScript
+directly — could drop a file into `src/server/` and have it executed as `elegooweb` on the
+next restart. Nothing corrected it, because `cp` onto an existing file keeps that file's
+mode and no line in the installer had ever expressed an intended one (ELEG-20). If you add
+a file to the install root, give it a mode there too.
 
 Because the service runs the TypeScript directly, **there is no build step for the
 backend** — copying a `.ts` file into `/opt/elegooweb/src/server/` and restarting is a
