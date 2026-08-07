@@ -2,18 +2,34 @@
  * Telegram bot command handlers: /status, /photo, /help
  */
 
-import type { Context } from 'grammy';
+import type { Context, MiddlewareFn } from 'grammy';
 import { InputFile } from 'grammy';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { BotConfig } from './config.js';
 import { fetchSnapshot } from './camera.js';
 import { safeCaption } from './notifications.js';
+import { isAllowedSender } from './allowlist.js';
 
 export function registerCommands(
-  bot: { command: (cmd: string, handler: (ctx: Context) => Promise<void>) => void },
+  bot: {
+    command: (cmd: string, handler: (ctx: Context) => Promise<void>) => void;
+    use: (middleware: MiddlewareFn<Context>) => unknown;
+  },
   bridge: MqttBridge,
   config: BotConfig,
 ): void {
+  // Sender gate, BEFORE any handler (ELEG-3) — see src/server/telegram.ts for the
+  // reasoning. Silent drop; a reply would confirm the bot exists.
+  bot.use(async (ctx, next) => {
+    if (isAllowedSender(config.allowedChatIds, ctx.from?.id)) {
+      await next();
+      return;
+    }
+    console.warn(
+      `[Telegram] Ignoring update from unauthorised sender ${ctx.from?.id ?? 'unknown'}`,
+    );
+  });
+
   bot.command('start', async (ctx) => {
     await ctx.reply(
       '🖨 *Elegoo CC2 Telegram Bot*\n\n' +

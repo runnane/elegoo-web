@@ -117,7 +117,8 @@ docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/run
 | `CAMERA_ENABLED` | `true` | Enable camera MJPEG proxy |
 | `CAMERA_URL` | `http://<PRINTER_IP>:8080` | Override camera URL |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (enables notifications) |
-| `TELEGRAM_CHAT_ID` | — | Telegram chat ID |
+| `TELEGRAM_CHAT_ID` | — | Telegram chat ID — where notifications are **sent** |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | `TELEGRAM_CHAT_ID` | Comma-separated numeric sender ids permitted to **issue** bot commands. Anyone else is ignored silently |
 | `PROGRESS_INTERVAL` | `25` | Notify every N% progress |
 | `DATA_DIR` | `./data` | Data directory for state, reports, logs |
 | `AI_ENABLED` | `false` | Enable AI print monitoring |
