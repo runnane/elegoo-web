@@ -2,10 +2,11 @@
   "mcpServers": {
     "respawn-control": {
       "type": "http",
-      "url": "${RESPAWN_MCP_URL}",
+      "url": "https://respawn.srv.jont.no/mcp",
       "headers": {
         "Authorization": "Bearer ${RESPAWN_MCP_TOKEN}"
       }
     }
+
   }
 }
