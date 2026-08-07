@@ -1,6 +1,7 @@
 /** Layer time chart — plots duration per layer with layer numbers on X-axis */
 
 import type { PrinterState } from '../printer-state';
+import { type LayerTimeEntry, trailingLayerRun } from '../types';
 import { $ } from './helpers';
 
 const PADDING = { top: 10, right: 12, bottom: 28, left: 48 };
@@ -11,11 +12,7 @@ const SERIES_COLOR = '#ab47bc';
 const MAX_VISIBLE = 200;
 
 /** One entry of the layer-time series, as the server sends it over `/ws`. */
-export interface LayerTimePoint {
-  layer: number;
-  duration: number;
-  timestamp: number;
-}
+export type LayerTimePoint = LayerTimeEntry;
 
 /**
  * Pick the window to plot: the last `maxVisible` entries of the **trailing
@@ -33,11 +30,7 @@ export function selectVisibleLayers(
   layerTimes: readonly LayerTimePoint[],
   maxVisible = MAX_VISIBLE,
 ): LayerTimePoint[] {
-  let start = 0;
-  for (let i = 1; i < layerTimes.length; i++) {
-    if (layerTimes[i].layer <= layerTimes[i - 1].layer) start = i;
-  }
-  const run = layerTimes.slice(start);
+  const run = trailingLayerRun(layerTimes);
   return run.length > maxVisible ? run.slice(-maxVisible) : run;
 }
 

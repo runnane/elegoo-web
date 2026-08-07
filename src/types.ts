@@ -380,3 +380,38 @@ export function detectZone(x: number, y: number): ZoneName {
   }
   return 'outside';
 }
+
+// ── Layer-time series ────────────────────────────────────────────────
+
+/** One completed layer: how long it took, and when it finished. */
+export interface LayerTimeEntry {
+  layer: number;
+  duration: number;
+  timestamp: number;
+}
+
+/**
+ * Keep only the trailing strictly-increasing run of a layer-time series.
+ *
+ * The series is supposed to be monotonic in `layer` within a print, and since ELEG-16 the
+ * store no longer produces one that is not. But a series can still arrive non-monotonic
+ * from *outside* that guarantee — `data/state.json` written before that fix, or any
+ * future path that gets it wrong — and a cross-print entry then skews `/api/metrics`, the
+ * MCP `layers` tool and the print-report stats, none of which look at anything but the
+ * raw array (ELEG-18).
+ *
+ * Anything at or before the last decrease belongs to a previous print, so it goes. Its
+ * duration spans the gap *between* two prints, which is why leaving it in is worse than
+ * dropping it: on the live repro one 155s phantom sat among 14s layers.
+ *
+ * Lives in `types.ts` because both halves need the identical rule — the server sanitising
+ * at the restore boundary, the chart choosing what to plot — and two copies would be free
+ * to disagree. Pure, and covered by `src/__tests__/layer-chart.test.ts`.
+ */
+export function trailingLayerRun<T extends LayerTimeEntry>(entries: readonly T[]): T[] {
+  let start = 0;
+  for (let i = 1; i < entries.length; i++) {
+    if (entries[i].layer <= entries[i - 1].layer) start = i;
+  }
+  return entries.slice(start);
+}

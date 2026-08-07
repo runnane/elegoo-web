@@ -18,6 +18,7 @@ import {
   EXCEPTION_NAMES,
   isFilamentChangeSubStatus,
   detectZone,
+  trailingLayerRun,
   ZONE_MAX_HISTORY,
 } from '../types.js';
 import type { ZoneState } from '../types.js';
@@ -496,17 +497,36 @@ export class StateStore extends EventEmitter {
     }
   }
 
-  /** Restore layer data from persistence */
+  /**
+   * Restore layer data from persistence.
+   *
+   * Sanitised on the way in (ELEG-18). `data/state.json` is accepted up to 24h old and is
+   * not necessarily written by code that had the ELEG-16 fix, so a persisted series can
+   * still carry an entry from a previous print. Everything downstream — `/api/metrics`,
+   * the MCP `layers` tool, `computeLayerStats` in the report collector — reads the raw
+   * array and would average a cross-print duration into its numbers. Cleaning here means
+   * none of them has to know.
+   */
   restoreLayerData(
     layerTimes: Array<{ layer: number; duration: number; timestamp: number }>,
     lastLayer: number,
     lastLayerTime: number,
   ): void {
-    if (layerTimes && layerTimes.length > 0) {
-      this.layerTimes = layerTimes;
-      this._lastLayer = lastLayer;
-      this._lastLayerTime = lastLayerTime;
+    if (!layerTimes || layerTimes.length === 0) return;
+
+    const clean = trailingLayerRun(layerTimes);
+    const dropped = layerTimes.length - clean.length;
+    if (dropped > 0) {
+      log.warn(
+        `Restored layer data was not monotonic — dropped ${dropped} entr${dropped === 1 ? 'y' : 'ies'} from a previous print, kept ${clean.length} from L${clean[0].layer}`,
+      );
     }
+
+    this.layerTimes = clean;
+    // The persisted baseline still describes the tail: entries are only ever dropped from
+    // the front, so the last entry — and the layer in progress after it — is unchanged.
+    this._lastLayer = lastLayer;
+    this._lastLayerTime = lastLayerTime;
   }
 
   getLastLayer(): number {
