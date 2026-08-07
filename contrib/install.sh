@@ -68,6 +68,27 @@ if ! id "$SERVICE_USER" &>/dev/null; then
     useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
 
+# Build the frontend if the source tree has none.
+#
+# This builds in $SCRIPT_DIR — the checkout — and NOT in $INSTALL_DIR. Building in the
+# install directory is what used to drag the entire dev toolchain (vite, vitest,
+# typescript, release-it) into production, which every later `pnpm install --prod` then
+# had to prune back out, emitting the "Failed to create bin ... ENOENT" warnings that
+# made a healthy deploy look broken (ELEG-19). $INSTALL_DIR gets runtime dependencies
+# and nothing else.
+#
+# It also drops to $SUDO_USER: this script runs as root, and a root-owned dist/ and
+# node_modules/ left behind in someone's working tree is a nasty parting gift.
+if [[ ! -d "$SCRIPT_DIR/dist" ]]; then
+    log_info "No dist/ in source — building the frontend..."
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        sudo -u "$SUDO_USER" bash -c "cd $(printf '%q' "$SCRIPT_DIR") && pnpm install && pnpm build"
+    else
+        log_warn "  No SUDO_USER — building as root, which will leave root-owned files in $SCRIPT_DIR"
+        (cd "$SCRIPT_DIR" && pnpm install && pnpm build)
+    fi
+fi
+
 # Create installation directory
 log_info "Creating installation directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
@@ -203,18 +224,13 @@ else
     log_info "Keeping existing .env configuration"
 fi
 
-# Build frontend if dist/ doesn't exist
-if [[ ! -d "$INSTALL_DIR/dist" ]]; then
-    log_info "Building frontend..."
-    cd "$INSTALL_DIR"
-    pnpm install
-    pnpm build
-else
-    # Production install for server deps only
-    log_info "Installing dependencies..."
-    cd "$INSTALL_DIR"
-    pnpm install --prod
-fi
+# Runtime dependencies only. Never a plain `pnpm install` here: devDependencies in
+# $INSTALL_DIR are a larger production surface than the service needs, and the next
+# --prod run has to prune them again (ELEG-19). The frontend is built in the source
+# checkout above and arrives via rsync, so nothing in this directory needs a toolchain.
+log_info "Installing production dependencies..."
+cd "$INSTALL_DIR"
+pnpm install --prod
 
 # Set ownership
 log_info "Setting permissions..."

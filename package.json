@@ -33,7 +33,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check": "biome check --write src/",
-    "prepare": "simple-git-hooks || true"
+    "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1 && simple-git-hooks >/dev/null 2>&1 || true"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",

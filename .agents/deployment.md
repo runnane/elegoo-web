@@ -36,6 +36,16 @@ tsconfigs, writes the build stamp, `pnpm install --prod`,
 preserves an existing `.env`, and **requires `rsync`** — it exits rather than falling
 back to a copy that cannot delete.
 
+**`/opt/elegooweb` never gets devDependencies.** The install there is `--prod` and only
+`--prod`; if the source tree has no `dist/`, the installer builds it in the *checkout*
+(dropping to `$SUDO_USER`, so root does not leave artefacts in your working tree) and
+rsyncs the result. It used to run a full `pnpm install` + `pnpm build` inside
+`/opt/elegooweb` on first install, which put vite, vitest, typescript and release-it
+into production and left every later `--prod` run pruning them back out — the source of
+the `Failed to create bin … ENOENT` warnings that made a healthy deploy read as broken
+(ELEG-19). The runbook below builds before installing anyway, so that path was only ever
+reached on a first install.
+
 Three consequences that have already produced a real artefact:
 
 1. **The copy is delete-consistent, but only from the next install onwards.** It used to
