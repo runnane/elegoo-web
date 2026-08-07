@@ -8,17 +8,10 @@ data/
 .env
 .cache/
 
-# BEGIN swamp managed section - DO NOT EDIT
-
-# Runtime data (not needed in version control)
-.swamp/
-
-# Local extension sources (developer-specific, not shared)
-.swamp-sources.yaml
-
-# Claude Code configuration (managed by swamp)
+# Claude Code — per-machine state only.
+# .mcp.json, AGENTS.md, .agents/ and .claude/commands/ ARE committed: they are the
+# shared agent instructions for this repo (see AGENTS.md).
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
-# END swamp managed section

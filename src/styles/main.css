@@ -28,8 +28,8 @@
   --radius-sm: 6px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.24), 0 1px 2px rgba(0, 0, 0, 0.16);
   --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Consolas", monospace;
   --header-height: 52px;
   --sidebar-width: 380px;
 }
@@ -182,7 +182,7 @@ body {
 .card > .card-header > h3::after,
 .card > .files-header > h3::after,
 .card > .log-header > h3::after {
-  content: '▾';
+  content: "▾";
   position: absolute;
   right: 0;
   top: 0;
@@ -394,7 +394,7 @@ body {
   background: var(--accent);
 }
 .sidebar-resize-handle::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -4px;
   right: -4px;
@@ -561,7 +561,7 @@ body {
 
 /* Shimmer sweep while printing */
 .progress-fill.active::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(
@@ -1432,7 +1432,7 @@ body {
 }
 
 .toggle-slider::before {
-  content: '';
+  content: "";
   position: absolute;
   height: 16px;
   width: 16px;
@@ -1563,10 +1563,10 @@ body {
 .file-item:hover {
   background: var(--bg-hover);
 }
-.file-item[data-type='file'] {
+.file-item[data-type="file"] {
   cursor: default;
 }
-.file-item[data-type='file']:not(:has(.file-print-btn:hover)):hover {
+.file-item[data-type="file"]:not(:has(.file-print-btn:hover)):hover {
   background: var(--bg-hover);
 }
 .file-name-row {
@@ -1998,7 +1998,7 @@ body {
 .log-entries {
   height: 320px;
   overflow-y: auto;
-  font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+  font-family: "Menlo", "Consolas", "Courier New", monospace;
   font-size: 0.75rem;
   line-height: 1.5;
   background: var(--bg-primary);
@@ -2427,8 +2427,8 @@ body {
   margin-bottom: 4px;
 }
 .modal-body select,
-.modal-body input[type='text'],
-.modal-body input[type='number'] {
+.modal-body input[type="text"],
+.modal-body input[type="number"] {
   width: 100%;
   padding: 6px 10px;
   background: var(--bg-input);
@@ -2437,7 +2437,7 @@ body {
   color: var(--text-primary);
   font-size: 13px;
 }
-.modal-body input[type='color'] {
+.modal-body input[type="color"] {
   width: 48px;
   height: 32px;
   border: 1px solid var(--border);
@@ -3131,7 +3131,7 @@ body {
   cursor: pointer;
   font-size: 0.85rem;
 }
-.settings-card-label input[type='checkbox'] {
+.settings-card-label input[type="checkbox"] {
   accent-color: var(--accent);
 }
 .settings-card-move {
@@ -3534,7 +3534,7 @@ body {
   font-size: 12px;
 }
 .print-dialog-meta-row span + span::before {
-  content: ' · ';
+  content: " · ";
 }
 .print-dialog-section {
   margin-bottom: 14px;
@@ -3726,7 +3726,7 @@ body {
   color: var(--text-primary);
   user-select: none;
 }
-.print-dialog-checkbox input[type='checkbox'] {
+.print-dialog-checkbox input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 18px;
@@ -3741,12 +3741,12 @@ body {
     background 0.15s,
     border-color 0.15s;
 }
-.print-dialog-checkbox input[type='checkbox']:checked {
+.print-dialog-checkbox input[type="checkbox"]:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
-.print-dialog-checkbox input[type='checkbox']:checked::after {
-  content: '';
+.print-dialog-checkbox input[type="checkbox"]:checked::after {
+  content: "";
   position: absolute;
   left: 4px;
   top: 1px;
@@ -3756,7 +3756,7 @@ body {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.print-dialog-checkbox input[type='checkbox']:hover {
+.print-dialog-checkbox input[type="checkbox"]:hover {
   border-color: var(--accent);
 }
 /* Footer */
@@ -3846,7 +3846,7 @@ body {
   padding: 8px;
   overflow: auto;
   max-height: 70vh;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -3857,7 +3857,7 @@ body {
   padding: 8px;
   overflow: auto;
   max-height: 70vh;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
   font-size: 11px;
   line-height: 1.5;
 }
@@ -3884,12 +3884,12 @@ body {
   margin-right: 4px;
 }
 .debug-key::after {
-  content: ':';
+  content: ":";
   color: var(--text-secondary);
   margin-right: 4px;
 }
 .debug-node > .debug-key::after {
-  content: '';
+  content: "";
 }
 .debug-meta {
   color: var(--text-secondary);

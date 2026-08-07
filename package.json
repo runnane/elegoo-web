@@ -23,6 +23,7 @@
     "release:dry": "release-it --dry-run",
     "docker:build": "docker build -t ghcr.io/runnane/elegoo-web:local .",
     "docker:push": "docker push ghcr.io/runnane/elegoo-web:local",
+    "gates": "bash scripts/gates.sh",
     "lint": "biome lint src/",
     "lint:fix": "biome lint --write src/",
     "format": "biome format --write src/",
