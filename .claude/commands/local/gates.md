@@ -25,7 +25,7 @@ this table is CI's step list too. Add a gate here and CI picks it up with no wor
 | 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`, `src/telegram`** |
 | 3 | typecheck (service) | `tsc -p tsconfig.server.json` | `tsconfig.server.json` — the other half. See below |
 | 4 | build | `vite build` | writes `dist/`, which is gitignored |
-| 5 | tests | `vitest run` | 6 tests, ~150 ms |
+| 5 | tests | `vitest run` | 11 tests, ~300 ms |
 
 Grep the log for `✗` to get the failing gate, then read upward for that check's own
 output.
@@ -159,9 +159,18 @@ twice:
 
 ## Green gates prove very little here — the honest list
 
-The suite is **one file, six tests**, covering two pure functions. Nothing tests the MQTT
-bridge, the state store, any REST route, `/mcp`, the Moonraker/OctoPrint layers, Telegram,
-the AI monitor, or **any** frontend code. There is no browser test and no screenshot.
+The suite is **two files, eleven tests**, and neither file tests behaviour you are likely
+to break:
+
+- `src/__tests__/types.test.ts` — six tests over two pure functions.
+- `src/server/__tests__/mcp-doc-parity.test.ts` — five tests asserting `MCP.md` lists
+  exactly the registered tools and resources (ELEG-7). That is a **documentation** check.
+  It will catch you renaming a tool without touching the doc; it will not notice that the
+  tool stopped working.
+
+Nothing tests the MQTT bridge, the state store, any REST route, `/mcp`'s actual
+behaviour, the Moonraker/OctoPrint layers, Telegram, the AI monitor, or **any** frontend
+code. There is no browser test and no screenshot.
 
 So the load-bearing gates are the two typechecks, and the failing-direction check matters
 more here than in a repo with real coverage:
