@@ -29,19 +29,28 @@ here. Don't reason about this host's behaviour from the compose file.
 ## How a deploy happens
 
 `contrib/install.sh` (`sudo pnpm service:install`) is the mechanism: it creates the
-user and the directory, then **`cp -r`** of `src/`, `dist/`, `public/`,
-`package.json`, `pnpm-lock.yaml` and the tsconfigs, `pnpm install --prod`,
+user and the directory, then **`rsync -a --delete`** of `src/`, `dist/` and `public/`
+(one directory at a time) plus a plain copy of `package.json`, `pnpm-lock.yaml` and the
+tsconfigs, writes the build stamp, `pnpm install --prod`,
 `chown -R elegooweb:elegooweb`, install the unit, `systemctl enable` + restart. It
-preserves an existing `.env`.
+preserves an existing `.env`, and **requires `rsync`** — it exits rather than falling
+back to a copy that cannot delete.
 
 Three consequences that have already produced a real artefact:
 
-1. **`cp -r` never deletes.** A file removed from git stays in production forever.
-   Right now `/opt/elegooweb/src/ui/bed-mesh.ts` is live on disk although commit
-   `a8157a9` ("remove bed mesh feature") deleted it from the repo. It happens to be
-   unreferenced, so it is harmless today — but the same mechanism would keep serving a
-   retired route or an old module that something still imports. Verify a removal with
-   `ls`, not with the git diff.
+1. **The copy is delete-consistent, but only from the next install onwards.** It used to
+   be `cp -r`, which never deletes, so a file removed from git stayed in production
+   forever. `src/`, `dist/` and `public/` are now `rsync -a --delete`, **scoped one
+   directory at a time** — never a sweep over `$INSTALL_DIR`, because `.env`, `data/` and
+   `node_modules/` live at the install root beside them and must survive. The
+   `--exclude`s in the installer are a second layer, not the defence.
+
+   What that backlog looks like today, from a dry run against the live directory:
+   `/opt/elegooweb/src/ui/bed-mesh.ts` (deleted from the repo by `a8157a9`) plus **24
+   orphaned hashed bundles in `dist/assets/`**, one pair per build ever deployed. All
+   unreferenced, so harmless — but the same mechanism would just as happily keep serving
+   a retired route or a module something still imports. Until an install actually runs
+   they are all still there, so **verify a removal with `ls`, not with the git diff.**
 2. **The deployed tree still has no git metadata — but it does carry a stamp.** The
    installer writes `/opt/elegooweb/build-info.json` (commit, short commit,
    `git describe`, `package.json` version, install timestamp) and the service reports it
@@ -105,10 +114,18 @@ journalctl -u elegooweb -n 100 --no-pager        # or: pnpm service:logs
 diff -rq --exclude=node_modules --exclude=data --exclude=.env --exclude=dist \
   "$PWD/src" /opt/elegooweb/src
 
+# what would the deploy DELETE? read this before every install — it is the safety case
+for d in src dist public; do
+  rsync -n -v -a --delete --exclude=.env --exclude=data/ --exclude=node_modules/ \
+    "$PWD/$d/" "/opt/elegooweb/$d/" | grep '^deleting' || true
+done
+# -n writes nothing. The list must contain only files you meant to remove, and must
+# never mention .env, data/ or node_modules/ — if it does, stop and do not install.
+
 # deploy (from a clean, merged checkout on main)
 git switch main && git pull --ff-only
 pnpm install && pnpm gates && pnpm build        # dist/ must be current
-sudo pnpm service:install                       # cp + install --prod + restart
+sudo pnpm service:install                       # rsync --delete + install --prod + restart
 
 # restart / stop only
 sudo systemctl restart elegooweb

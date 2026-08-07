@@ -47,6 +47,18 @@ if ! command -v pnpm &> /dev/null; then
 fi
 log_info "pnpm version: $(pnpm -v)"
 
+# Check for rsync — the deploy is delete-consistent and there is no safe fallback.
+# Falling back to `cp -r` here would silently reintroduce the exact bug this guards
+# against (a file deleted from git stays live in $INSTALL_DIR forever) while reporting
+# a successful install, so this exits rather than degrading.
+if ! command -v rsync &> /dev/null; then
+    log_error "rsync is not installed, and the deploy requires it."
+    log_error "  Install it (apt install rsync / dnf install rsync / pacman -S rsync) and re-run."
+    log_error "  Do not substitute 'cp -r': it never deletes, so files removed from the"
+    log_error "  repository would remain live in $INSTALL_DIR."
+    exit 1
+fi
+
 # Resolve source directory (repo root = parent of contrib/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -61,15 +73,49 @@ log_info "Creating installation directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/data"
 
-# Copy source files
-log_info "Copying files..."
-cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
-cp -r "$SCRIPT_DIR/dist" "$INSTALL_DIR/" 2>/dev/null || true
+# Copy source files — delete-consistent, so a file removed from the repository is also
+# removed from the deploy.
+#
+# --delete is scoped to ONE DIRECTORY AT A TIME and is never run over $INSTALL_DIR
+# itself. That is the whole safety argument: src/, dist/ and public/ are wholly owned by
+# the repository, while the state that must survive an upgrade lives at the install root
+# beside them —
+#
+#   $INSTALL_DIR/.env           the only copy of PRINTER_PASSWORD, TELEGRAM_BOT_TOKEN,
+#                               AI_VLM_API_KEY. No backup anywhere.
+#   $INSTALL_DIR/data/          persisted runtime state (DATA_DIR), created above
+#   $INSTALL_DIR/node_modules/  installed deps, not present in the source tree
+#
+# — so none of them is inside the deletion scope at all. The --exclude list is a second
+# line of defence for the case where one of those ever moves inside a synced directory;
+# it is deliberately not the only one. Do not "simplify" this into a single
+# `rsync -a --delete "$SCRIPT_DIR/" "$INSTALL_DIR/"`, which would put all three back
+# under the excludes and one typo away from destroying production.
+#
+# Note the existing `if [[ ! -f "$INSTALL_DIR/.env" ]]` guard below protects against
+# *overwrite* only. It is not cover for --delete.
+#
+# Trailing slashes are load-bearing: `rsync -a src/ dest/src/` copies the contents,
+# `rsync -a src dest/src/` would nest the tree as dest/src/src.
+RSYNC_OPTS=(-a --delete --exclude=.env --exclude=data/ --exclude=node_modules/)
+
+log_info "Copying files (delete-consistent)..."
+rsync "${RSYNC_OPTS[@]}" "$SCRIPT_DIR/src/" "$INSTALL_DIR/src/"
+# dist/ and public/ may be absent from the source; skip rather than sync, because an
+# absent source with --delete would empty the deployed copy.
+if [[ -d "$SCRIPT_DIR/dist" ]]; then
+    rsync "${RSYNC_OPTS[@]}" "$SCRIPT_DIR/dist/" "$INSTALL_DIR/dist/"
+else
+    log_warn "  No dist/ in source — leaving the deployed frontend untouched"
+fi
+if [[ -d "$SCRIPT_DIR/public" ]]; then
+    rsync "${RSYNC_OPTS[@]}" "$SCRIPT_DIR/public/" "$INSTALL_DIR/public/"
+fi
+# Single files: no delete semantics to get right.
 cp "$SCRIPT_DIR/package.json" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/pnpm-lock.yaml" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/tsconfig.json" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/tsconfig.server.json" "$INSTALL_DIR/" 2>/dev/null || true
-cp -r "$SCRIPT_DIR/public" "$INSTALL_DIR/" 2>/dev/null || true
 
 # Stamp the deploy — $INSTALL_DIR is not a git checkout, so this file is the only way
 # to ask what is actually running. Read back by src/server/build-info.ts and reported
