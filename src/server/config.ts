@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { parseAllowedChatIds } from '../telegram/allowlist.js';
 
 export interface ServiceConfig {
   // Printer
@@ -16,6 +17,8 @@ export interface ServiceConfig {
   telegramEnabled: boolean;
   telegramToken: string;
   telegramChatId: string;
+  /** Numeric sender ids permitted to issue bot commands; empty denies everyone (ELEG-3) */
+  telegramAllowedChatIds: string[];
   progressInterval: number;
 
   // Data persistence
@@ -73,6 +76,18 @@ export function loadConfig(): ServiceConfig {
   if (telegramChatId && !/^-?\d+$/.test(telegramChatId)) {
     throw new Error(`Invalid TELEGRAM_CHAT_ID: "${telegramChatId}" (must be a numeric string)`);
   }
+  // Who may *send* commands. Defaults to TELEGRAM_CHAT_ID, so an existing deployment
+  // gains the gate without a new setting (ELEG-3).
+  const telegramAllowedChatIds = parseAllowedChatIds(
+    env('TELEGRAM_ALLOWED_CHAT_IDS'),
+    telegramChatId,
+  );
+  if (env('TELEGRAM_ALLOWED_CHAT_IDS') && telegramAllowedChatIds.length === 0) {
+    throw new Error(
+      'TELEGRAM_ALLOWED_CHAT_IDS is set but contains no valid numeric id — refusing to start ' +
+        'rather than fall back to a bot that answers everyone',
+    );
+  }
 
   return {
     printerIp,
@@ -83,6 +98,7 @@ export function loadConfig(): ServiceConfig {
     telegramEnabled: !!(telegramToken && telegramChatId),
     telegramToken,
     telegramChatId,
+    telegramAllowedChatIds,
     progressInterval: parseInt(env('PROGRESS_INTERVAL', '25'), 10) || 25,
     dataDir: env('DATA_DIR') || './data',
     moonrakerPort,

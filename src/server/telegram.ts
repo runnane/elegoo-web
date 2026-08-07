@@ -10,6 +10,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import { getSnapshot } from './rest-api.js';
 import { CRITICAL_EXCEPTIONS } from '../types.js';
+import { isAllowedSender } from '../telegram/allowlist.js';
 import type { AIAlert } from './ai-monitor.js';
 import { getLogger } from './logger.js';
 
@@ -136,6 +137,19 @@ export class TelegramIntegration {
   }
 
   private registerCommands(): void {
+    // Sender gate, BEFORE any handler (ELEG-3). Middleware rather than a check inside
+    // each command, so a command added later is gated by construction instead of by
+    // somebody remembering. Drops silently: replying "unauthorised" confirms the bot
+    // exists and which chat it belongs to.
+    const allowed = this.config.telegramAllowedChatIds;
+    this.bot.use(async (ctx, next) => {
+      if (isAllowedSender(allowed, ctx.from?.id)) {
+        await next();
+        return;
+      }
+      log.warn(`Ignoring update from unauthorised sender ${ctx.from?.id ?? 'unknown'}`);
+    });
+
     this.bot.command('start', async (ctx) => {
       await ctx.reply(
         '🖨 *Elegoo CC2 Telegram Bot*\n\n' +
