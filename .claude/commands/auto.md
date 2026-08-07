@@ -104,13 +104,15 @@ Announce the order and the split/skip intentions before starting, then work it.
   rewrites. Redirect the run to a file rather than piping it through `tail` — the
   evidence is the log, and a re-run destroys the only copy of it.
 - **Green gates are necessary and nowhere near sufficient in this repo — and pretending
-  otherwise is the main risk of an unattended pass.** There are **eleven tests**: six over
-  two pure functions, and five asserting `MCP.md` matches the registered tools — a
-  documentation check, not a behavioural one. The MQTT bridge, the state store, every REST
-  route, `/mcp`'s behaviour, both compat layers, Telegram, the AI monitor and the entire
-  frontend have **no test at all**, and there is no browser check. CI runs `pnpm gates` —
-  the same gates you just ran locally — so a green CI adds confirmation, not coverage.
-  Five items, seconds each:
+  otherwise is the main risk of an unattended pass.** The suite is small and almost
+  entirely **pure functions**, plus one that is a *documentation* check (`MCP.md` matches
+  the registered tools) rather than a behavioural one. The MQTT bridge, the state store's
+  event handling, every REST route, `/mcp`'s behaviour, both compat layers, the Telegram
+  middleware wiring and the AI monitor have **no test at all**, and there is no browser
+  check. CI runs `pnpm gates` — the same gates you just ran locally — so a green CI adds
+  confirmation, not coverage. (No count quoted on purpose: vitest prints one every run,
+  and every number ever written here went stale — ELEG-15. `local/gates.md` has the
+  per-file breakdown.) Five items, seconds each:
 
   1. **Break the invariant and watch the named test go red.** If no test covers it —
      which is the common case — **write that sentence in the closing comment** rather

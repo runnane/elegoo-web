@@ -20,11 +20,13 @@
 # so an auto-fix you did not commit still fails CI's lint step — hence --fix runs the
 # writer first and then re-checks, and you commit what it rewrote.
 #
-# What this cannot check is in .claude/commands/local/gates.md: there are 39 tests in
-# this repo, all but three over pure functions and those three driving one chart against
-# a stub canvas — nothing exercises a connection or a route, there is still no browser
-# and no screenshot, and no gate on earth can tell you whether a change does the right
-# thing to a physical printer.
+# What this cannot check is in .claude/commands/local/gates.md. In short: the suite is
+# small and almost entirely pure functions, nothing exercises a connection or a route,
+# there is no browser and no screenshot, and no gate on earth can tell you whether a
+# change does the right thing to a physical printer.
+#
+# Deliberately no test count here or in the footer — vitest prints one two lines above it
+# every run. A number in a string that nothing updates only ever drifts (ELEG-15).
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
