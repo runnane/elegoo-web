@@ -112,9 +112,9 @@ When both agents of a pair report back — never while one is still running:
 
 1. In each issue's worktree run `pnpm gates --fix` and **commit whatever biome
    rewrites**. On failure, bounce back to a `SendMessage`-resumed agent; don't open a PR
-   on a red build. Note that `pnpm install --frozen-lockfile` currently fails on `main`
-   (`ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`) — a fresh worktree needs a plain `pnpm install`.
-   See [`local/gates.md`](local/gates.md).
+   on a red build. A fresh worktree can use `pnpm install --frozen-lockfile` again — the
+   `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` that forced a plain `pnpm install` was fixed by
+   ELEG-4. See [`local/gates.md`](local/gates.md).
 2. **Re-run the verification yourself, and correct the subagent's account of what it
    proves.** Green gates in this repo mean "it compiles, it is formatted, and two pure
    functions still work" — six tests, no browser check, no server-side coverage at all. A
@@ -142,9 +142,9 @@ When both agents of a pair report back — never while one is still running:
    `🤖 Generated with [Claude Code](https://claude.com/claude-code)`).
 4. **Check the PR landed clean.** `gh pr view <n> --json mergeable,mergeStateStatus`: if
    `CONFLICTING`/`DIRTY`, rebase that branch on the latest `main`, resolve, re-verify,
-   force-push. `gh pr checks <n>`: read **which step** failed — CI on this repo is
-   currently red for two pre-existing reasons, so neither dismiss it nor attribute it to
-   the branch without looking.
+   force-push. `gh pr checks <n>`: read **which step** failed. CI on this repo is green
+   on `main` (since ELEG-1 and ELEG-4), so there is no standing red to attribute a
+   failure to — it is the branch's until reading the step says otherwise.
 5. Per issue: add a closing **verification comment** (what you ran, what it proves and
    what it cannot, surface recap, follow-up **issue keys**, **PR URL**, mergeable + CI
    status) and `issues_update_issue` → `IN_REVIEW` — which opening the PR already did, so

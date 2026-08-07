@@ -132,11 +132,12 @@ open a PR (you do not need to ask). Never commit to `main`.
 8. **Check the PR landed clean — don't assume it did.**
    - **Merge conflicts:** `gh pr view <n> --json mergeable,mergeStateStatus`. If
      `CONFLICTING`/`DIRTY`, rebase on the latest `main`, resolve, re-verify, force-push.
-   - **CI status:** `gh pr checks <n>`. **`main` is currently red for two pre-existing
-     reasons** (a `--frozen-lockfile` config mismatch that fails CI before any gate
-     runs, and the formatting violation fixed by ELEG-1) — so read *which step* failed
-     before attributing it to your branch, and never dismiss a red check without
-     looking. `local/gates.md` has the detail.
+   - **CI status:** `gh pr checks <n>`. **`main` is green**, so a red check is yours
+     until you have read *which step* failed and shown otherwise. It has not always been:
+     a `--frozen-lockfile` config mismatch used to fail CI before any gate ran (ELEG-4)
+     and a formatting violation before that (ELEG-1). Both are fixed; the habit they
+     taught — read the failing step, never dismiss a red check without looking — is what
+     survives. `local/gates.md` has the detail.
    - **Merged ≠ on `main`.** A PR reading `MERGED` only merged into *its base*. Confirm:
      `git fetch origin && git merge-base --is-ancestor <sha> origin/main`.
    - **Offer to watch** pending checks rather than leaving the user to find out.
