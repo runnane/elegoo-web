@@ -25,7 +25,7 @@ this table is CI's step list too. Add a gate here and CI picks it up with no wor
 | 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`, `src/telegram`** |
 | 3 | typecheck (service) | `tsc -p tsconfig.server.json` | `tsconfig.server.json` — the other half. See below |
 | 4 | build | `vite build` | writes `dist/`, which is gitignored |
-| 5 | tests | `vitest run` | 11 tests, ~300 ms |
+| 5 | tests | `vitest run` | 39 tests, ~350 ms |
 
 Grep the log for `✗` to get the failing gate, then read upward for that check's own
 output.
@@ -159,18 +159,33 @@ twice:
 
 ## Green gates prove very little here — the honest list
 
-The suite is **two files, eleven tests**, and neither file tests behaviour you are likely
-to break:
+The suite is **six files, 39 tests**. All but three cover a *pure function*; none
+exercises a connection or a route:
 
 - `src/__tests__/types.test.ts` — six tests over two pure functions.
 - `src/server/__tests__/mcp-doc-parity.test.ts` — five tests asserting `MCP.md` lists
   exactly the registered tools and resources (ELEG-7). That is a **documentation** check.
   It will catch you renaming a tool without touching the doc; it will not notice that the
   tool stopped working.
+- `src/server/__tests__/build-info.test.ts` — seven tests over the deployed-commit stamp
+  (ELEG-6).
+- `src/server/__tests__/layer-tracking.test.ts` + `src/__tests__/layer-chart.test.ts` —
+  eighteen tests over the layer-time series and the chart's domain arithmetic (ELEG-16):
+  the print-boundary rule, and that no point can map outside the plot rect.
+- `src/__tests__/layer-chart-render.test.ts` — three tests, and the **only** ones in the
+  repo that run drawing code. There is no jsdom and no canvas, so they hand the chart a
+  recording 2D-context stub and assert on the ops it emitted (is there a `clip()` around
+  the series, does any coordinate leave the plot rect, does the value label fit). Copy
+  this shape for another canvas card; it needs no new dependency.
 
-Nothing tests the MQTT bridge, the state store, any REST route, `/mcp`'s actual
-behaviour, the Moonraker/OctoPrint layers, Telegram, the AI monitor, or **any** frontend
-code. There is no browser test and no screenshot.
+Nothing tests the MQTT bridge, the state store's wiring, any REST route, `/mcp`'s actual
+behaviour, the Moonraker/OctoPrint layers, Telegram or the AI monitor. The one render
+test asserts *geometry*, not appearance — there is still no browser and no screenshot,
+so colour, font, overlap and layout are unchecked by any gate.
+
+Note the split those last two demonstrate: a test importing `src/server/**` belongs under
+`src/server/__tests__/`, because `tsconfig.json` excludes that directory and an import
+from `src/__tests__/` drags Node-only modules into the browser typecheck.
 
 So the load-bearing gates are the two typechecks, and the failing-direction check matters
 more here than in a repo with real coverage:

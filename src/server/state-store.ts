@@ -56,6 +56,46 @@ const FILAMENT_RADIUS_MM = 1.75 / 2;
 const CROSS_SECTION_MM2 = Math.PI * FILAMENT_RADIUS_MM * FILAMENT_RADIUS_MM; // ~2.405 mm²
 const CROSS_SECTION_CM2 = Math.PI * (0.175 / 2) ** 2; // in cm² for g/cm³ density
 
+/** Ring-buffer cap on the layer-time series (a very tall print, not a real limit) */
+const MAX_LAYER_ENTRIES = 50_000;
+/** A single layer taking longer than this is a stale timestamp, not a slow layer */
+const MAX_PLAUSIBLE_LAYER_SEC = 600;
+
+/** What a `current_layer` report means, given the layer we were tracking before it. */
+export type LayerReportAction =
+  | 'ignore' // same layer as before — nothing has completed
+  | 'baseline' // no previous layer to time against; just start the clock
+  | 'boundary' // layer went backwards: a different print, discard the pending entry
+  | 'discard' // implausible duration, almost certainly a stale timestamp
+  | 'record'; // a layer genuinely finished
+
+/**
+ * Decide what to do with a `current_layer` report. Pure, so the print-boundary rule can
+ * be tested without an MQTT bridge — see `src/server/__tests__/layer-tracking.test.ts`.
+ *
+ * The boundary case is the one that matters (ELEG-16): the printer keeps reporting the
+ * *previous* job's `current_layer` for a moment after it ends, so the new job's first
+ * report arrives as a drop (L29 → L1). Timing that gap produces an entry belonging to
+ * neither print, and it lands in front of the new series — leaving `layerTimes`
+ * non-monotonic and the layer chart drawing outside its own axes.
+ */
+export function classifyLayerReport(
+  prevLayer: number,
+  prevLayerTime: number,
+  nextLayer: number,
+  now: number,
+): { action: LayerReportAction; durationSec: number } {
+  if (nextLayer === prevLayer) return { action: 'ignore', durationSec: 0 };
+  if (prevLayer <= 0 || prevLayerTime <= 0) return { action: 'baseline', durationSec: 0 };
+  if (nextLayer < prevLayer) return { action: 'boundary', durationSec: 0 };
+
+  const durationSec = (now - prevLayerTime) / 1000;
+  return {
+    action: durationSec > MAX_PLAUSIBLE_LAYER_SEC ? 'discard' : 'record',
+    durationSec,
+  };
+}
+
 /** Per-spool filament usage tracking */
 export interface FilamentUsage {
   trayKey: string; // 'mono' or 'canvas_<canvasId>_tray_<trayId>'
@@ -939,44 +979,58 @@ export class StateStore extends EventEmitter {
   private trackLayerChange(layer: number | undefined): void {
     if (layer == null || layer <= 0) return;
     const now = Date.now();
-    if (layer !== this._lastLayer) {
-      if (this._lastLayer > 0 && this._lastLayerTime > 0) {
-        const durationSec = (now - this._lastLayerTime) / 1000;
-        // Sanity check: reject bogus durations (> 10 min per layer is implausible,
-        // likely caused by stale timestamp across restart or print boundary)
-        if (durationSec > 600) {
-          log.warn(
-            `Discarding bogus layer duration: L${this._lastLayer} = ${durationSec.toFixed(0)}s`,
-          );
-        } else {
-          const entry = { layer: this._lastLayer, duration: durationSec, timestamp: now };
-          this.layerTimes.push(entry);
-          if (this.layerTimes.length > 50_000) this.layerTimes.shift();
-          // Broadcast to WS clients
-          this.emit('layer_time', entry);
-        }
-        // Emit first_layer_complete when layer 1 finishes
-        if (this.baselineReady && this._lastLayer === 1) {
-          this.emit('print_event', {
-            type: 'first_layer_complete',
-            filename: this.status?.print_status?.filename || '',
-            totalLayers: this.totalLayers || 0,
-            durationSec,
-          } satisfies PrintEvent);
-        }
-        // Emit layer_change event for milestone layers (every 10 layers)
-        if (this.baselineReady && layer % 10 === 0) {
-          this.emit('print_event', {
-            type: 'layer_change',
-            layer,
-            totalLayers: this.totalLayers || 0,
-            durationSec,
-          } satisfies PrintEvent);
-        }
-      }
-      this._lastLayer = layer;
-      this._lastLayerTime = now;
+
+    const report = classifyLayerReport(this._lastLayer, this._lastLayerTime, layer, now);
+    if (report.action === 'ignore') return;
+
+    if (report.action === 'boundary') {
+      // The printer keeps reporting the finished job's current_layer for a moment
+      // after a print ends, so the first report of the new job arrives as a *drop*.
+      // Recording it would append a cross-print entry (ELEG-16) and leave the series
+      // non-monotonic, which is what painted the layer chart outside its plot area.
+      log.info(
+        `Layer went backwards (L${this._lastLayer} → L${layer}) — treating as a print boundary, resetting layer data`,
+      );
+      this.clearLayerData();
+    } else if (report.action === 'discard') {
+      log.warn(
+        `Discarding bogus layer duration: L${this._lastLayer} = ${report.durationSec.toFixed(0)}s`,
+      );
+    } else if (report.action === 'record') {
+      const entry = { layer: this._lastLayer, duration: report.durationSec, timestamp: now };
+      this.layerTimes.push(entry);
+      if (this.layerTimes.length > MAX_LAYER_ENTRIES) this.layerTimes.shift();
+      // Broadcast to WS clients
+      this.emit('layer_time', entry);
     }
+
+    // Milestone events describe a layer that genuinely completed, so they are skipped
+    // for a boundary (the duration spans two prints) and for the first report after a
+    // reset (there is no previous layer to have finished).
+    if (report.action === 'record' || report.action === 'discard') {
+      // Emit first_layer_complete when layer 1 finishes
+      if (this.baselineReady && this._lastLayer === 1) {
+        this.emit('print_event', {
+          type: 'first_layer_complete',
+          filename: this.status?.print_status?.filename || '',
+          totalLayers: this.totalLayers || 0,
+          durationSec: report.durationSec,
+        } satisfies PrintEvent);
+      }
+      // Emit layer_change event for milestone layers (every 10 layers)
+      if (this.baselineReady && layer % 10 === 0) {
+        this.emit('print_event', {
+          type: 'layer_change',
+          layer,
+          totalLayers: this.totalLayers || 0,
+          durationSec: report.durationSec,
+        } satisfies PrintEvent);
+      }
+    }
+
+    // Set the baseline last: clearLayerData() above zeroes both fields.
+    this._lastLayer = layer;
+    this._lastLayerTime = now;
   }
 
   /** Get human-readable status summary (used by Telegram) */

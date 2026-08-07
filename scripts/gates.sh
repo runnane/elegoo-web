@@ -20,10 +20,11 @@
 # so an auto-fix you did not commit still fails CI's lint step — hence --fix runs the
 # writer first and then re-checks, and you commit what it rewrote.
 #
-# What this cannot check is in .claude/commands/local/gates.md: there are eleven tests
-# in this repo — six over two pure functions, five asserting MCP.md matches the
-# registered tools — no browser test at all, and no gate on earth can tell you whether
-# a change does the right thing to a physical printer.
+# What this cannot check is in .claude/commands/local/gates.md: there are 39 tests in
+# this repo, all but three over pure functions and those three driving one chart against
+# a stub canvas — nothing exercises a connection or a route, there is still no browser
+# and no screenshot, and no gate on earth can tell you whether a change does the right
+# thing to a physical printer.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -74,7 +75,7 @@ if [ "${#failed[@]}" -gt 0 ]; then
   exit 1
 fi
 printf '\n\033[32mAll gates green.\033[0m\n'
-printf '\033[2mEleven tests and no browser check — see .claude/commands/local/gates.md for what this does NOT prove.\033[0m\n'
+printf '\033[2mNo browser and no screenshot — see .claude/commands/local/gates.md for what this does NOT prove.\033[0m\n'
 if [ "$fix" = 0 ]; then
   echo 'Reminder: if you edit anything else, re-run `pnpm gates --fix` and commit what biome rewrites.'
 fi
