@@ -50,14 +50,25 @@ and throws again.
 Two independent failures, both pre-existing. Check whether they still are before
 attributing a red check to your branch — the last CI run to be green was in July.
 
-1. **`pnpm install --frozen-lockfile` fails in CI**:
-   `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` — "the current `overrides` configuration doesn't
-   match the value found in the lockfile". Newer pnpm no longer reads the `pnpm` field
-   from `package.json` (it warns: *"The `pnpm` field in package.json is no longer read …
-   the following keys were ignored: `pnpm.overrides`, `pnpm.onlyBuiltDependencies`,
-   `pnpm.updateConfig`"*), so the lockfile's recorded overrides and the effective config
-   disagree and the frozen install refuses. **CI therefore fails before it runs a single
-   gate.** Filed on the tracker; don't "fix" it by deleting the lockfile.
+1. ~~**`pnpm install --frozen-lockfile` fails in CI**~~ — **fixed in ELEG-4.** The cause
+   was never really the `overrides` block: it was that `ci.yml` asked
+   `pnpm/action-setup@v4` for `version: latest`, so **CI silently moved to pnpm 11 while
+   every developer here was on 10.x**. Two different reds came out of that one drift, and
+   the second masked the first:
+   `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` (pnpm 11 stopped reading the `pnpm` field in
+   `package.json`, so the effective overrides went empty while the lockfile still recorded
+   them), and later `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` (a **pnpm 11 default policy
+   that does not exist in 10.x** — `pnpm config get minimumReleaseAge` → `undefined`).
+
+   The fix was both halves: the settings moved to `pnpm-workspace.yaml` (their documented
+   new home, read by 10.x *and* 11.x), and the package manager is now pinned by
+   `packageManager` in `package.json` with **no `version:` in the workflow**, so CI runs
+   exactly what you run. **If you bump `packageManager` to 11.x, expect the release-age
+   policy to bite** — that move is its own issue.
+
+   The lasting lesson: `version: latest` on a package-manager action means CI drifts away
+   from every developer without a commit. Don't reintroduce it. And still don't "fix" a
+   lockfile complaint by deleting the lockfile — the `undici` override is a security pin.
 2. **A formatting violation in `src/styles/main.css`** made `biome ci src/` red
    (`pnpm format:check` too). Fixed by the commit that added this file — but the shape is
    worth knowing, because biome reports a formatting violation as `Found 1 error.` with

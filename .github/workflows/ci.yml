@@ -12,9 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` on purpose — action-setup then reads `packageManager` from
+      # package.json, so CI uses the exact pnpm developers use. `version: latest`
+      # silently moved CI to pnpm 11 while everyone here was on 10.x, which broke
+      # the frozen install two different ways (ELEG-4).
       - uses: pnpm/action-setup@v4
-        with:
-          version: latest
 
       - uses: actions/setup-node@v4
         with:
