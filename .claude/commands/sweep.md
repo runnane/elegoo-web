@@ -165,7 +165,7 @@ When both agents of a pair report back — never while one is still running:
    (an explicit `wip:` commit is fine) and only then remove — a teardown is not the moment
    to decide a subagent's uncommitted edits were worthless. See
    [`shared/agent-isolation.md`](shared/agent-isolation.md).
-7. Update `TODO.md` if a roadmap item moved; close any epic whose children are all merged.
+7. Close any epic whose children are all merged.
 8. Dispatch the next pair. Repeat until the queue is empty.
 
 ## 5. Report
