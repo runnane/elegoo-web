@@ -39,6 +39,7 @@ import { execSync } from 'child_process';
 import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
+import { applyCors, corsHeaders } from './cors.js';
 import type { FanInfo } from '../types.js';
 import { MOONRAKER_VERSION, AVAILABLE_OBJECTS, queryObjects } from './moonraker-compat.js';
 import { createOctoPrintRouter } from './octoprint-compat.js';
@@ -53,9 +54,6 @@ function jsonResult(res: ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify({ result: data });
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Key',
   });
   res.end(body);
 }
@@ -63,7 +61,6 @@ function jsonResult(res: ServerResponse, data: unknown, status = 200): void {
 function jsonError(res: ServerResponse, message: string, code = 400): void {
   res.writeHead(code, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
   });
   res.end(JSON.stringify({ error: { code, message } }));
 }
@@ -1236,14 +1233,23 @@ export class MoonrakerServer {
     const [urlPath] = fullUrl.split('?');
     const query = parseQuery(fullUrl);
 
+    // Cross-origin policy, set ONCE for this response (ELEG-24). setHeader persists and
+    // writeHead merges over it, so the ~100 jsonResult/jsonError call sites below do not
+    // each have to know about CORS — and cannot each forget it, which is how this
+    // surface kept its wildcard when the others were reviewed.
+    applyCors(
+      res,
+      corsHeaders(
+        this.config.corsPolicy,
+        req.headers.origin,
+        'GET, POST, DELETE, OPTIONS',
+        'Content-Type, Authorization, X-Api-Key',
+      ),
+    );
+
     // CORS preflight
     if (method === 'OPTIONS') {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Key',
-        'Access-Control-Max-Age': '86400',
-      });
+      res.writeHead(204);
       res.end();
       return;
     }
@@ -2059,7 +2065,6 @@ export class MoonrakerServer {
       const target = `http://${hostHeader}:${this.config.servicePort}/`;
       res.writeHead(302, {
         Location: target,
-        'Access-Control-Allow-Origin': '*',
       });
       res.end();
       return;
@@ -2069,7 +2074,6 @@ export class MoonrakerServer {
     if (urlPath === '/info' && method === 'GET') {
       res.writeHead(200, {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
       });
       res.end(
         JSON.stringify({
@@ -2246,7 +2250,6 @@ export class MoonrakerServer {
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
           'Content-Disposition': `attachment; filename="${baseName}"`,
-          'Access-Control-Allow-Origin': '*',
           ...(proxyRes.headers['content-length']
             ? { 'Content-Length': proxyRes.headers['content-length'] }
             : {}),

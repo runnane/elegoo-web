@@ -24,6 +24,7 @@ import { StatePersistence } from './state-persistence.js';
 import { AIMonitor, type AIAlert } from './ai-monitor.js';
 import { PrintReportCollector } from './print-report-collector.js';
 import { getBuildInfo } from './build-info.js';
+import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
 
 const config = loadConfig();
@@ -92,12 +93,17 @@ const moonrakerServer = new MoonrakerServer(store, bridge, config);
 const httpServer = createServer((req, res) => {
   const url = req.url || '';
   if (url === '/mcp' || url.startsWith('/mcp?')) {
-    // CORS for MCP endpoint
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id');
-    res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
-    res.setHeader('Access-Control-Max-Age', '86400');
+    // CORS for MCP endpoint — same-origin unless CORS_ALLOWED_ORIGINS says otherwise
+    applyCors(
+      res,
+      corsHeaders(
+        config.corsPolicy,
+        req.headers.origin,
+        'GET, POST, DELETE, OPTIONS',
+        'Content-Type, mcp-session-id',
+        'mcp-session-id',
+      ),
+    );
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
@@ -115,10 +121,15 @@ const httpServer = createServer((req, res) => {
 
   // OctoPrint compatibility API
   if (url === '/octoprint' || url.startsWith('/octoprint/') || url.startsWith('/octoprint?')) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, Authorization');
-    res.setHeader('Access-Control-Max-Age', '86400');
+    applyCors(
+      res,
+      corsHeaders(
+        config.corsPolicy,
+        req.headers.origin,
+        'GET, POST, OPTIONS',
+        'Content-Type, X-Api-Key, Authorization',
+      ),
+    );
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
@@ -129,10 +140,15 @@ const httpServer = createServer((req, res) => {
 
   // Moonraker compatibility API
   if (url === '/moonraker' || url.startsWith('/moonraker/') || url.startsWith('/moonraker?')) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Max-Age', '86400');
+    applyCors(
+      res,
+      corsHeaders(
+        config.corsPolicy,
+        req.headers.origin,
+        'GET, POST, DELETE, OPTIONS',
+        'Content-Type, Authorization',
+      ),
+    );
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();

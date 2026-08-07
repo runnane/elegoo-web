@@ -28,15 +28,28 @@ Three things make this sharper than a typical "no auth" note:
 
 1. **The consequences are physical.** A request can heat a nozzle, drive the toolhead,
    start a job or abort a 14-hour print. There is no undo.
-2. **`Access-Control-Allow-Origin: *`** is set on `/mcp`, `/octoprint/*` and
-   `/moonraker/*`. With no credentials to withhold, that means **any web page a browser
-   visits can issue those requests** from inside the network the browser is on. A
-   `SameSite` cookie does not help, because there is no cookie.
+2. **`Access-Control-Allow-Origin: *` — fixed in ELEG-24, and worth understanding anyway.**
+   It used to be set on **five** surfaces: `/mcp`, `/octoprint/*`, `/moonraker/*`, and the
+   two the original note missed — **`/api/*`** (the snapshot, stream and control routes)
+   and **the dedicated `:7125` server**. With no credentials to withhold, that meant **any
+   web page a browser visits could issue those requests** from inside the network the
+   browser is on. A `SameSite` cookie does not help, because there is no cookie.
 
-   This is the one that survives a LAN-only deployment intact, and it is easy to
+   This is the one that survived a LAN-only deployment intact, and it is easy to
    under-rate: the attacker does not need to reach the network, only to get someone who is
    already on it to load a page. "It is not exposed" is an answer about inbound routing,
    not about this.
+
+   The default is now **same-origin** — no `Access-Control-Allow-Origin` at all unless
+   `CORS_ALLOWED_ORIGINS` names one. The SPA is served by the origin it calls, so it needs
+   none. A browser-based compat client on another origin (Mainsail, Fluidd) now needs that
+   variable set; `*` still works as an explicit opt-in, which is the point — the dangerous
+   setting should be something a person chose.
+
+   All five surfaces go through `src/server/cors.ts`. **Add a new surface and you get the
+   policy for free only if you route through it** — the `:7125` server is the cautionary
+   example: it sets the headers once in `handleHttp` precisely because ~100
+   `jsonResult`/`jsonError` call sites could each have forgotten.
 3. **The compat layers advertise auth they do not have.** `octoprint-compat.ts` returns
    a fixed `apikey: 'elegoo-cc2-compat'` and the Moonraker layer answers
    `access.get_api_key` — so a client shows "connected, authenticated" while nothing was
