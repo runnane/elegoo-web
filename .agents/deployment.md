@@ -42,12 +42,25 @@ Three consequences that have already produced a real artefact:
    unreferenced, so it is harmless today — but the same mechanism would keep serving a
    retired route or an old module that something still imports. Verify a removal with
    `ls`, not with the git diff.
-2. **The deployed tree has no version.** No git metadata, no build stamp — so "is this
-   change live?" cannot be answered from the repo. Diff it:
+2. **The deployed tree still has no git metadata — but it does carry a stamp.** The
+   installer writes `/opt/elegooweb/build-info.json` (commit, short commit,
+   `git describe`, `package.json` version, install timestamp) and the service reports it
+   from `/api/health` as `build`, read once at startup. So "is this change live?" is now
+   one request, answered at the receiver:
+   ```bash
+   curl -s localhost:8088/api/health | jq .build
+   # {"commit":"a8157a9…","shortCommit":"a8157a9","describe":"v1.4.0-3-ga8157a9",…}
+   ```
+   **All-null `build` means unstamped, not broken** — a `pnpm dev` run, or a deploy made
+   before ELEG-10 landed. Nothing else distinguishes the two; the first stamped install
+   is what fixes that. The old hand-diff still works and is the only check that catches a
+   *stale* file rather than an old one:
    ```bash
    diff -rq --exclude=node_modules --exclude=data --exclude=.env --exclude=dist \
      "$PWD/src" /opt/elegooweb/src
    ```
+   The stamp lives at the install root, deliberately outside `src/`, `dist/` and
+   `public/`, so a delete-consistent copy of those directories cannot remove it.
 3. **`.env` divergence is invisible.** The production `.env` is a *different file* from
    the one you test with, and the installer only ever creates it. A new
    `config.ts` key therefore defaults silently in production until someone adds it
@@ -105,13 +118,20 @@ sudo systemctl stop elegooweb
 **Verify at the receiver, not at the exit code** — a successful `cp` proves nothing:
 
 ```bash
-curl -s localhost:8088/api/health                 # {"ok":true,"mqtt":"connected",…}
+curl -s localhost:8088/api/health | jq .          # {"ok":true,"mqtt":"connected","build":{…}}
 systemctl show -p ActiveEnterTimestamp elegooweb  # did it actually restart?
-journalctl -u elegooweb -n 30 --no-pager          # startup banner: printer, ports, AI/Telegram state
+journalctl -u elegooweb -n 30 --no-pager          # startup banner: build, printer, ports, AI/Telegram state
 ```
 
-`mqtt":"connected"` is the one that matters: the process can start happily and fail to
-reach the printer, and the web UI then looks fine and shows nothing.
+Two fields in there carry the whole check:
+
+- **`build.commit`** answers "is my change live?". Compare it against the commit you
+  deployed — `git rev-parse HEAD` in the checkout you installed from. Equal means the
+  copy landed; anything else means it did not, whatever the `cp` exit code said. All
+  nulls means the install predates the stamp (or was not run from a checkout).
+- **`mqtt":"connected"`** is the one that matters for whether it *works*: the process can
+  start happily and fail to reach the printer, and the web UI then looks fine and shows
+  nothing.
 
 ## What this means for the tracker
 
@@ -121,7 +141,9 @@ ELEG has `tracksProduction` **on**, so `IN_PRODUCTION` exists and is meaningful:
 - `IN_PRODUCTION` means the copy + restart happened and `/api/health` answered from the
   new code. That is operator work — file it as its own `OPERATOR:` issue rather than
   leaving a code issue open across a manual step, give the exact commands above, and
-  ask for the output.
+  ask for the output. **The evidence is `build.commit` from `/api/health` matching the
+  commit that was deployed**, not a successful `sudo pnpm service:install` — set the
+  status from that output rather than from the install having exited 0.
 - The status automation never moves an issue backwards out of `MERGED` /
   `IN_PRODUCTION`, so setting `IN_PRODUCTION` optimistically is not correctable later.
   Set it after the verification, from the output you were given.

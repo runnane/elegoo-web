@@ -23,13 +23,21 @@ import { TelegramIntegration } from './telegram.js';
 import { StatePersistence } from './state-persistence.js';
 import { AIMonitor, type AIAlert } from './ai-monitor.js';
 import { PrintReportCollector } from './print-report-collector.js';
+import { getBuildInfo } from './build-info.js';
 import { initLogger, getLogger } from './logger.js';
 
 const config = loadConfig();
 initLogger(config.dataDir);
 const log = getLogger('Service');
 
+// Read the deploy stamp here so it is in the startup banner and in the process cache
+// before the first /api/health request arrives.
+const build = getBuildInfo();
+
 log.info('🖨  Elegoo CC2 Service');
+log.info(
+  `Build:   ${build.describe ?? build.shortCommit ?? 'unstamped (not an installed deploy?)'}`,
+);
 log.info(`Printer: ${config.printerIp}`);
 log.info(`Service: http://0.0.0.0:${config.servicePort}`);
 log.info(`Camera:  ${config.cameraEnabled ? config.cameraUrl : 'disabled'}`);
