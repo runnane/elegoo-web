@@ -36,8 +36,8 @@ importers:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@25.9.0)
       three:
-        specifier: 0.178.0
-        version: 0.178.0
+        specifier: 0.185.1
+        version: 0.185.1
       tsx:
         specifier: ^4.23.10
         version: 4.23.10
@@ -2598,6 +2598,9 @@ packages:
 
   three@0.178.0:
     resolution: {integrity: sha512-ybFIB0+x8mz0wnZgSGy2MO/WCO6xZhQSZnmfytSPyNpM0sBafGRVhdaj+erYh5U+RhQOAg/eXqw5uVDiM2BjhQ==}
+
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
 
   tiny-inflate@1.0.3:
     resolution: {integrity: sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==}
@@ -5204,6 +5207,8 @@ snapshots:
   text-hex@1.0.0: {}
 
   three@0.178.0: {}
+
+  three@0.185.1: {}
 
   tiny-inflate@1.0.3: {}
 
