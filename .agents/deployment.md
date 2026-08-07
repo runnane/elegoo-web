@@ -57,14 +57,25 @@ Three consequences that have already produced a real artefact:
 ## Exposure is decided outside this repo
 
 The service binds `0.0.0.0` and has **no authentication of any kind** (see
-[security.md](security.md)). Whether it is reachable beyond the LAN is decided by a
-reverse proxy / tunnel configured in the **`~/ansible` (ANS)** repo, not here — so a
-change to *who can reach it* is an ANS issue, and the specifics of how this particular
-host is exposed are recorded in the **ELEG tracker**, deliberately not in this public
-repository.
+[security.md](security.md)), so what limits who can reach it is entirely the network
+around it: a reverse-proxy vhost and DNS, both configured in the **`~/ansible` (ANS)**
+repo rather than here. A change to *who can reach it* is therefore an ANS issue, and the
+specifics for a given deployment belong in the **ELEG tracker**, deliberately not in this
+public repository.
 
-Read [security.md](security.md) before adding an endpoint: on this deployment, "internal
-only" is not a safe assumption to design against.
+Two consequences for anyone testing this:
+
+- **A request from the host itself proves nothing about reachability.** `curl` and any
+  local fetch tool resolve and route from inside the network, so a `200` says only that
+  the service is up — not that anyone else can get to it. Answering "is this exposed?"
+  needs a resolver check (what does public DNS return — a routable address or an RFC1918
+  one?) and, for reachability, a client genuinely off the network.
+- **The proxy is not the only door.** Because the bind is `0.0.0.0`, ports 8088 and 7125
+  are directly reachable from anything routed to the host, bypassing whatever vhost or
+  auth the proxy might add.
+
+Read [security.md](security.md) before adding an endpoint: what protects this service is
+network position, not code.
 
 ## Operator commands
 
