@@ -17,6 +17,7 @@ import {
   formatTime,
   fetchTimeout,
   applyDarkThumbnailCheck,
+  THUMBNAIL_CLASS,
 } from './helpers';
 import { toast } from './toast';
 import { currentFileSource } from './files';
@@ -243,7 +244,7 @@ function showDialog(
           <div class="print-dialog-thumbnail" id="print-dialog-thumb">
             ${
               detail?.thumbnail || state.thumbnail
-                ? `<img src="data:image/png;base64,${detail?.thumbnail || state.thumbnail}" alt="Preview" id="print-dialog-thumb-img">`
+                ? `<img src="data:image/png;base64,${detail?.thumbnail || state.thumbnail}" alt="Preview" id="print-dialog-thumb-img" class="${THUMBNAIL_CLASS}">`
                 : '<div class="print-dialog-no-thumb">No preview</div>'
             }
           </div>
