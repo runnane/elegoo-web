@@ -10,15 +10,25 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `version:` on purpose — action-setup then reads `packageManager` from
       # package.json, so CI uses the exact pnpm developers use. `version: latest`
       # silently moved CI to pnpm 11 while everyone here was on 10.x, which broke
-      # the frozen install two different ways (ELEG-4).
-      - uses: pnpm/action-setup@v4
+      # the frozen install two different ways (ELEG-4). Still optional-when-
+      # packageManager-is-present in v6, so the bump did not reintroduce it.
+      #
+      # Stay on `pnpm/action-setup`. Its successor `pnpm/setup` requires pnpm v11+,
+      # and moving there is ELEG-9's deliberate decision, not a side effect of a
+      # runtime bump.
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      # `cache: pnpm` is explicit and must stay. setup-node v5 added automatic
+      # caching driven by `packageManager`, then v6 narrowed that to npm only — so
+      # the automatic path does not cover pnpm and dropping this line would silently
+      # lose the store cache. This step must also stay AFTER action-setup: the cache
+      # resolution shells out to pnpm.
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
