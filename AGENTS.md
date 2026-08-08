@@ -108,6 +108,17 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   component library: `src/main.ts` composes modules from `src/ui/*.ts`, styling is
   CSS custom properties in `src/styles/`. Match the surrounding idiom rather than
   introducing a framework in one card.
+- **A list view's controls go in a *static sibling* of the list, never inside it.**
+  Every list card re-renders wholesale on a WebSocket update — the render function
+  assigns `container.innerHTML`. Anything interactive built inside that container is
+  therefore destroyed and rebuilt under the user: a filter input loses focus and
+  selection mid-keystroke when a 1036 response lands. Files, Print History, Print
+  Reports and Timelapse each pair `#<view>-list` with a `#<view>-controls` div beside
+  it, and `src/ui/list-controls.ts` mounts into that once (ELEG-49…52). Sort/filter
+  state lives in that module's closure, **outside** the render function, and is
+  persisted in `ui-settings.ts` — not `persistence.ts`, which is cleared when the print
+  changes. New list views follow the same shape; the pure half of any list logic belongs
+  in `src/ui/list-sort.ts`, which is the only half a test can reach.
 - **MCP tools and [`MCP.md`](MCP.md) change together.** `MCP.md` is the documented
   contract for the `/mcp` surface (resources, tools, parameters). A tool added,
   renamed, or given a new parameter without the doc edit in the same commit is drift
