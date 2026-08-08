@@ -150,10 +150,10 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 | `PROGRESS_INTERVAL` | `25` | Notify every N% progress |
 | `DATA_DIR` | `./data` | Data directory for state, reports, logs |
 | `AI_ENABLED` | `false` | Enable AI print monitoring |
-| `AI_VLM_ENABLED` | `true` | Enable VLM analysis (when AI enabled) |
+| `AI_VLM_ENABLED` | `false` | Enable VLM analysis. Opt-in: `AI_ENABLED` alone does **not** turn this on |
 | `AI_VLM_PROVIDER` | `ollama` | VLM provider: `ollama` or `openai` |
 | `AI_VLM_API_KEY` | — | API key for OpenAI VLM provider |
-| `AI_VLM_BASE_URL` | `http://172.20.100.9:3000` | VLM API endpoint |
+| `AI_VLM_BASE_URL` | `http://localhost:11434` | VLM API endpoint (ollama's default port) |
 | `AI_VLM_MODEL` | `llava` | VLM model name |
 | `AI_LOCAL_ENABLED` | `true` | Enable local SigLIP zero-shot classification |
 | `AI_LOCAL_MODEL` | `Xenova/siglip-base-patch16-224` | Local classification model |
@@ -336,7 +336,7 @@ Enable with `AI_ENABLED=true`. Three detection backends run in parallel:
 
 **Motion-based stall detection**: Computes frame-to-frame pixel diff (160×120 grayscale via sharp). If motion drops below 0.5% for 3 consecutive frames while printing, injects a `print_stalled` issue.
 
-**VLM analysis** (`AI_VLM_ENABLED`): Sends camera snapshots to an external vision-language model (Ollama or OpenAI-compatible API). Can detect issues SigLIP cannot: `under_extrusion`, `nozzle_clog`, `print_stalled`.
+**VLM analysis** (`AI_VLM_ENABLED`, off by default): Sends camera snapshots to an external vision-language model (Ollama or OpenAI-compatible API). Can detect issues SigLIP cannot: `under_extrusion`, `nozzle_clog`, `print_stalled`.
 
 **Zone-aware filtering**: Analysis only runs when `sub_status === 2075` (Printing) AND `zones.current === 'print_area'`. Skipped during heating, filament changes, and when the toolhead is in the cutter/purge area.
 

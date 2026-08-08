@@ -117,10 +117,18 @@ export function loadConfig(): ServiceConfig {
 
     // AI monitoring
     aiEnabled: env('AI_ENABLED') === 'true',
-    aiVlmEnabled: env('AI_VLM_ENABLED', 'true') !== 'false',
+    // Opt-in, exactly like aiEnabled above it. It used to default ON, so setting only
+    // AI_ENABLED=true — which is how the README says to turn on AI monitoring — silently
+    // started POSTing camera frames to the VLM endpoint as well (ELEG-72).
+    aiVlmEnabled: env('AI_VLM_ENABLED') === 'true',
     aiVlmProvider: env('AI_VLM_PROVIDER', 'ollama') as 'openai' | 'ollama',
     aiVlmApiKey: env('AI_VLM_API_KEY'),
-    aiVlmBaseUrl: env('AI_VLM_BASE_URL', 'http://172.20.100.9:3000'),
+    // localhost, and ollama's actual port. The previous default was a hardcoded private
+    // LAN address on the maintainer's own network, which shipped in a public image: every
+    // user who enabled AI sent pictures of their printer to whatever held that IP on
+    // THEIR network. It also could never have worked against a stock ollama, which
+    // listens on 11434 rather than the 3000 that was hardcoded.
+    aiVlmBaseUrl: env('AI_VLM_BASE_URL', 'http://localhost:11434'),
     aiVlmModel: env('AI_VLM_MODEL', 'llava'),
     aiLocalEnabled: env('AI_LOCAL_ENABLED', 'true') !== 'false',
     aiLocalModel: env('AI_LOCAL_MODEL', 'Xenova/siglip-base-patch16-224'),
