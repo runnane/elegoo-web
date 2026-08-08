@@ -1,7 +1,15 @@
 import type { PrinterState } from '../printer-state';
 import type { CommandSender } from '../ws-client';
 import type { FileEntry } from '../types';
-import { $, escapeHtml, escapeAttr, formatTime, applyDarkThumbnailCheck } from './helpers';
+import {
+  $,
+  escapeHtml,
+  escapeAttr,
+  formatTime,
+  applyDarkThumbnailCheck,
+  THUMBNAIL_CLASS,
+  THUMBNAIL_PLACEHOLDER_SRC,
+} from './helpers';
 import { requestPrintDialog } from './print-dialog';
 
 let currentSource: 'local' | 'u-disk' = 'local';
@@ -107,11 +115,16 @@ export function handleInlineThumbnail(base64: string | null): void {
       const fp = currentDir === '/' ? fn : currentDir.replace(/^\//, '') + '/' + fn;
       if (fp !== fullPath) return;
       const iconEl = el.querySelector('.file-icon');
-      if (iconEl && !iconEl.querySelector('img')) {
+      // The guard skips a slot that already holds a *real* thumbnail. The placeholder
+      // is not one, and must be replaced when the genuine preview arrives — treating it
+      // as "already done" would leave every gcode file showing the placeholder forever
+      // (ELEG-42).
+      const existing = iconEl?.querySelector('img');
+      if (iconEl && (!existing || existing.classList.contains('thumb-img-fallback'))) {
         const img = document.createElement('img');
         img.src = `data:image/png;base64,${base64}`;
         img.alt = 'Thumbnail';
-        img.className = 'file-inline-thumb';
+        img.className = `file-inline-thumb ${THUMBNAIL_CLASS}`;
         applyDarkThumbnailCheck(img, iconEl as HTMLElement);
         iconEl.textContent = '';
         iconEl.appendChild(img);
@@ -166,7 +179,7 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
 
   let html = '<div class="file-popover-inner">';
   if (thumb) {
-    html += `<img class="file-popover-thumb" src="data:image/png;base64,${thumb}" alt="Preview">`;
+    html += `<img class="file-popover-thumb ${THUMBNAIL_CLASS}" src="data:image/png;base64,${thumb}" alt="Preview">`;
   }
   html += '<div class="file-popover-details">';
   html += `<div class="file-popover-name">${escapeHtml(file.filename)}</div>`;
@@ -449,6 +462,7 @@ function showThumbnailPopup(base64: string, anchor: HTMLElement): void {
   const img = document.createElement('img');
   img.src = `data:image/png;base64,${base64}`;
   img.alt = 'Thumbnail';
+  img.className = THUMBNAIL_CLASS;
   popup.appendChild(img);
   applyDarkThumbnailCheck(img, popup);
   document.body.appendChild(popup);
@@ -542,7 +556,13 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
     if (isFolder) {
       iconHtml = '📁';
     } else if (cachedThumb) {
-      iconHtml = `<img src="data:image/png;base64,${cachedThumb}" alt="Thumb" class="file-inline-thumb">`;
+      iconHtml = `<img src="data:image/png;base64,${cachedThumb}" alt="Thumb" class="file-inline-thumb ${THUMBNAIL_CLASS}">`;
+    } else if (file.filename.toLowerCase().endsWith('.gcode')) {
+      // A gcode file whose thumbnail is queued, absent or unusable. Same placeholder
+      // the error handler swaps in, so "no thumbnail" and "bad thumbnail" look alike
+      // and deliberate rather than one being a mismatched emoji in a grid of previews
+      // (ELEG-42). Replaced in place by handleInlineThumbnail when one arrives.
+      iconHtml = `<img src="${THUMBNAIL_PLACEHOLDER_SRC}" alt="No preview" class="file-inline-thumb thumb-img-fallback">`;
     } else {
       iconHtml = '📄';
     }

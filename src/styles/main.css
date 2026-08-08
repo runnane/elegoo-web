@@ -1608,6 +1608,17 @@ body {
   object-fit: cover;
   border-radius: var(--radius-sm);
 }
+/*
+ * A thumbnail the browser could not decode, swapped for the placeholder by the
+ * delegated handler in ui/helpers.ts (ELEG-42). `contain` rather than the `cover` above
+ * so the placeholder glyph is not cropped, and dimmed so it reads as "no preview" and
+ * not as artwork.
+ */
+.thumb-img-fallback {
+  object-fit: contain;
+  opacity: 0.55;
+  padding: 2px;
+}
 .file-details {
   flex: 1;
   min-width: 0;

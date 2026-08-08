@@ -53,6 +53,7 @@ import {
   trackStateChanges,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
+import { installThumbnailFallback } from './ui/helpers';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -674,6 +675,11 @@ function connectToService(): void {
 $('connect-btn').addEventListener('click', () => {
   connectToService();
 });
+
+// A corrupt or truncated thumbnail otherwise renders as the browser's broken-image
+// icon. One delegated listener covers every thumbnail, including the ones built as
+// HTML strings (ELEG-42).
+installThumbnailFallback();
 
 // Auto-connect on page load
 connectToService();
