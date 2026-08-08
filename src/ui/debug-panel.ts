@@ -99,7 +99,6 @@ function getStateSnapshot(state: PrinterState): Record<string, unknown> {
   if (state.status) snap.status = state.status;
   if (state.canvas) snap.canvas = state.canvas;
   if (state.monoFilament) snap.monoFilament = state.monoFilament;
-  if (state.systemInfo) snap.systemInfo = state.systemInfo;
   if (state.storageCapacity) snap.storageCapacity = state.storageCapacity;
   snap.zones = state.zones;
   // Scalars

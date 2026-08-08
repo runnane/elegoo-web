@@ -311,7 +311,6 @@ function onPrinterConnected(sn: string): void {
   // Request data that the service may not have cached yet
   client!.sendCommand(1044, { storage_media: 'local', dir: '/', offset: 0, limit: 50 });
   client!.sendCommand(1048, { storage_media: 'local' });
-  client!.sendCommand(1062, {});
   client!.sendCommand(2006, {});
   requestHistory();
 }
@@ -394,9 +393,6 @@ function connectToService(): void {
       }
       if (initData.fileTotalLayers != null) {
         state.fileTotalLayers = initData.fileTotalLayers as number;
-      }
-      if (initData.systemInfo) {
-        state.systemInfo = initData.systemInfo as Record<string, unknown>;
       }
       if (initData.layerTimes && Array.isArray(initData.layerTimes)) {
         const lt = initData.layerTimes as Array<{

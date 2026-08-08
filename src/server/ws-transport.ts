@@ -181,7 +181,6 @@ export class WebSocketTransport {
       thumbnail: this.store.thumbnail,
       thumbnailFailed: this.store.thumbnailFailed,
       fileTotalLayers: this.store.fileTotalLayers,
-      systemInfo: this.store.systemInfo,
       timelapseList: this.store.timelapseList,
       videoUrl: this.store.videoUrl,
       zones: this.store.zones,

@@ -167,41 +167,32 @@ export function renderSystemInfo(state: PrinterState): void {
   if (!container) return;
 
   const attrs = state.attributes;
-  const sysInfo = state.systemInfo;
+  if (!attrs) return;
 
-  if (!attrs && !sysInfo) return;
-
-  const key = JSON.stringify([attrs?.sn, attrs?.software_version?.ota_version, sysInfo]);
+  const key = JSON.stringify([attrs.sn, attrs.software_version?.ota_version]);
   if (key === lastSysKey) return;
   lastSysKey = key;
 
+  // Everything here comes from 1001 (GET_ATTRIBUTES). There used to be a second loop
+  // over `state.systemInfo`, filled from method 1062 — it never produced a single row,
+  // because 1062 answers `{"error_code": 1100}` on this firmware and the handler only
+  // stored a result on `error_code === 0` (ELEG-55).
   const rows: [string, string][] = [];
 
-  if (attrs) {
-    rows.push(['Hostname', attrs.hostname]);
-    rows.push(['Model', attrs.machine_model]);
-    rows.push(['Serial', attrs.sn]);
-    rows.push(['IP', attrs.ip]);
-    if (attrs.software_version) {
-      rows.push(['OTA Version', attrs.software_version.ota_version]);
-      rows.push(['MCU Version', attrs.software_version.mcu_version]);
-      rows.push(['SoC Version', attrs.software_version.soc_version]);
-    }
-    if (attrs.hardware_version) {
-      rows.push(['Hardware', attrs.hardware_version]);
-    }
-    if (attrs.protocol_version) {
-      rows.push(['Protocol', attrs.protocol_version]);
-    }
+  rows.push(['Hostname', attrs.hostname]);
+  rows.push(['Model', attrs.machine_model]);
+  rows.push(['Serial', attrs.sn]);
+  rows.push(['IP', attrs.ip]);
+  if (attrs.software_version) {
+    rows.push(['OTA Version', attrs.software_version.ota_version]);
+    rows.push(['MCU Version', attrs.software_version.mcu_version]);
+    rows.push(['SoC Version', attrs.software_version.soc_version]);
   }
-
-  if (sysInfo) {
-    for (const [k, v] of Object.entries(sysInfo)) {
-      if (typeof v === 'string' || typeof v === 'number') {
-        const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-        rows.push([label, String(v)]);
-      }
-    }
+  if (attrs.hardware_version) {
+    rows.push(['Hardware', attrs.hardware_version]);
+  }
+  if (attrs.protocol_version) {
+    rows.push(['Protocol', attrs.protocol_version]);
   }
 
   let html = '<div class="svc-list">';

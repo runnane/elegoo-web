@@ -70,7 +70,6 @@ export class PrinterState {
     layer?: number;
     thumbnail?: string;
   } | null = null;
-  systemInfo: Record<string, unknown> | null = null;
   storageCapacity: { total: number; free: number; used: number } | null = null;
   monoFilament: Record<string, unknown> | null = null;
   /** Layer timing: records [layer, durationSec] for each completed layer */
@@ -256,17 +255,6 @@ export class PrinterState {
           thumbnail: result.thumbnail as string | undefined,
         };
         this.notify();
-        break;
-      }
-      case 1062: {
-        // GET_SYSTEM_INFO
-        const errorCode = result.error_code as number | undefined;
-        if (errorCode === 0) {
-          const info = { ...result };
-          delete info.error_code;
-          this.systemInfo = info;
-          this.notify();
-        }
         break;
       }
       case 1048: {

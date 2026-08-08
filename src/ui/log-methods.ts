@@ -43,7 +43,13 @@ export const METHOD_NAMES: Record<number, string> = {
   1051: 'GetTimeLapse',
   1060: 'SetDeviceName',
   1061: 'GetCapacity',
-  1062: 'GetSystemInfo',
+  // NOT "GetSystemInfo" — that label was never verified against a real response, and
+  // both protocol docs in data/ name 1062 GetAIDetectionSettings. A read-only probe of
+  // the live printer answers `{"error_code": 1100}`, so nothing here has ever seen what
+  // it returns. The service no longer sends it (ELEG-55); this entry stays only so the
+  // log viewer can label one if the vendor app or the touchscreen sends it. ELEG-56 is
+  // the capture that would settle the name.
+  1062: 'GetAIDetectionSettings?',
   1063: 'MessageAutoReport',
   1064: 'OTAUpgrade',
   1065: 'GetHomeStatus',
