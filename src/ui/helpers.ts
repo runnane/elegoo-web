@@ -2,6 +2,14 @@ export function $(id: string): HTMLElement {
   return document.getElementById(id)!;
 }
 
+/** Byte count in the largest unit that keeps it readable. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+
 /** Fetch with AbortController timeout (default 15s). Throws on timeout. */
 export function fetchTimeout(
   input: RequestInfo | URL,

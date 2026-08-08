@@ -11,7 +11,9 @@
 
 import type { CommandSender } from '../ws-client';
 import type { PrinterState } from '../printer-state';
-import { $, escapeHtml, escapeAttr } from './helpers';
+import { $, escapeHtml, escapeAttr, formatBytes } from './helpers';
+import { type ListControls, createListControls } from './list-controls';
+import { nonZero } from './list-sort';
 
 let playerClient: CommandSender | null = null;
 
@@ -19,30 +21,97 @@ export function setTimelapseClient(client: CommandSender): void {
   playerClient = client;
 }
 
+/** The list is `Record<string, unknown>[]`, so each field is read through an accessor. */
+type TimelapseEntry = Record<string, unknown>;
+
+const entryName = (v: TimelapseEntry): string => String(v.filename || 'Unknown');
+const entryStatus = (v: TimelapseEntry): number => (v.timelapse_status as number) ?? 0;
+const entrySize = (v: TimelapseEntry): number | undefined =>
+  nonZero(v.timelapse_size as number | undefined);
+const entryDuration = (v: TimelapseEntry): number | undefined =>
+  nonZero(v.timelapse_duration as number | undefined);
+const entryBegin = (v: TimelapseEntry): number | undefined =>
+  nonZero(v.begin_time as number | undefined);
+
+/** Status codes, from the file header: 0=NotCaptured, 1=NotExported, 2=Exported, 3=Failed */
+const STATUS_EXPORTED = 2;
+const STATUS_FAILED = 3;
+
+/** Kept outside the render function — see `list-controls.ts` on why that matters. */
+let timelapseControls: ListControls<TimelapseEntry> | null = null;
+let lastTimelapseState: PrinterState | null = null;
+
+function ensureTimelapseControls(): ListControls<TimelapseEntry> {
+  if (timelapseControls) return timelapseControls;
+  timelapseControls = createListControls<TimelapseEntry>({
+    id: 'timelapse',
+    container: $('timelapse-controls'),
+    noun: 'videos',
+    filterPlaceholder: 'Filter timelapses…',
+    filterText: entryName,
+    columns: [
+      { key: 'name', label: 'Name', value: entryName },
+      { key: 'time', label: 'Recorded', value: entryBegin, initialDirection: 'desc' },
+      { key: 'duration', label: 'Length', value: entryDuration, initialDirection: 'desc' },
+      { key: 'size', label: 'Size', value: entrySize, initialDirection: 'desc' },
+    ],
+    defaultSort: { key: 'time', dir: 'desc' },
+    selects: [
+      {
+        // The timelapse analogue of Print History's failures filter, which this issue
+        // asked to fold in if it was cheap. It was — the helper already does dropdowns.
+        id: 'state',
+        label: 'State',
+        options: [
+          { value: 'ready', label: 'ready to play' },
+          { value: 'pending', label: 'needs export' },
+          { value: 'failed', label: 'generation failed' },
+        ],
+        match: (v, value) => {
+          const status = entryStatus(v);
+          if (value === 'ready') return status === STATUS_EXPORTED && !!v.timelapse_url;
+          if (value === 'failed') return status === STATUS_FAILED;
+          return status !== STATUS_EXPORTED && status !== STATUS_FAILED;
+        },
+      },
+    ],
+    onChange: () => {
+      if (lastTimelapseState) renderTimelapse(lastTimelapseState);
+    },
+  });
+  return timelapseControls;
+}
+
 export function renderTimelapse(state: PrinterState): void {
   const container = $('timelapse-list');
   if (!container) return;
+  lastTimelapseState = state;
 
-  const videos = state.timelapseList;
-  if (!videos || !videos.length) {
-    container.innerHTML =
-      '<div class="file-empty">No timelapse videos found. Click Refresh to load print history.</div>';
+  const controls = ensureTimelapseControls();
+  const videos = controls.apply(state.timelapseList ?? []);
+
+  if (!videos.length) {
+    // "No timelapses at all" and "none match your filter" are different facts.
+    container.innerHTML = controls.emptyHtml(
+      'No timelapse videos found. Click Refresh to load print history.',
+    );
     return;
   }
 
   let html = '';
   for (const video of videos) {
-    const name = String(video.filename || 'Unknown');
-    const status = video.timelapse_status as number;
+    const name = entryName(video);
+    const status = entryStatus(video);
     const videoUrl = (video.timelapse_url as string) || '';
-    const videoDuration = (video.timelapse_duration as number) || 0;
-    const beginTime = video.begin_time as number | undefined;
-    const time = beginTime ? new Date(beginTime * 1000).toLocaleString() : '';
-    const durStr = videoDuration > 0 ? `${videoDuration}s` : '';
-    const meta = [time, durStr].filter(Boolean).join(' · ');
+    const time = entryBegin(video) ? new Date(entryBegin(video)! * 1000).toLocaleString() : '';
+    const videoDuration = entryDuration(video);
+    const durStr = videoDuration ? `${videoDuration}s` : '';
+    const size = entrySize(video);
+    const sizeStr = size ? formatBytes(size) : '';
+    const meta = [time, durStr, sizeStr].filter(Boolean).join(' · ');
 
     // Status 2 = already exported (has URL), status 1 = captured but needs export
-    const isExported = status === 2 && videoUrl;
+    const isExported = status === STATUS_EXPORTED && videoUrl;
     const actionBtn = isExported
       ? `<button class="btn btn-sm btn-primary timelapse-play-btn" data-url="${escapeAttr(videoUrl)}">▶ Play</button>`
       : `<button class="btn btn-sm btn-ghost timelapse-export-btn" data-url="${escapeAttr(videoUrl || name)}">⬆ Export</button>`;

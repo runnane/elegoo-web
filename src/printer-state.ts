@@ -98,6 +98,7 @@ export class PrinterState {
     timelapse_status: number;
     timelapse_url: string;
     timelapse_duration: number;
+    timelapse_size: number;
   }> = [];
   printHistoryTotal = 0;
   /** Auto-report sequence tracking for gap detection */
@@ -340,6 +341,9 @@ export class PrinterState {
               timelapse_status: (t.time_lapse_video_status as number) ?? 0,
               timelapse_url: (t.time_lapse_video_url as string) || '',
               timelapse_duration: (t.time_lapse_video_duration as number) || 0,
+              // On the wire per CC2_PROTOCOL_REFERENCE.md §1036 and used by the vendor
+              // app, but dropped here until ELEG-52 wanted it as a sort key.
+              timelapse_size: (t.time_lapse_video_size as number) || 0,
             }));
             this.printHistoryTotal = total ?? this.printHistory.length;
             // Populate timelapse list from history entries with video data
@@ -352,6 +356,7 @@ export class PrinterState {
                 timelapse_status: t.timelapse_status,
                 timelapse_url: t.timelapse_url,
                 timelapse_duration: t.timelapse_duration,
+                timelapse_size: t.timelapse_size,
                 begin_time: t.begin_time,
                 end_time: t.end_time,
               }));

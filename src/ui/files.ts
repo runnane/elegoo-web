@@ -4,6 +4,7 @@ import type { FileEntry } from '../types';
 import {
   $,
   escapeHtml,
+  formatBytes,
   escapeAttr,
   formatTime,
   applyDarkThumbnailCheck,
@@ -413,13 +414,6 @@ function ensureFileDelegation(container: HTMLElement): void {
 
 function _bindFilePopovers(_container: HTMLElement): void {
   // No-op: popovers now handled by delegation in ensureFileDelegation
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
 }
 
 function renderBreadcrumb(_client: CommandSender): string {
