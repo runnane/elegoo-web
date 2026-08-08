@@ -143,6 +143,10 @@ export class WebSocketTransport {
     return {
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       mqtt: mqttState,
+      // The coarse `mqtt` above is kept as-is for any existing consumer; `mqttPhase`
+      // splits its `broker_only` into awaiting_sn / registering / rejected, which is the
+      // distinction a human actually needs (ELEG-59).
+      mqttPhase: this.bridge.phase,
       mqttRegisterAttempts: this.bridge.registerAttempts,
       printerSn: this.bridge.serialNumber || null,
       printerIp: this.bridge.ip,

@@ -2,10 +2,17 @@
 
 import { $, escapeHtml } from './helpers';
 import type { PrinterState } from '../printer-state';
+import { type MqttPhase, mqttBannerHeadline, mqttPhaseMessage } from '../types';
 
 export interface ServiceStatus {
   uptime: number;
   mqtt: string;
+  /**
+   * The finer split of `mqtt`'s `broker_only` (ELEG-59). Optional because a browser can
+   * outlive a server restart and still be holding a `service_status` from before this
+   * shipped; `phaseOf()` falls back to the coarse field in that case.
+   */
+  mqttPhase?: MqttPhase;
   mqttRegisterAttempts: number;
   printerSn: string | null;
   printerIp: string;
@@ -19,6 +26,27 @@ interface ServiceCheck {
   label: string;
   state: string;
   okValues: string[];
+}
+
+/** What the MQTT row reads. `registering…` is now reserved for actually registering. */
+const PHASE_LABELS: Record<MqttPhase, string> = {
+  connected: 'connected',
+  disconnected: 'disconnected',
+  awaiting_sn: 'waiting for printer',
+  registering: 'registering...',
+  rejected: 'refused — too many clients',
+};
+
+/**
+ * Prefer the server's phase; fall back to deriving one from the coarse `mqtt` field so a
+ * browser holding a pre-ELEG-59 `service_status` still renders sensibly. The fallback
+ * cannot tell `awaiting_sn` from `registering` — that is the whole point of the new
+ * field — so it reports the vaguer of the two rather than guessing.
+ */
+function phaseOf(s: ServiceStatus): MqttPhase {
+  if (s.mqttPhase) return s.mqttPhase;
+  if (s.mqtt === 'connected') return 'connected';
+  return s.mqtt === 'broker_only' ? 'registering' : 'disconnected';
 }
 
 let lastStatus: ServiceStatus | null = null;
@@ -101,13 +129,18 @@ export function renderServiceStatus(): void {
   // Dropdown detail
   if (!dropdown) return;
 
-  let mqttLabel = s.mqtt;
-  if (s.mqtt === 'broker_only') mqttLabel = 'registering...';
+  const phase = phaseOf(s);
+  const mqttLabel = PHASE_LABELS[phase];
 
-  const showFirmwareWarning = s.mqtt === 'broker_only' && s.mqttRegisterAttempts >= 3;
-  const firmwareBanner = showFirmwareWarning
+  // The banner used to fire on `broker_only && attempts >= 3`, which meant it could
+  // never fire for the case that most needed it: when the printer never speaks, no SN is
+  // learned, registration is never attempted and `mqttRegisterAttempts` stays 0 forever
+  // (ELEG-59). The decision now lives in `mqttBannerHeadline`, where it is testable.
+  const headline = mqttBannerHeadline(phase, s.mqttRegisterAttempts);
+  const firmwareBanner = headline
     ? `<div class="svc-firmware-warning">
-        ⚠️ <strong>Firmware not responding</strong> — ${s.mqttRegisterAttempts} registration attempts. Try power-cycling.
+        ⚠️ <strong>${escapeHtml(headline)}</strong> — ${escapeHtml(mqttPhaseMessage(phase))}
+        ${phase === 'registering' ? `(${s.mqttRegisterAttempts} registration attempts)` : ''}
       </div>`
     : '';
 

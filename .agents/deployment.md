@@ -154,7 +154,7 @@ sudo systemctl stop elegooweb
 **Verify at the receiver, not at the exit code** — a successful `cp` proves nothing:
 
 ```bash
-curl -s localhost:8088/api/health | jq .          # {"ok":true,"mqtt":"connected","build":{…}}
+curl -s localhost:8088/api/health | jq .          # {"ok":true,"mqtt":"connected","mqttPhase":"connected","build":{…}}
 systemctl show -p ActiveEnterTimestamp elegooweb  # did it actually restart?
 journalctl -u elegooweb -n 30 --no-pager          # startup banner: build, printer, ports, AI/Telegram state
 ```
@@ -168,6 +168,23 @@ Two fields in there carry the whole check:
 - **`mqtt":"connected"`** is the one that matters for whether it *works*: the process can
   start happily and fail to reach the printer, and the web UI then looks fine and shows
   nothing.
+
+  **If it is not `connected`, read `mqttPhase` before blaming the deploy** (ELEG-59). The
+  coarse field collapses two unrelated failures into `broker_only`, and the instinct
+  after a deploy is to roll back — which on 2026-08-08 was the wrong move, because the
+  service was fine and the printer's firmware had hung:
+
+  | `mqttPhase` | What it means | Who fixes it |
+  | --- | --- | --- |
+  | `awaiting_sn` | The broker answered but the printer has never published. Registration was **never attempted**, so `mqttRegisterAttempts` is 0. The machine's Linux side is up; its control application is not. | Power-cycle the **printer**. Not a deploy problem. |
+  | `registering` | An SN is known and registration is in flight. Watch `mqttRegisterAttempts` climb. | Wait; if it keeps climbing, the printer is not answering. |
+  | `rejected` | The printer already has its maximum of two clients. | Close another client — the vendor app, or a second copy of this service. |
+
+  `mqttMessage` carries the same thing as one sentence, which is usually all you need:
+
+  ```bash
+  curl -s localhost:8088/api/health | jq -r '.mqttPhase, .mqttRegisterAttempts, .mqttMessage'
+  ```
 
 ## What this means for the tracker
 
