@@ -274,6 +274,113 @@ export function isFilamentChangeSubStatus(subStatus: number): boolean {
   return false;
 }
 
+// ─── Command result codes (`error_code` on a method response) ────────
+//
+// Distinct from EXCEPTION_NAMES below: an *exception* is a hardware fault the printer
+// reports about itself, while these come back on the response to a command we sent and
+// say what happened to that command. Names and numbers are from the official app's `hh`
+// enum, transcribed in `data/CC2_PROTOCOL_REFERENCE.md` §4.
+export const ERROR_CODE_NAMES: Record<number, string> = {
+  0: 'Success',
+  109: 'Filament runout',
+  1000: 'Auth token invalid',
+  1001: 'Unknown method',
+  1002: 'Cannot open folder',
+  1003: 'Invalid parameter',
+  1004: 'File write failed',
+  1005: 'Token update failed',
+  1006: 'Failed to send update to MCU',
+  1007: 'Cannot delete file',
+  1008: 'Empty response',
+  1009: 'Printer busy',
+  1010: 'Not currently printing',
+  1011: 'File copy failed',
+  1012: 'Task not found',
+  1013: 'Database operation failed',
+  1014: 'Invalid gcode file',
+  1015: 'No thumbnail available',
+  1016: 'Thumbnail parse failed',
+  1017: 'USB drive not detected',
+  1018: 'USB drive removed',
+  1019: 'Timelapse generation failed',
+  1020: 'Timelapse video does not exist',
+  1021: 'File not found',
+  1026: 'No bed mesh data — run auto-levelling first',
+  9999: 'Unknown error',
+};
+
+/**
+ * What happened to a command, as far as the UI needs to care.
+ *
+ * The split that matters is `busy` vs the rest. The printer returns 1009 whenever it
+ * cannot accept a command *right now* — mid-filament-change, during calibration, with
+ * another command in flight — and that is not a failure: the same command will work in
+ * a moment. Showing it as an error trains people to ignore real errors, and showing
+ * nothing at all (which is what happened before ELEG-40) lets them conclude the command
+ * worked.
+ */
+export type CommandOutcome = 'ok' | 'busy' | 'rejected' | 'error';
+
+/** Transient — the identical command is expected to succeed once the printer is free. */
+export const BUSY_ERROR_CODES = new Set([1009]);
+
+/**
+ * The command was understood and refused, and repeating it unchanged will be refused
+ * again until something else changes. Worth telling the user *what* to change, which is
+ * why these are not lumped in with `error`.
+ */
+export const REJECTED_ERROR_CODES = new Set([
+  1001, 1003, 1010, 1012, 1014, 1015, 1017, 1018, 1020, 1021, 1026,
+]);
+
+/**
+ * Classify a response's `error_code`.
+ *
+ * A missing code counts as `ok`: several methods answer with no `error_code` at all on
+ * success, so treating absent as failure would toast an error on every one of them.
+ */
+export function classifyCommandOutcome(code: number | undefined | null): CommandOutcome {
+  if (code === undefined || code === null || code === 0) return 'ok';
+  if (BUSY_ERROR_CODES.has(code)) return 'busy';
+  if (REJECTED_ERROR_CODES.has(code)) return 'rejected';
+  return 'error';
+}
+
+/** Human-readable reason for a non-zero `error_code`, falling back to the number. */
+export function describeCommandError(code: number | undefined | null): string {
+  if (code === undefined || code === null) return 'unknown error';
+  return ERROR_CODE_NAMES[code] ?? `error ${code}`;
+}
+
+/**
+ * Commands whose failure is worth a toast, and what to call them in one.
+ *
+ * Only *writes* are listed. A poll that comes back busy is noise — it will be re-polled
+ * seconds later — whereas a button press that silently did nothing is the whole
+ * complaint behind ELEG-40. Methods handled individually elsewhere (1047 delete, 1051
+ * timelapse export, 2003 filament save) are deliberately absent so they keep their more
+ * specific wording.
+ */
+export const COMMAND_METHOD_NAMES: Record<number, string> = {
+  1007: 'Emergency stop',
+  1020: 'Start print',
+  1021: 'Pause print',
+  1022: 'Stop print',
+  1023: 'Resume print',
+  1024: 'Load filament',
+  1025: 'Unload filament',
+  1026: 'Home',
+  1027: 'Move',
+  1028: 'Set temperature',
+  1029: 'Light switch',
+  1030: 'Fan control',
+  1031: 'Speed mode',
+  1032: 'Auto-level',
+  1033: 'Vibration optimization',
+  1034: 'PID calibration',
+  1035: 'Self-check',
+};
+
 // Exception codes from the CC2 protocol
 export const EXCEPTION_NAMES: Record<number, string> = {
   101: 'Bed Heat Failed',

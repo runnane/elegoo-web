@@ -54,6 +54,12 @@ import {
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
+import {
+  COMMAND_METHOD_NAMES,
+  classifyCommandOutcome,
+  describeCommandError,
+  type CommandOutcome,
+} from './types';
 
 const state = new PrinterState();
 const logStore = new LogStore();
@@ -308,6 +314,36 @@ function onPrinterConnected(sn: string): void {
   requestHistory();
 }
 
+/**
+ * Toast the outcome of a write command, and hand the classification back so a caller
+ * with something more specific to say on success can branch on it.
+ *
+ * Before ELEG-40 a refused command produced nothing at all: `guardedSend` re-enabled the
+ * button on its timer and the user reasonably concluded it had worked. `busy` is a
+ * warning rather than an error because it is not a failure — the printer simply could
+ * not take the command this instant.
+ *
+ * **Nothing is retried automatically, deliberately.** These are writes to a physical
+ * machine, and a re-sent `move` that lands thirty seconds later — after the user has
+ * given up and put a hand on the bed — is worse than one that visibly did nothing. The
+ * user is told they can press it again; pressing it is theirs to decide.
+ */
+function reportCommandOutcome(method: number, data: unknown): CommandOutcome {
+  const result = (data as Record<string, unknown>).result as Record<string, unknown> | undefined;
+  const code = result?.error_code as number | undefined;
+  const outcome = classifyCommandOutcome(code);
+  const label = COMMAND_METHOD_NAMES[method] ?? `Command ${method}`;
+
+  if (outcome === 'busy') {
+    toast(`${label}: printer is busy — try again in a moment`, 'warning');
+  } else if (outcome === 'rejected') {
+    toast(`${label} refused: ${describeCommandError(code)}`, 'warning');
+  } else if (outcome === 'error') {
+    toast(`${label} failed: ${describeCommandError(code)}`, 'error');
+  }
+  return outcome;
+}
+
 function connectToService(): void {
   // Build WS URL relative to current page (works with Vite proxy and production)
   const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -432,6 +468,13 @@ function connectToService(): void {
     onMessage(method, data) {
       state.handleResponse(method, data as Record<string, unknown>);
       onCommandResponse(method);
+
+      // Writes report their own failures; reads do not (a poll that comes back busy is
+      // re-polled seconds later and is not worth a toast). `ok` for anything unlisted,
+      // so the success paths below read the same either way.
+      const outcome =
+        COMMAND_METHOD_NAMES[method] !== undefined ? reportCommandOutcome(method, data) : 'ok';
+
       if (method === 1044 && client) {
         requestAnimationFrame(() => renderFiles(state, client!));
       }
@@ -443,15 +486,10 @@ function connectToService(): void {
         const errorCode = result?.error_code as number | undefined;
         if (errorCode === 0) {
           toast('File deleted', 'success');
+        } else if (classifyCommandOutcome(errorCode) === 'busy') {
+          toast('Cannot delete — printer is busy. Try again in a moment.', 'warning');
         } else {
-          const ERROR_NAMES: Record<number, string> = {
-            1003: 'Invalid parameter',
-            1007: 'Cannot delete file',
-            1009: 'Printer busy',
-            1021: 'File not found',
-          };
-          const msg = ERROR_NAMES[errorCode ?? -1] ?? `Error ${errorCode ?? 'unknown'}`;
-          toast(`Delete failed: ${msg}`, 'error');
+          toast(`Delete failed: ${describeCommandError(errorCode)}`, 'error');
         }
         client.sendCommand(1044, {
           storage_media: currentFileSource(),
@@ -477,7 +515,7 @@ function connectToService(): void {
         handleFileDetailForPrint(state);
       }
       // After move/home, request fresh status and flash position
-      if ((method === 1026 || method === 1027) && client) {
+      if ((method === 1026 || method === 1027) && client && outcome === 'ok') {
         client.sendCommand(1002, {});
         const pos = state.status?.gcode_move;
         if (pos) {
@@ -507,28 +545,32 @@ function connectToService(): void {
           } else {
             toast('Timelapse export started — video will be generated', 'info');
           }
-        } else if (err1051 === 1009) {
+        } else if (classifyCommandOutcome(err1051) === 'busy') {
           toast('Cannot export timelapse — printer is busy. Try when idle.', 'warning');
           requestAnimationFrame(() => renderTimelapse(state));
         } else {
-          toast(`Timelapse export failed (error ${err1051})`, 'error');
+          toast(`Timelapse export failed: ${describeCommandError(err1051)}`, 'error');
           requestAnimationFrame(() => renderTimelapse(state));
         }
       }
       if (method === 1050 && state.videoUrl) {
         showTimelapsePlayer(state.videoUrl);
       }
-      if (method === 1032) {
-        toast('Auto-level started', 'success');
-      }
-      if (method === 1033) {
-        toast('Vibration optimization started', 'success');
-      }
-      if (method === 1034) {
-        toast('PID calibration started', 'success');
-      }
-      if (method === 1035) {
-        toast('Self-check started', 'success');
+      // Only on success. These used to toast "started" whatever came back, so a
+      // calibration the printer had refused as busy still read as under way (ELEG-40).
+      if (outcome === 'ok') {
+        if (method === 1032) {
+          toast('Auto-level started', 'success');
+        }
+        if (method === 1033) {
+          toast('Vibration optimization started', 'success');
+        }
+        if (method === 1034) {
+          toast('PID calibration started', 'success');
+        }
+        if (method === 1035) {
+          toast('Self-check started', 'success');
+        }
       }
       if (method === 1036) {
         requestAnimationFrame(() => renderPrintHistory(state));
@@ -542,10 +584,10 @@ function connectToService(): void {
         if (errorCode === 0) {
           toast('Filament saved', 'success');
           if (client) client.sendCommand(2005, {});
-        } else if (errorCode === 1009) {
-          toast('Cannot edit filament while printing — printer is busy', 'error');
+        } else if (classifyCommandOutcome(errorCode) === 'busy') {
+          toast('Cannot edit filament while printing — printer is busy', 'warning');
         } else {
-          toast(`Filament save failed (error ${errorCode ?? '?'})`, 'error');
+          toast(`Filament save failed: ${describeCommandError(errorCode)}`, 'error');
         }
       }
     },
