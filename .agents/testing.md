@@ -99,6 +99,14 @@ carry the protocol's hard-won knowledge:
   state object into a fixed third-party JSON shape. Pure input → output, and a client
   like Mainsail breaks silently when a field's shape drifts.
 
+**There is no DOM environment at all** — vitest runs `environment: "node"` and neither
+`jsdom` nor `happy-dom` is a dependency, so a test cannot import a module that touches
+`document`. That is why the frontend is written as pure-half / DOM-half pairs:
+`card-layout.ts` + `settings.ts`, `list-sort.ts` + `list-controls.ts`. **Put the
+decisions in the pure half** — it is the only half a test can reach — and keep the DOM
+half to markup and wiring. ELEG-61 tracks adding jsdom so the wiring can be asserted
+too; until it lands, "gates green" says nothing whatsoever about anything that renders.
+
 Build fixtures from **captured real payloads** (the debug panel exports the state tree,
 and `${DATA_DIR}/state.json` is a real snapshot) rather than hand-writing an idealised
 message — the CC2's actual payloads are the thing worth encoding. Strip anything
