@@ -238,6 +238,30 @@ more here than in a repo with real coverage:
 Undo each mutation with an inverse patch, **never `git checkout <file>`** — see
 [`shared/gate-failures.md`](../shared/gate-failures.md) §6.
 
+## Dependency advisories are deliberately NOT a gate
+
+`pnpm audit` is not in `scripts/gates.sh` and should not be added to it (ELEG-63). The
+gate set is otherwise deterministic and offline; `pnpm audit` queries a third-party
+advisory feed, so the same commit passes today and fails tomorrow because someone
+published. That would turn a PR red for a reason unrelated to the PR — and "a red check
+on your branch is yours" is a signal this repo spends real effort keeping true.
+
+Advisories live in [`.github/workflows/audit.yml`](../../../.github/workflows/audit.yml)
+instead: weekly, on changes to the lockfile/manifest, and on demand. **It never fails the
+job.** Do not make it a required check.
+
+Two things to know when it reports something:
+
+- **The fix is almost always a floor in `overrides:` in `pnpm-workspace.yaml`**, not a
+  manifest bump. Every one of the 38 advisories open at ELEG-63 was transitive.
+- **Dependabot will not do it for you**, even though it is enabled on this repo. It bumps
+  what it finds in a manifest; it does not write pnpm overrides. It had opened zero PRs
+  for those 38. Enabled ≠ covered.
+
+An override is a floor, not a pin: `pnpm why <pkg>` tells you whether the parent's own
+range has caught up, at which point delete the line rather than leave a number nobody can
+date.
+
 ## The gate no script can run: the printer
 
 `pnpm gates` cannot tell you whether a change does the right thing to a **physical

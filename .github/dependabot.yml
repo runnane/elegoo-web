@@ -1,10 +1,34 @@
 version: 2
+
+# Dependabot was already enabled here, and it is NOT sufficient on its own (ELEG-63).
+# All 38 advisories open at the time were TRANSITIVE — hono/express/ajv under
+# @modelcontextprotocol/sdk, onnxruntime under @huggingface/transformers, esbuild under
+# tsx — and it opened no PR for any of them, because under pnpm the fix is a floor in
+# `overrides:` in pnpm-workspace.yaml and Dependabot does not write that file. It only
+# bumps entries it can find in a manifest.
+#
+# So treat this as covering DIRECT dependencies and the actions below. The transitive
+# half is caught by .github/workflows/audit.yml and fixed by hand in pnpm-workspace.yaml.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    # Mirrors updateConfig.ignoreDependencies in pnpm-workspace.yaml — three and its
+    # types are pinned exactly there, so a PR bumping them is noise, not news.
+    ignore:
+      - dependency-name: three
+      - dependency-name: '@types/three'
+
   - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Added by ELEG-63. Without this, an action major goes stale until a deprecation
+  # notice appears in a run log and someone reads it — which is exactly how ELEG-62
+  # came to be filed (checkout/setup-node/action-setup all sat on the Node 20 runtime).
+  - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
