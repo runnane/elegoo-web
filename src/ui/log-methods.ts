@@ -45,10 +45,23 @@ export const METHOD_NAMES: Record<number, string> = {
   1061: 'GetCapacity',
   // NOT "GetSystemInfo" — that label was never verified against a real response, and
   // both protocol docs in data/ name 1062 GetAIDetectionSettings. A read-only probe of
-  // the live printer answers `{"error_code": 1100}`, so nothing here has ever seen what
-  // it returns. The service no longer sends it (ELEG-55); this entry stays only so the
-  // log viewer can label one if the vendor app or the touchscreen sends it. ELEG-56 is
-  // the capture that would settle the name.
+  // the live printer answers:
+  //
+  //     { "id": 25, "method": 1062, "result": { "error_code": 1100 } }
+  //
+  // every time, so nothing here has ever seen what it returns. **error_code 1100 is
+  // undocumented** — it is in no error table in this repo. Best guess, unconfirmed, is
+  // "feature unavailable on this machine" rather than "unknown method"; seeing 1100 come
+  // back from some *other* method would confirm that.
+  //
+  // This comment is the only committed record of the above: `data/` is gitignored in its
+  // entirety, so the protocol references AGENTS.md tells you to cite are not in a clone
+  // (ELEG-66).
+  //
+  // The service no longer sends 1062 (ELEG-55); this entry stays only so the log viewer
+  // can label one if the touchscreen or some other client sends it. ELEG-56 is the
+  // capture that would settle the real name. Do NOT send 1063 to find out what it does —
+  // it is a `Set…`.
   1062: 'GetAIDetectionSettings?',
   1063: 'MessageAutoReport',
   1064: 'OTAUpgrade',
