@@ -1,14 +1,7 @@
 /** Settings panel — persistent card layout + Telegram config */
 
 import { $, fetchTimeout } from './helpers';
-import {
-  type CardLayout,
-  ALL_CARD_IDS,
-  CARD_NAMES,
-  DEFAULT_SIDEBAR,
-  defaultCardLayout,
-  normaliseCardLayout,
-} from './card-layout';
+import { type CardLayout, CARD_NAMES, defaultCardLayout, normaliseCardLayout } from './card-layout';
 import { toast } from './toast';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
