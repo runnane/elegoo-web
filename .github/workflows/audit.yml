@@ -1,0 +1,83 @@
+name: Audit
+
+# Dependency advisories, checked by something other than a `git push` banner (ELEG-63).
+#
+# WHY THIS IS NOT A GATE IN scripts/gates.sh
+#
+# `scripts/gates.sh` is deliberately the single list of what has to pass, and CI runs
+# exactly it (ELEG-5) — so the obvious move was to add `pnpm audit` there and let CI
+# pick it up with no workflow edit. That was considered and rejected:
+#
+#   - `pnpm gates` is otherwise deterministic and offline. `pnpm audit` queries the
+#     registry's advisory feed, so the same commit passes today and fails tomorrow
+#     because a third party published something.
+#   - That turns a PR red for a reason that has nothing to do with the PR. This repo
+#     works hard to keep "a red check on your branch is yours" true (ELEG-4, ELEG-62),
+#     and a gate that goes red on its own is precisely how that signal is lost.
+#
+# So advisories get their own non-blocking job: it reports, it does not gate. Nothing
+# here should ever be made a required check.
+#
+# Fixing what it finds is usually a FLOOR in `overrides:` in pnpm-workspace.yaml, not a
+# manifest bump — see the comments there and in .github/dependabot.yml for why
+# Dependabot cannot do it for us.
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC. Weekly matches the dependabot.yml cadence.
+    - cron: '0 6 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - package.json
+  pull_request:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - package.json
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # No `version:` on purpose — see the note in ci.yml (ELEG-4).
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit
+        run: |
+          pnpm audit --json > audit.json || true
+          node -e '
+            const a = JSON.parse(require("fs").readFileSync("audit.json", "utf8"));
+            const v = a.metadata.vulnerabilities;
+            const total = Object.values(v).reduce((s, n) => s + n, 0);
+            const rows = Object.values(a.advisories ?? {})
+              .map(x => `| ${x.severity} | ${x.module_name} | ${x.vulnerable_versions} | ${x.patched_versions} |`)
+              .sort();
+            const out = total === 0
+              ? "No known advisories in the dependency tree."
+              : [
+                  `**${total} advisory/advisories** (critical ${v.critical}, high ${v.high}, moderate ${v.moderate}, low ${v.low}).`,
+                  "",
+                  "Fix by raising a floor in `overrides:` in `pnpm-workspace.yaml` — Dependabot cannot write that file.",
+                  "",
+                  "| severity | package | vulnerable | patched |",
+                  "| --- | --- | --- | --- |",
+                  ...rows,
+                ].join("\n");
+            console.log(out);
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, out + "\n");
+            // Never fail the job: this reports, it does not gate. See the header.
+          '

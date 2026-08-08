@@ -4,9 +4,46 @@
 # --frozen-lockfile correctly refused the mismatch (ELEG-4). This file is the
 # documented new home and is read by both 10.x and 11.x.
 
-# Security pin, not a compatibility shim — keep it.
+# Security pins, not compatibility shims — keep them.
+#
+# Every entry here is a FLOOR raising a transitive dependency to its patched version
+# (ELEG-63). A floor rather than a lockfile bump on purpose: `pnpm update` moves the
+# lockfile and the next resolution can quietly move it back, whereas an override is
+# re-asserted on every install and carries the reason next to the number.
+#
+# Nothing in the gates looks at advisories — `.github/workflows/audit.yml` does, weekly
+# and on changes to the lockfile, and Dependabot raises the PRs. See that workflow for
+# why this is deliberately NOT a gate in scripts/gates.sh.
+#
+# When a direct dependency's own range catches up, delete the line rather than leaving
+# a floor nobody can date. Check with: pnpm why <pkg>
 overrides:
   undici: '>=6.24.0'
+
+  # @modelcontextprotocol/sdk 1.30.0 → express / ajv / express-rate-limit / hono.
+  # Its declared ranges already permit all of these; only the lockfile was stale.
+  hono: '>=4.12.34'
+  '@hono/node-server': '>=2.0.5'
+  qs: '>=6.15.2'
+  body-parser: '>=2.3.0'
+  fast-uri: '>=3.1.5'
+  ip-address: '>=10.3.1'
+
+  # @huggingface/transformers 4.2.0 → onnxruntime-{node,web}. These two DO cross their
+  # parent's declared range (onnxruntime-node wants adm-zip ^0.5.16), so they are the
+  # only entries here that upstream has not itself blessed. Reached solely through the
+  # dynamic import in src/server/ai-monitor.ts, i.e. only when AI_PROVIDER selects the
+  # local CLIP path — which no test covers. Verified by importing the package.
+  adm-zip: '>=0.6.0'
+  protobufjs: '>=7.6.5'
+  # sharp is also a DIRECT dependency here at 0.35.x and that copy was never affected;
+  # the advisory is against the second, older copy transformers pulled in beside it.
+  # The floor collapses the two into one — which also halves the native binary payload.
+  sharp: '>=0.35.0'
+
+  # tsx → esbuild. tsx is a runtime dependency here: production runs the TypeScript
+  # directly under `node --import tsx`, so this is not a build-only advisory.
+  esbuild: '>=0.28.1'
 
 onlyBuiltDependencies:
   - esbuild
