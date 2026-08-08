@@ -166,6 +166,9 @@ function compactPayload(entry: LogEntry): string {
     }
   }
 
+  // The deliberate exception to the CSS-truncation rule (ELEG-43): this is a DOM-size
+  // guard, not a layout decision. A megabyte payload across hundreds of log rows is a
+  // performance problem no stylesheet can solve, and the row expands to show it in full.
   return entry.payload.slice(0, 200);
 }
 

@@ -570,7 +570,7 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
     html += `
       <div class="file-item ${isFolder ? 'file-item-folder' : ''}" data-filename="${escapeAttr(file.filename)}" data-type="${isFolder ? 'folder' : 'file'}">
         <div class="file-name-row">
-          <span class="file-name">${escapeHtml(file.filename)}</span>${cacheMarker}
+          <span class="file-name" title="${escapeAttr(file.filename)}">${escapeHtml(file.filename)}</span>${cacheMarker}
         </div>
         <div class="file-item-body">
           <div class="file-icon">${iconHtml}</div>
