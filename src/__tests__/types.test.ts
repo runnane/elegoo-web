@@ -12,6 +12,9 @@ import {
   mqttPhase,
   mqttPhaseMessage,
   mqttBannerHeadline,
+  formatBuildVersion,
+  buildVersionLabel,
+  UNKNOWN_VERSION_LABEL,
 } from '../types';
 
 describe('detectZone', () => {
@@ -223,5 +226,76 @@ describe('mqttPhaseMessage', () => {
     // These two sentences are the entire content of the 2026-08-08 incident.
     expect(mqttPhaseMessage('awaiting_sn')).toMatch(/power cycle/i);
     expect(mqttPhaseMessage('rejected')).toMatch(/two clients/i);
+  });
+});
+
+describe('formatBuildVersion — x.y.z+aa, the way RCP renders it (ELEG-48)', () => {
+  it('emits the commit DISTANCE, not a short sha', () => {
+    // The issue described `+aa` as "a short build/commit suffix", which is what it looks
+    // like. RCP's formatVersion actually emits the number of commits since the tag, and
+    // a near-miss would defeat the point of the request.
+    expect(formatBuildVersion({ describe: 'v0.2.1-58-g5b00442' })).toBe('0.2.1+58');
+  });
+
+  it('drops the suffix when sitting exactly on a tag', () => {
+    // Matches RCP, which returns the bare version rather than `+0`.
+    expect(formatBuildVersion({ describe: 'v0.3.0' })).toBe('0.3.0');
+    expect(formatBuildVersion({ describe: 'v0.3.0-0-gabc1234' })).toBe('0.3.0');
+  });
+
+  it('strips a leading v so the result is valid semver', () => {
+    expect(formatBuildVersion({ describe: 'v1.2.3-4-gdeadbee' })).toBe('1.2.3+4');
+    expect(formatBuildVersion({ describe: '1.2.3-4-gdeadbee' })).toBe('1.2.3+4');
+  });
+
+  it('records a dirty install, which RCP never sees', () => {
+    // contrib/install.sh runs `describe --tags --always --dirty`; RCP uses `--long`.
+    // Installed from a modified checkout is worth surfacing, and `+58.dirty` is still
+    // valid semver build metadata.
+    expect(formatBuildVersion({ describe: 'v0.2.1-58-g5b00442-dirty' })).toBe('0.2.1+58.dirty');
+    expect(formatBuildVersion({ describe: 'v0.3.0-dirty' })).toBe('0.3.0+dirty');
+  });
+
+  it('keeps a prerelease tag intact', () => {
+    expect(formatBuildVersion({ describe: 'v1.2.3-rc.1' })).toBe('1.2.3-rc.1');
+  });
+
+  it('falls back to package.json rather than rendering a bare sha as a version', () => {
+    // `--always` with no reachable tag yields just a sha. That is not a version, and
+    // showing it as one would be exactly the silently-wrong string this exists to avoid.
+    expect(formatBuildVersion({ describe: '5b00442', version: '0.2.1' })).toBe('0.2.1');
+    expect(formatBuildVersion({ describe: 'not-a-version', version: '0.2.1' })).toBe('0.2.1');
+  });
+
+  it('returns null when there is nothing trustworthy to show', () => {
+    // The all-null stamp the issue calls out: normal for `pnpm dev`, and for any deploy
+    // predating ELEG-10. Absent beats wrong.
+    expect(formatBuildVersion({ describe: null, version: null })).toBeNull();
+    expect(formatBuildVersion({})).toBeNull();
+    expect(formatBuildVersion(null)).toBeNull();
+    expect(formatBuildVersion(undefined)).toBeNull();
+    expect(formatBuildVersion({ describe: '   ', version: '  ' })).toBeNull();
+  });
+
+  it('never renders the string "null"', () => {
+    // The specific failure the issue names: `null+null` reaching the page.
+    for (const stamp of [null, undefined, {}, { describe: null, version: null }]) {
+      expect(String(formatBuildVersion(stamp))).not.toContain('null+');
+    }
+  });
+});
+
+describe('buildVersionLabel', () => {
+  it('always gives the caller something renderable', () => {
+    expect(buildVersionLabel({ describe: 'v0.2.1-58-g5b00442' })).toBe('0.2.1+58');
+    expect(buildVersionLabel(null)).toBe(UNKNOWN_VERSION_LABEL);
+    expect(buildVersionLabel({})).toBe(UNKNOWN_VERSION_LABEL);
+  });
+
+  it('says "unknown" rather than "dev", because it cannot tell them apart', () => {
+    // An all-null stamp means pnpm dev, OR a deploy predating ELEG-10, OR an installer
+    // that failed to write the file. Claiming "dev" for the last two would be a lie.
+    expect(UNKNOWN_VERSION_LABEL).toBe('unknown');
+    expect(buildVersionLabel({})).not.toMatch(/dev/i);
   });
 });
