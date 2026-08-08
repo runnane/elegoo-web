@@ -4219,3 +4219,63 @@ body {
   font-size: 13px;
   min-width: 120px;
 }
+
+/* Shared list sort/filter control bar (ELEG-49). Used by Files, Print History,
+   Print Reports and Timelapse. Always a *sibling* of the list it controls, never
+   inside it — the lists are replaced wholesale on every render. */
+.list-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 8px;
+}
+.list-controls .list-filter {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+.list-controls .list-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+.list-sort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.list-sort-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.list-sort-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-light);
+}
+.list-sort-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.list-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}

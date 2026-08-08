@@ -502,6 +502,9 @@
             <div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
             <span id="upload-progress-text">Uploading...</span>
           </div>
+          <!-- Sibling of the list, not inside it: #file-list is replaced wholesale on
+               every render, and a filter input inside it would lose focus mid-typing. -->
+          <div id="file-list-controls"></div>
           <div id="file-list" class="file-list">
             <div class="loading">Loading...</div>
           </div>
