@@ -1,0 +1,113 @@
+name: Publish image
+
+# Publishes ghcr.io/runnane/elegoo-web (ELEG-69).
+#
+# WHY THIS EXISTS
+#
+# There was no publish workflow at all. The only push path in the repo was
+# `pnpm docker:push`, which tagged `:local` — while README.md and
+# docker-compose.example.yml both tell users to pull `:latest`. So the documented
+# commands could not refresh the tag people are told to use, and `:latest` sat four
+# months stale at v0.2.1 while `main` moved 60 commits ahead. Issue #9 is the result:
+# three people asked for a working image, and the one on the registry predated every
+# security fix in that window.
+#
+# So publishing is automated and tied to the tag that is being released, rather than
+# depending on someone remembering to run docker push from a laptop.
+#
+# WHAT PUBLISHES WHEN
+#
+#   push tag v*      → x.y.z, x.y, latest      (a release)
+#   push to main     → edge                    (newest main, NOT latest)
+#   workflow_dispatch→ whatever the ref implies
+#
+# `latest` deliberately tracks the newest RELEASE tag, not main. Someone pulling
+# `:latest` should get a version that was released on purpose; `:edge` is there for
+# anyone who wants the tip.
+
+on:
+  push:
+    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required to push to ghcr.io. Nothing else here needs a token.
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `git describe` needs tags and history, not a shallow clone.
+          fetch-depth: 0
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: describe
+        run: |
+          # fetch-depth 0 above is what makes `git describe` meaningful.
+          echo "value=$(git describe --tags --always --dirty 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "now=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          # arm64 as well as amd64: this service runs next to a printer, and that host
+          # is very often a Raspberry Pi. Built under QEMU, so it is slow — but a user
+          # on a Pi cannot use an amd64-only image at all.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # So the image can say which build it is — the UI renders this as x.y.z+aa
+          # (ELEG-48), and it is the first thing to ask when a stranger files an issue.
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_DESCRIBE=${{ steps.describe.outputs.value }}
+            BUILD_VERSION=${{ steps.describe.outputs.version }}
+            BUILD_TIME=${{ steps.describe.outputs.now }}
+
+      - name: Summarise what was pushed
+        run: |
+          {
+            echo "### Pushed"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo
+            echo "Verify an anonymous pull actually works — the package must also be"
+            echo "**public** in its own settings, which is separate from repo access:"
+            echo
+            echo '```bash'
+            echo "docker pull ghcr.io/${{ github.repository }}:latest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

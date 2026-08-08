@@ -23,7 +23,7 @@
     "release": "release-it",
     "release:dry": "release-it --dry-run",
     "docker:build": "docker build -t ghcr.io/runnane/elegoo-web:local .",
-    "docker:push": "docker push ghcr.io/runnane/elegoo-web:local",
+    "docker:verify": "docker run --rm -e PRINTER_IP=192.0.2.99 -e TELEGRAM_BOT_TOKEN= -e AI_ENABLED=false -e CAMERA_ENABLED=false ghcr.io/runnane/elegoo-web:local node --import tsx -e \"import('./src/server/config.js').then(()=>console.log('image OK'))\"",
     "gates": "bash scripts/gates.sh",
     "lint": "biome lint src/",
     "lint:fix": "biome lint --write src/",
