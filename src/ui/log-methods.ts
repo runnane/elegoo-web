@@ -1,4 +1,13 @@
-/** Human-readable names for CC2 MQTT method codes */
+/**
+ * Human-readable names for CC2 MQTT method codes, for the log viewer.
+ *
+ * **Treat an entry here as a label, not as a citation.** Several were wrong, and
+ * because this is the most readable list of methods in the repo it is where uncited
+ * claims got copied from — ELEG-38 asked for a history delete on 1049, ELEG-30 for AI
+ * detection on 2010/2011, and ELEG-32 for OTA on 1064, all of which trace back to this
+ * table. `data/CC2_PROTOCOL_REFERENCE.md` is the citable source; ELEG-57 audits the
+ * rest of this table against it.
+ */
 
 export const METHOD_NAMES: Record<number, string> = {
   1001: 'GetAttributes',
@@ -20,13 +29,16 @@ export const METHOD_NAMES: Record<number, string> = {
   1035: 'SelfCheck',
   1036: 'PrintTaskList',
   1037: 'PrintTaskDetail',
-  1038: 'DeletePrintTask',
+  1038: 'HistoryDelete',
   1044: 'GetFileList',
   1045: 'GetThumbnail',
   1046: 'GetFileDetail',
   1047: 'DeleteFile',
   1048: 'GetDiskInfo',
-  1049: 'DeleteHistory',
+  // Was 'DeleteHistory', which collided with 1038 above — one operation, two entries,
+  // so one had to be wrong. Both protocol docs in `data/` say 1049 is UpdateToken, and
+  // ELEG-38 nearly sent a history-delete payload to it (ELEG-38).
+  1049: 'UpdateToken',
   1050: 'GetVideoUrl',
   1051: 'GetTimeLapse',
   1060: 'SetDeviceName',

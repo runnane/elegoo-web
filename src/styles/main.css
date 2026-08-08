@@ -3064,6 +3064,16 @@ body {
   align-items: center;
   gap: 8px;
 }
+.history-delete-btn {
+  /* Pushed to the trailing edge so it does not crowd the filename (ELEG-38). */
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.history-delete-btn:hover {
+  opacity: 1;
+  color: var(--danger);
+}
 .history-status {
   font-size: 14px;
 }

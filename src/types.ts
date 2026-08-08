@@ -408,6 +408,8 @@ export const COMMAND_METHOD_NAMES: Record<number, string> = {
   1033: 'Vibration optimization',
   1034: 'PID calibration',
   1035: 'Self-check',
+  // 1038 (HistoryDelete) is handled individually in main.ts so it can refresh the list
+  // and use delete-specific wording, so it is deliberately absent here.
 };
 
 // Exception codes from the CC2 protocol
