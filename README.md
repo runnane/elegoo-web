@@ -223,6 +223,7 @@ src/
 │   ├── config.ts            # Environment-based configuration (.env)
 │   ├── logger.ts            # Winston structured logging with rotation
 │   ├── telegram.ts          # Telegram bot notifications
+│   ├── allowlist.ts         # Who may talk to the Telegram bot
 │   ├── ai-monitor.ts        # AI print monitoring (SigLIP + VLM + motion)
 │   ├── moonraker-compat.ts  # Moonraker API compatibility
 │   ├── moonraker-server.ts  # Moonraker standalone server (:7125)
@@ -231,13 +232,6 @@ src/
 │   ├── state-persistence.ts # Persist/restore state across restarts
 │   ├── print-report-collector.ts  # Collect print data for reports
 │   └── print-report-pdf.ts       # PDF report generation
-├── telegram/
-│   ├── bot.ts               # Telegram bot initialization
-│   ├── camera.ts            # Camera snapshot handling
-│   ├── commands.ts          # Bot command handlers
-│   ├── config.ts            # Telegram configuration
-│   ├── mqtt-bridge.ts       # Bridge for MQTT event handling
-│   └── notifications.ts     # Notification formatting + sending
 ├── ui/
 │   ├── dashboard.ts       # Re-export barrel for all UI modules
 │   ├── helpers.ts         # Shared DOM/formatting utilities

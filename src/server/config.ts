@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { parseAllowedChatIds } from '../telegram/allowlist.js';
+import { parseAllowedChatIds } from './allowlist.js';
 import { type CorsPolicy, parseCorsPolicy } from './cors.js';
 
 export interface ServiceConfig {

@@ -9,7 +9,7 @@
 # cannot drift apart. Add a gate here and CI picks it up with no workflow edit.
 #
 # It used to be four hand-listed steps in ci.yml, which is how `service:check` came
-# to be missing from them: tsconfig.json excludes src/server and src/telegram, CI only
+# to be missing from them: tsconfig.json excludes src/server, CI only
 # ran the build (which uses that config), and so the entire backend was typechecked by
 # nothing in CI. Measured at the time — a deliberate type error in src/server/config.ts
 # left `pnpm build` PASSING and only `service:check` caught it. Production runs the
@@ -64,7 +64,7 @@ fi
 # Order mirrors ci.yml: cheapest signal first.
 run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci src/
 run 'typecheck: browser half (tsconfig.json)' pnpm exec tsc
-run 'typecheck: service + telegram' pnpm run service:check
+run 'typecheck: service half (tsconfig.server.json)' pnpm run service:check
 run 'build (vite)' pnpm exec vite build
 run 'unit tests (vitest)' pnpm exec vitest run
 

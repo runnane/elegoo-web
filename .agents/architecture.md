@@ -53,8 +53,8 @@ the first match wins, and the static/SPA fallback is last.
   making the browser poll.
 - **A new agent-facing capability** → `mcp-server.ts` **and** `MCP.md` in the same
   commit (see [mcp.md](mcp.md)).
-- **A new notification** → `telegram.ts` / `src/telegram/**`, driven off a
-  `state-store` event, never off a poll of the printer.
+- **A new notification** → `src/server/telegram.ts`, driven off a `state-store` event,
+  never off a poll of the printer.
 
 ## State flow, and the two things that surprise people
 

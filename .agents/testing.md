@@ -76,10 +76,9 @@ than by adding a `// @vitest-environment` line and moving on.
 ## The typechecks are the real safety net, and one of them is easy to miss
 
 With almost no tests, `tsc` is doing most of the work — which is exactly why
-`tsconfig.json` **excluding `src/server` and `src/telegram`** matters so much. `pnpm
-build` and CI both run only that one, so **the whole backend can be type-broken while
-everything looks green.** Run `pnpm service:check` (or just `pnpm gates`) after
-touching `src/server/**` or `src/telegram/**`. See
+`tsconfig.json` **excluding `src/server`** matters so much. `pnpm build` and CI both run
+only that one, so **the whole backend can be type-broken while everything looks green.**
+Run `pnpm service:check` (or just `pnpm gates`) after touching `src/server/**`. See
 [`.claude/commands/local/gates.md`](../.claude/commands/local/gates.md).
 
 ## Where a test is worth writing here

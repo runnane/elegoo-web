@@ -76,13 +76,20 @@ data under the org policy: it is a camera in someone's home or workshop, so an e
 that exposes it more widely, or a fixture that commits one of those images, is not a
 detail.
 
-**The Telegram bot has no sender check.** `src/telegram/commands.ts` registers
-`/start`, `/help`, `/status` and `/photo` with no filter on who sent them, so **any**
-Telegram user who finds the bot gets printer status and a camera photo. Outbound
-notifications go only to the configured `TELEGRAM_CHAT_ID`; inbound is open. If you
-touch that file, the sender gate is the first thing to add (compare a numeric id, never
-a handle — handles are re-assignable), and gate on it *before* the handler does any
-work.
+**The Telegram bot's inbound commands are gated on the sender — keep it that way.**
+`/start`, `/help`, `/status` and `/photo` once registered with no filter on who sent
+them, so **any** Telegram user who found the bot got printer status and a camera photo;
+outbound went only to `TELEGRAM_CHAT_ID`, but inbound was open. ELEG-3 closed it:
+`src/server/allowlist.ts` holds the decision (pure, and the one part of the bot a test
+reaches — `src/server/__tests__/telegram-allowlist.test.ts`), and
+`src/server/telegram.ts` gates on it *before* the handler does any work. Two properties
+are load-bearing: ids are compared as **numeric ids, never handles** (handles are
+re-assignable), and an **empty allowlist denies everyone** rather than allowing all — a
+missing env var must not reopen the hole. Any new command goes behind the same gate.
+
+That fix had to be written twice, because an unreachable second copy of the bot lived
+under `src/telegram/`. It is deleted (ELEG-23), so there is now exactly one place to
+get this right.
 
 ## Secrets
 

@@ -13,5 +13,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src"],
-  "exclude": ["src/server", "src/telegram"]
+  "exclude": ["src/server"]
 }

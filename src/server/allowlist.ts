@@ -1,13 +1,17 @@
 /**
  * Who is allowed to talk to the bot (ELEG-3).
  *
- * Both Telegram entry points — `src/server/telegram.ts`, which is what the service runs,
- * and the standalone `src/telegram/bot.ts` — registered `/start`, `/help`, `/status` and
- * `/photo` with **no check on the sender**. `TELEGRAM_CHAT_ID` was only ever used for
- * *outbound* messages, so inbound was open to anyone who found the bot: printer status,
- * and via `/photo` a live camera image of the room.
+ * `src/server/telegram.ts`, which is what the service runs, registered `/start`, `/help`,
+ * `/status` and `/photo` with **no check on the sender**. `TELEGRAM_CHAT_ID` was only ever
+ * used for *outbound* messages, so inbound was open to anyone who found the bot: printer
+ * status, and via `/photo` a live camera image of the room.
  *
- * Kept here, pure and separate from grammy, so the boundary is unit-testable without a
+ * ELEG-3 had to be applied twice, because a second unreachable bot under `src/telegram/`
+ * carried its own copy of the same handlers. That duplicate is deleted (ELEG-23) and this
+ * file moved here with it; it lives beside its consumers rather than in a directory of
+ * its own.
+ *
+ * Kept pure and separate from grammy, so the boundary is unit-testable without a
  * Telegram connection — see `src/server/__tests__/telegram-allowlist.test.ts`.
  */
 

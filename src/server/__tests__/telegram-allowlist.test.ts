@@ -1,20 +1,20 @@
 /**
  * Telegram sender allowlist (ELEG-3).
  *
- * Both bots registered `/start`, `/help`, `/status` and `/photo` with no check on who
- * sent the message. `TELEGRAM_CHAT_ID` was only ever used for *outbound* notifications,
- * so inbound was open to anyone who found the bot — printer status, and via `/photo` a
- * live camera image of the room.
+ * The bot registered `/start`, `/help`, `/status` and `/photo` with no check on who sent
+ * the message. `TELEGRAM_CHAT_ID` was only ever used for *outbound* notifications, so
+ * inbound was open to anyone who found the bot — printer status, and via `/photo` a live
+ * camera image of the room.
  *
  * This is a security boundary, so it is asserted in **both** directions: that an allowed
  * id passes, and that everything else is refused. The middleware wiring in
- * `src/server/telegram.ts` and `src/telegram/commands.ts` is not covered — nothing in
- * this repo can stand up a grammy bot — so the `next()`-only-when-allowed shape is
- * verified by reading. What is covered is every way the decision itself can go wrong.
+ * `src/server/telegram.ts` is not covered — nothing in this repo can stand up a grammy
+ * bot — so the `next()`-only-when-allowed shape is verified by reading. What is covered
+ * is every way the decision itself can go wrong.
  */
 
 import { describe, it, expect } from 'vitest';
-import { isAllowedSender, parseAllowedChatIds } from '../../telegram/allowlist.js';
+import { isAllowedSender, parseAllowedChatIds } from '../allowlist.js';
 
 describe('parseAllowedChatIds', () => {
   it('falls back to TELEGRAM_CHAT_ID when no explicit list is set', () => {
