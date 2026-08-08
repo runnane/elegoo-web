@@ -574,6 +574,21 @@ function connectToService(): void {
           toast('Self-check started', 'success');
         }
       }
+      if (method === 1038) {
+        // History delete. 1036 takes no paging params, so the refresh is a full refetch.
+        const result = (data as Record<string, unknown>).result as
+          | Record<string, unknown>
+          | undefined;
+        const code = result?.error_code as number | undefined;
+        if (classifyCommandOutcome(code) === 'ok') {
+          toast('History entry deleted', 'success');
+        } else if (classifyCommandOutcome(code) === 'busy') {
+          toast('Cannot delete — printer is busy. Try again in a moment.', 'warning');
+        } else {
+          toast(`Delete failed: ${describeCommandError(code)}`, 'error');
+        }
+        requestHistory();
+      }
       if (method === 1036) {
         requestAnimationFrame(() => renderPrintHistory(state));
         requestAnimationFrame(() => renderTimelapse(state));
