@@ -4,6 +4,8 @@ import type { LogStore, LogEntry } from '../log-store';
 import { $, escapeHtml } from './helpers';
 import { METHOD_NAMES } from './log-methods';
 import { loadUISettings, saveUISettings } from './ui-settings';
+import { exportLogEntries } from './log-export';
+import { toast } from './toast';
 
 let autoScroll = true;
 let paused = false;
@@ -387,6 +389,18 @@ export function bindStructuredLogControls(store: LogStore): void {
     pinnedEntries.clear();
     lastRenderedTs = '';
     lastRenderedCount = '';
+  });
+
+  $('slog-export').addEventListener('click', () => {
+    // Whatever the direction / type / method / search filters are currently showing —
+    // the same set on screen, so the file matches what the user was looking at.
+    const entries = store.getEntries().filter(matchesFilters);
+    if (!entries.length) {
+      toast('Nothing to export — no messages match the filters', 'warning');
+      return;
+    }
+    const count = exportLogEntries(entries, 'structured');
+    toast(`Exported ${count} message${count === 1 ? '' : 's'}`, 'success');
   });
 
   // Diff toggle

@@ -1,5 +1,7 @@
 import type { LogStore, LogEntry } from '../log-store';
 import { $, escapeHtml } from './helpers';
+import { exportLogEntries } from './log-export';
+import { toast } from './toast';
 
 let autoScroll = true;
 const expandedEntries = new Set<number>();
@@ -115,5 +117,17 @@ export function bindLogControls(store: LogStore): void {
   $('log-filter').addEventListener('input', (e) => {
     filterText = (e.target as HTMLInputElement).value;
     renderLog(store);
+  });
+
+  $('log-export').addEventListener('click', () => {
+    // The filtered view, not the whole buffer — the filter is how you found the
+    // interesting thing, and an unfiltered dump is what people already cannot read.
+    const entries = store.getEntries().filter(matchesFilter);
+    if (!entries.length) {
+      toast('Nothing to export — no messages match the filter', 'warning');
+      return;
+    }
+    const count = exportLogEntries(entries, 'raw');
+    toast(`Exported ${count} message${count === 1 ? '' : 's'}`, 'success');
   });
 }

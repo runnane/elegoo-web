@@ -535,8 +535,10 @@
               </label>
               <button class="btn btn-sm btn-ghost" id="slog-pause" title="Pause updates">⏸</button>
               <button class="btn btn-sm btn-ghost" id="slog-diff" title="Toggle diff view">Δ Diff</button>
+              <button class="btn btn-sm btn-ghost" id="slog-export" title="Download the filtered log as JSON">⬇ Export</button>
               <button class="btn btn-sm btn-ghost" id="slog-clear">Clear</button>
             </div>
+            <p class="settings-hint log-export-note">Exports the messages currently shown. The payloads include the printer's serial number and local IP — check before posting one publicly.</p>
             <div id="slog-entries" class="log-entries"></div>
             <div class="log-status-bar">
               <span id="slog-count">0 messages</span>
@@ -551,8 +553,10 @@
               <label class="log-autoscroll-label">
                 <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
               </label>
+              <button class="btn btn-sm btn-ghost" id="log-export" title="Download the filtered log as JSON">⬇ Export</button>
               <button class="btn btn-sm btn-ghost" id="log-clear">Clear</button>
             </div>
+            <p class="settings-hint log-export-note">Exports the messages currently shown. The payloads include the printer's serial number and local IP — check before posting one publicly.</p>
             <div id="log-entries" class="log-entries"></div>
           </div>
         </div>
