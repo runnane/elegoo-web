@@ -6,6 +6,12 @@ export interface ServiceConfig {
   // Printer
   printerIp: string;
   printerPassword: string;
+  /**
+   * Optional serial-number override. Normally discovered and then cached, but a
+   * printer that is silent at startup can never be discovered — so this lets a first
+   * start register immediately (ELEG-60). Empty means "discover it".
+   */
+  printerSn: string;
 
   // Service
   servicePort: number;
@@ -96,6 +102,7 @@ export function loadConfig(): ServiceConfig {
   return {
     printerIp,
     printerPassword: env('PRINTER_PASSWORD', '123456'),
+    printerSn: env('PRINTER_SN', '').trim(),
     servicePort,
     cameraEnabled: env('CAMERA_ENABLED') !== 'false',
     cameraUrl: env('CAMERA_URL') || `http://${printerIp}:8080`,

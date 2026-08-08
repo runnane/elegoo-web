@@ -35,13 +35,22 @@ export class MqttBridge extends EventEmitter {
   private _registerAttempts = 0;
   private heartbeatMissed = 0;
 
+  /**
+   * @param initialSn Serial number already known from config or the cache. When set,
+   *   registration starts on the first broker connect instead of waiting to overhear a
+   *   message the printer will not send while nothing is registered (ELEG-60).
+   * @param onSnLearned Called when an SN is discovered, so the caller can remember it.
+   */
   constructor(
     private printerIp: string,
     private password: string,
+    initialSn = '',
+    private onSnLearned?: (sn: string) => void,
   ) {
     super();
     this.clientId = this.generateId(10);
     this.requestId = this.generateId(26);
+    this.sn = initialSn;
   }
 
   private generateId(len: number): string {
@@ -84,8 +93,16 @@ export class MqttBridge extends EventEmitter {
       this._brokerConnected = true;
       // Subscribe broadly for SN discovery — printer may not publish
       // api_status until a client registers, so catch any elegoo topic
+      // Still subscribed broadly even when the SN is known: it is the fallback if the
+      // remembered SN is stale because the printer was swapped.
       this.client!.subscribe('elegoo/#', { qos: 1 });
-      if (this.sn) this.register();
+      if (this.sn) {
+        log.info(`Registering with known SN ${this.sn}...`);
+        this.register();
+      } else {
+        log.info('No known SN — waiting for the printer to publish. This can hang if the');
+        log.info('printer is idle and nothing is registered; set PRINTER_SN to skip it.');
+      }
     });
 
     this.client.on('message', (topic: string, payload: Buffer) => {
@@ -126,6 +143,7 @@ export class MqttBridge extends EventEmitter {
       if (parts.length >= 3 && parts[1].length > 0) {
         this.sn = parts[1];
         log.info(`Discovered printer SN: ${this.sn}`);
+        this.onSnLearned?.(this.sn);
         this.client!.unsubscribe('elegoo/#');
         this.register();
       }

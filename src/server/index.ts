@@ -26,6 +26,7 @@ import { PrintReportCollector } from './print-report-collector.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
+import { readCachedSn, writeCachedSn } from './sn-cache.js';
 
 const config = loadConfig();
 initLogger(config.dataDir);
@@ -35,11 +36,21 @@ const log = getLogger('Service');
 // before the first /api/health request arrives.
 const build = getBuildInfo();
 
+// --- MQTT Bridge (singleton connection to printer) ---
+// A remembered SN turns "wait for the printer to say something" into "register now".
+// Without it a restart can hang in broker_only indefinitely (ELEG-60).
+const knownSn = config.printerSn || readCachedSn(config.dataDir);
+const bridge = new MqttBridge(config.printerIp, config.printerPassword, knownSn, (sn) =>
+  writeCachedSn(config.dataDir, sn),
+);
+
 log.info('🖨  Elegoo CC2 Service');
 log.info(
   `Build:   ${build.describe ?? build.shortCommit ?? 'unstamped (not an installed deploy?)'}`,
 );
-log.info(`Printer: ${config.printerIp}`);
+log.info(
+  `Printer: ${config.printerIp}${knownSn ? ` (SN ${knownSn}${config.printerSn ? ', from PRINTER_SN' : ', cached'})` : ' (SN not yet known)'}`,
+);
 log.info(`Service: http://0.0.0.0:${config.servicePort}`);
 log.info(`Camera:  ${config.cameraEnabled ? config.cameraUrl : 'disabled'}`);
 log.info(`Data:    ${config.dataDir}`);
@@ -52,9 +63,6 @@ if (config.aiEnabled) {
   );
 }
 log.info(`Moonraker: http://0.0.0.0:${config.moonrakerPort}`);
-
-// --- MQTT Bridge (singleton connection to printer) ---
-const bridge = new MqttBridge(config.printerIp, config.printerPassword);
 
 // --- State Store (shared state for all consumers) ---
 const store = new StateStore(bridge, config.progressInterval);
