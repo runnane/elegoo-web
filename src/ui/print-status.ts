@@ -1,6 +1,13 @@
 import type { PrinterState } from '../printer-state';
 import type { CommandSender } from '../ws-client';
-import { STATUS_NAMES, SUB_STATUS_NAMES, EXCEPTION_NAMES, CRITICAL_EXCEPTIONS } from '../types';
+import {
+  STATUS_NAMES,
+  SUB_STATUS_NAMES,
+  EXCEPTION_NAMES,
+  CRITICAL_EXCEPTIONS,
+  powerLossState,
+} from '../types';
+import { maybeShowPowerLossDialog } from './power-loss-dialog';
 import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
 import { loadUISettings, saveUISettings } from './ui-settings';
 
@@ -142,6 +149,10 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   const isPaused = machineStatus?.sub_status === 2502 || machineStatus?.sub_status === 2505;
   const statusName = STATUS_NAMES[machineStatus?.status] ?? 'Unknown';
   const subStatusName = SUB_STATUS_NAMES[machineStatus?.sub_status] ?? '';
+  const powerLoss = powerLossState(machineStatus?.status, machineStatus?.sub_status);
+
+  // A half-finished print is waiting on a human, and this is the thing they have open.
+  maybeShowPowerLossDialog(powerLoss, ps?.filename, client);
 
   // Thumbnail — request once per file, don't retry on failure
   if (ps?.filename && ps.filename !== lastThumbnailFile) {
@@ -206,6 +217,16 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   } else if (machineStatus?.status === 14) {
     badge.textContent = `🛑 ${statusName}`;
     badge.className = 'print-status-badge badge-error';
+  } else if (powerLoss !== 'none') {
+    // Status 15 used to fall through to the `else` below and render as `badge-idle` —
+    // the printer sitting on a half-finished job awaiting a decision, styled as though
+    // it had nothing to do (ELEG-29).
+    badge.textContent =
+      powerLoss === 'awaiting_decision'
+        ? '⚡ Power loss — resume or cancel'
+        : `⚡ ${statusName}${subLabel}`;
+    badge.className =
+      'print-status-badge ' + (powerLoss === 'awaiting_decision' ? 'badge-error' : 'badge-busy');
   } else {
     badge.textContent = statusName + subLabel;
     badge.className = 'print-status-badge badge-idle';

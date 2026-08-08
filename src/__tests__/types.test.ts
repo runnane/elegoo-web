@@ -8,6 +8,7 @@ import {
   ERROR_CODE_NAMES,
   BUSY_ERROR_CODES,
   REJECTED_ERROR_CODES,
+  powerLossState,
 } from '../types';
 
 describe('detectZone', () => {
@@ -114,5 +115,35 @@ describe('command tables', () => {
     }
     expect(COMMAND_METHOD_NAMES[1027]).toBe('Move');
     expect(COMMAND_METHOD_NAMES[1032]).toBe('Auto-level');
+  });
+});
+
+describe('powerLossState', () => {
+  it('reports none for any status that is not 15', () => {
+    for (const status of [0, 1, 2, 14, undefined, null]) {
+      expect(powerLossState(status, 0)).toBe('none');
+    }
+  });
+
+  it('reports awaiting_decision for a bare status 15', () => {
+    // The printer is sitting on a half-finished job with nobody having told it what to
+    // do. This is the state that must prompt.
+    expect(powerLossState(15, 0)).toBe('awaiting_decision');
+    expect(powerLossState(15, undefined)).toBe('awaiting_decision');
+  });
+
+  it('reports resuming once 2405 arrives, so it stops prompting', () => {
+    // Prompting again here would invite a second resume on a print already recovering.
+    expect(powerLossState(15, 2405)).toBe('resuming');
+  });
+
+  it('reports resumed on 2406', () => {
+    expect(powerLossState(15, 2406)).toBe('resumed');
+  });
+
+  it('does not confuse a normal resume sub-status with a power-loss one', () => {
+    // 2401/2402 are an ordinary resume and never accompany status 15.
+    expect(powerLossState(2, 2401)).toBe('none');
+    expect(powerLossState(15, 2401)).toBe('awaiting_decision');
   });
 });
