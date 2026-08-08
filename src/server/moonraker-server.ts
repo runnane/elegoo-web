@@ -40,6 +40,7 @@ import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import { applyCors, corsHeaders } from './cors.js';
+import { NO_API_KEY_MESSAGE, MOONRAKER_NO_API_KEY_CODE } from './compat-auth.js';
 import type { FanInfo } from '../types.js';
 import { MOONRAKER_VERSION, AVAILABLE_OBJECTS, queryObjects } from './moonraker-compat.js';
 import { createOctoPrintRouter } from './octoprint-compat.js';
@@ -1060,7 +1061,11 @@ export class MoonrakerServer {
 
       case 'access.get_api_key':
       case 'access.post_api_key':
-        client.ws.send(rpcResult(msg.id, 'elegoo-compat-api-key'));
+        // No key is issued, so none is returned. Answering with a fixed string made
+        // clients display themselves as authenticated against a service that checks
+        // nothing (ELEG-26). `access.info` below reports login_required: false, which
+        // is how a client is supposed to learn that no credential is needed.
+        client.ws.send(rpcError(msg.id, MOONRAKER_NO_API_KEY_CODE, NO_API_KEY_MESSAGE));
         break;
 
       case 'access.info':
@@ -1640,9 +1645,15 @@ export class MoonrakerServer {
 
     // --- GET /access/info ---
     if (urlPath === '/access/info' && method === 'GET') {
+      // `login_required` and `trusted` were on the JSON-RPC `access.info` but missing
+      // here, so an HTTP-only client was never told that no credential is needed — and
+      // now that the api_key endpoint no longer hands out a fake one, this is where it
+      // has to learn it (ELEG-26).
       jsonResult(res, {
         default_source: 'moonraker',
         available_sources: ['moonraker'],
+        login_required: false,
+        trusted: true,
       });
       return;
     }
@@ -1902,9 +1913,9 @@ export class MoonrakerServer {
       return;
     }
 
-    // GET/POST /access/api_key
+    // GET/POST /access/api_key — see the JSON-RPC case above (ELEG-26).
     if (urlPath === '/access/api_key' && (method === 'GET' || method === 'POST')) {
-      jsonResult(res, 'elegoo-compat-api-key');
+      jsonError(res, NO_API_KEY_MESSAGE, 404);
       return;
     }
 

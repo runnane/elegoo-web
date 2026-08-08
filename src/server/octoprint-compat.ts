@@ -16,6 +16,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import type { FanInfo } from '../types.js';
 import { getLogger } from './logger.js';
+import { octoprintApiSettings, octoprintLoginPayload } from './compat-auth.js';
 
 const _log = getLogger('OctoPrint');
 
@@ -363,7 +364,7 @@ export function createOctoPrintRouter(
     // --- GET /api/settings (minimal stub) ---
     if (path === '/api/settings' && method === 'GET') {
       json(res, {
-        api: { enabled: true, key: 'elegoo-cc2-compat' },
+        api: octoprintApiSettings(),
         feature: {
           sdSupport: true,
           temperatureGraph: true,
@@ -426,19 +427,7 @@ export function createOctoPrintRouter(
 
     // --- GET /api/login (stub, always "logged in") ---
     if (path === '/api/login' && method === 'POST') {
-      json(res, {
-        _is_external_client: false,
-        _login_mechanism: 'apikey',
-        active: true,
-        admin: true,
-        apikey: 'elegoo-cc2-compat',
-        groups: ['admins', 'users'],
-        name: 'elegoo',
-        needs: { group: ['admins'], role: [] },
-        permissions: [],
-        roles: ['admin', 'user'],
-        user: true,
-      });
+      json(res, octoprintLoginPayload());
       return true;
     }
 
