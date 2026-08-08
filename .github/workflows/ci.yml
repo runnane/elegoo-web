@@ -10,7 +10,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `version:` on purpose — action-setup then reads `packageManager` from
       # package.json, so CI uses the exact pnpm developers use. `version: latest`
