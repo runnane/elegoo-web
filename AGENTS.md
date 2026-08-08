@@ -89,21 +89,27 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   the TypeScript **directly** under `node --import tsx`, so the specifier has to be
   the one Node resolves. Dropping the `.js` works in vite and breaks the service.
   **The rule bites on the half that Node executes.** In practice the tree is a clean
-  split — every relative import under `src/server/**` and `src/telegram/**` carries
-  `.js`, and every one in the vite-bundled browser half (`src/main.ts`, `src/ui/**`,
-  `src/types.ts`) is extensionless, which `moduleResolution: "bundler"` accepts. Match
-  the half you are editing rather than "fixing" 120 frontend imports.
-- **There are three tsconfigs and CI only checks one of them.** `tsconfig.json`
-  covers the browser half and **excludes `src/server` and `src/telegram`**;
-  `tsconfig.server.json` covers those (via `pnpm service:check`). `pnpm build` runs
-  the first one only, so the **entire backend can be type-broken while `pnpm build`
-  and CI are green**. Always run `pnpm gates` (or `pnpm service:check` by hand)
-  after touching `src/server/**` or `src/telegram/**`.
+  split — every relative import under `src/server/**` carries `.js`, and every one in
+  the vite-bundled browser half (`src/main.ts`, `src/ui/**`, `src/types.ts`) is
+  extensionless, which `moduleResolution: "bundler"` accepts. Match the half you are
+  editing rather than "fixing" 120 frontend imports.
+- **There are two tsconfigs and CI only checks one of them.** `tsconfig.json`
+  covers the browser half and **excludes `src/server`**; `tsconfig.server.json`
+  covers that (via `pnpm service:check`). `pnpm build` runs the first one only, so the
+  **entire backend can be type-broken while `pnpm build` and CI are green**. Always run
+  `pnpm gates` (or `pnpm service:check` by hand) after touching `src/server/**`.
+  (There used to be a third, `tsconfig.bot.json` — a byte-identical copy of
+  `tsconfig.server.json` that no script ever referenced. It went with the dead bot in
+  ELEG-23.)
 - **One MQTT connection, and it belongs to `MqttBridge`.** Never open a second
   client, from a route, a tool, the bot or a test — the printer's broker is small and
   a second registration fights the first. New consumers read from `StateStore` (or
   subscribe to its events) and publish through the bridge. `src/server/index.ts`
-  wires exactly one of each; keep it that way.
+  wires exactly one of each; keep it that way. The tree held a violation of this rule
+  for its whole life — an unreachable standalone Telegram bot under `src/telegram/`
+  with its own `MqttBridge`, no npm script and no way to start it, which also made
+  ELEG-3's security fix need applying twice. Deleted in ELEG-23; `git log` has it if a
+  standalone deployment is ever wanted, and it would need this rule reckoned with.
 - **The frontend is hand-written TypeScript + DOM.** No framework, no JSX, no
   component library: `src/main.ts` composes modules from `src/ui/*.ts`, styling is
   CSS custom properties in `src/styles/`. Match the surrounding idiom rather than
@@ -306,7 +312,7 @@ its own reviewer, and quite possibly its own agent working in it right now.
 | MCP server (`/mcp`) | `src/server/mcp-server.ts` (documented in `MCP.md`) |
 | Moonraker / OctoPrint compat | `src/server/{moonraker-compat,moonraker-server,octoprint-compat}.ts` |
 | AI print monitor | `src/server/ai-monitor.ts` |
-| Telegram bot | `src/server/telegram.ts`, `src/telegram/**` |
+| Telegram bot | `src/server/telegram.ts`, `src/server/allowlist.ts` |
 | Config / env parsing | `src/server/config.ts` |
 | Frontend entry | `src/main.ts`, `index.html` |
 | Frontend cards / views | `src/ui/*.ts` |

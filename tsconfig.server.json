@@ -12,5 +12,5 @@
     "noEmit": true,
     "lib": ["ES2022"]
   },
-  "include": ["src/server/**/*", "src/telegram/**/*", "src/types.ts"]
+  "include": ["src/server/**/*", "src/types.ts"]
 }

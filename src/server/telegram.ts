@@ -10,7 +10,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import { getSnapshot } from './rest-api.js';
 import { CRITICAL_EXCEPTIONS } from '../types.js';
-import { isAllowedSender } from '../telegram/allowlist.js';
+import { isAllowedSender } from './allowlist.js';
 import type { AIAlert } from './ai-monitor.js';
 import { getLogger } from './logger.js';
 

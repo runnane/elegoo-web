@@ -22,7 +22,7 @@ this table is CI's step list too. Add a gate here and CI picks it up with no wor
 | # | Check | Command | Notes |
 | --- | --- | --- | --- |
 | 1 | lint | `biome ci src/` | **non-writing**, as CI does it; covers formatting as well as lint |
-| 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`, `src/telegram`** |
+| 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`** |
 | 3 | typecheck (service) | `tsc -p tsconfig.server.json` | `tsconfig.server.json` — the other half. See below |
 | 4 | build | `vite build` | writes `dist/`, which is gitignored |
 | 5 | tests | `vitest run` | ~350 ms; it prints its own count, so none is quoted here |
@@ -32,7 +32,7 @@ output.
 
 ## There are two typechecks, and `pnpm build` is only one of them
 
-`tsconfig.json` **excludes `src/server` and `src/telegram`**, and `pnpm build` (`tsc &&
+`tsconfig.json` **excludes `src/server`**, and `pnpm build` (`tsc &&
 vite build`) runs only that config. So `pnpm build` passing says **nothing** about the
 backend. Measured, by appending `const __probe: number = "not a number"` to
 `src/server/config.ts`:
@@ -52,7 +52,7 @@ type-broken service merged green. `ci.yml` now runs `pnpm gates`, which includes
 The trap that remains is the one the table above encodes: **`pnpm build` is not a
 typecheck of the backend.** If you are running single checks by hand rather than
 `pnpm gates`, run both typechecks — the second is the one that matters for
-`src/server/**` and `src/telegram/**`.
+`src/server/**`.
 
 Production is why this bites: the service runs the TypeScript **directly** under
 `node --import tsx`, so there is no compile step between a type error and the running
