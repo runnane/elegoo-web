@@ -62,7 +62,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8088:8088 \
   -p 7125:7125 \
-  -e PRINTER_IP=172.20.100.236 \
+  -e PRINTER_IP=192.168.1.150 \
   -v elegoo-data:/app/data \
   ghcr.io/runnane/elegoo-web:latest
 ```
@@ -78,7 +78,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8088:8088 \
   -p 7125:7125 \
-  -e PRINTER_IP=172.20.100.236 \
+  -e PRINTER_IP=192.168.1.150 \
   -v ./elegoo-data/reports:/app/data/reports \
   -v ./elegoo-data/gcode-cache:/app/data/gcode-cache \
   -v ./elegoo-data/logs:/app/data/logs \
@@ -115,7 +115,7 @@ status dropdown, which is the first thing to quote when reporting a problem.
 
 ```bash
 docker build -t ghcr.io/runnane/elegoo-web:local .
-docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/runnane/elegoo-web:local
+docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=192.168.1.150 ghcr.io/runnane/elegoo-web:local
 ```
 
 A locally built image reports its version as `unknown`, which is expected: the stamp is
@@ -136,7 +136,7 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PRINTER_IP` | `172.20.100.236` | Printer IP address (required) |
+| `PRINTER_IP` | `192.168.1.150` | Printer IP address (required) |
 | `PRINTER_PASSWORD` | `123456` | Printer access code |
 | `PRINTER_SN` | — (discovered) | Printer serial number, e.g. `F01U3UD3798YT8K`. Normally discovered automatically and then cached in `<DATA_DIR>/printer-sn.json`, so this is rarely needed. Set it if a **first** start hangs at "registering": the printer only publishes while a client is registered, so a service that has never learned the serial has nothing to overhear |
 | `SERVICE_PORT` | `8088` | Web UI / API / WebSocket port |

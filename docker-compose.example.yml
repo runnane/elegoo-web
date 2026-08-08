@@ -9,7 +9,7 @@ services:
       - "7125:7125"   # Moonraker compatibility API
     environment:
       # ── Required ──────────────────────────────────────
-      PRINTER_IP: "172.20.100.236"
+      PRINTER_IP: "192.168.1.150"
 
       # ── Optional: Printer ─────────────────────────────
       # PRINTER_PASSWORD: "123456"       # Access code (default: 123456)
