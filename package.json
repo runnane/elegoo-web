@@ -38,11 +38,13 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
     "@release-it/conventional-changelog": "^12.0.0",
+    "@types/jsdom": "^30.0.0",
     "@types/pdfkit": "^0.17.6",
     "@types/three": "0.178.1",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.4",
+    "jsdom": "^30.0.1",
     "release-it": "^21.0.1",
     "simple-git-hooks": "^2.11.1",
     "typescript": "^7.0.2",

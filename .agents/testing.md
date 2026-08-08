@@ -51,8 +51,9 @@ diff — a missing `ctx.clip()`, a coordinate outside the plot rect, a label dra
 canvas edge (ELEG-16 had all three).
 
 What it cannot tell you is whether the result **looks** right: colour, font, overlap and
-layout need eyes on `pnpm dev:web`. Reach for jsdom only if you need real layout — it is
-a dependency and an environment switch, not a free upgrade.
+layout need eyes on `pnpm dev:web`. This stub approach is still the right one for canvas
+work — jsdom gives you a DOM, not a renderer, and `getContext('2d')` under it does
+nothing useful.
 
 **Where a new test file goes is decided by the typechecks, not by taste.** A test that
 imports `src/server/**` belongs under `src/server/__tests__/` — `tsconfig.json` excludes
@@ -67,11 +68,39 @@ pnpm test:coverage
 pnpm gates             # the whole set — see .claude/commands/local/gates.md
 ```
 
-`vitest.config.ts` runs in the **node** environment and picks up
-`src/**/*.test.ts` **and `test/**/*.test.ts`**, so a new suite can live in either
-place. There is no jsdom/happy-dom and no browser: a test that touches `document`
-needs a new environment configured, which is a decision to make deliberately rather
-than by adding a `// @vitest-environment` line and moving on.
+`vitest.config.ts` runs in the **node** environment by default and picks up
+`src/**/*.test.ts` **and `test/**/*.test.ts`**, so a new suite can live in either place.
+
+## There IS a DOM environment now — opt in per file (ELEG-61)
+
+`jsdom` is a devDependency, and a test that needs `document` opts in with a **docblock on
+its first line**:
+
+```ts
+// @vitest-environment jsdom
+```
+
+That is the whole mechanism. **There is no config change** — no `environment` key, no
+glob, no setup file — which is deliberate: the pure tests keep running in the faster
+`node` env, and there is nothing for the next person to find and misread. Copy the
+docblock, not a config entry.
+
+`src/__tests__/list-controls-dom.test.ts` is the pattern. Read its header before writing
+another; the two things it establishes:
+
+- **Assert the invariant *and* its counterfactual.** It asserts focus/caret/selection
+  survive a list re-render, and then, in a separate `describe`, mounts the bar *inside*
+  the re-rendered container and asserts focus **is** lost. A test that cannot go red is
+  not coverage, so the failure mode is encoded permanently rather than demonstrated once
+  by hand. Verified: moving the bar inside turns three of the focus tests red.
+- **There is no `localStorage`** — `bare`, `window.` and `globalThis.` are all
+  `undefined` under jsdom 30 on Node 26. `ui-settings.ts` catches and falls back to
+  defaults, so a persistence test would **pass for the wrong reason**. Give each case a
+  unique list id instead, and do not assert persistence until **ELEG-64** lands.
+
+What jsdom still does not give you: layout, paint, real fonts, or `getContext('2d')`.
+Colour, overlap and appearance are still `pnpm dev:web` and eyes, and there is still no
+browser or screenshot in any gate.
 
 ## The typechecks are the real safety net, and one of them is easy to miss
 
@@ -98,13 +127,13 @@ carry the protocol's hard-won knowledge:
   state object into a fixed third-party JSON shape. Pure input → output, and a client
   like Mainsail breaks silently when a field's shape drifts.
 
-**There is no DOM environment at all** — vitest runs `environment: "node"` and neither
-`jsdom` nor `happy-dom` is a dependency, so a test cannot import a module that touches
-`document`. That is why the frontend is written as pure-half / DOM-half pairs:
+**The pure-half / DOM-half split stays, even though jsdom now exists** —
 `card-layout.ts` + `settings.ts`, `list-sort.ts` + `list-controls.ts`. **Put the
-decisions in the pure half** — it is the only half a test can reach — and keep the DOM
-half to markup and wiring. ELEG-61 tracks adding jsdom so the wiring can be asserted
-too; until it lands, "gates green" says nothing whatsoever about anything that renders.
+decisions in the pure half**: those tests are faster, they read better, and they do not
+depend on an environment. What ELEG-61 changed is that the DOM half is no longer
+*unreachable* — wiring, focus behaviour and event handling can now be asserted, and the
+one invariant that had been held up by code review alone now has a test. Everything else
+that renders is still asserted by nothing.
 
 Build fixtures from **captured real payloads** (the debug panel exports the state tree,
 and `${DATA_DIR}/state.json` is a real snapshot) rather than hand-writing an idealised
@@ -220,13 +249,17 @@ because nothing answered is worse than no check.
 
 ## What nothing checks — say so instead of implying otherwise
 
-- **Layout and the actual UI.** No browser test, no screenshot, no playwright. A card
-  that renders empty, overlaps, or throws in the console is invisible to every gate.
-  Look at the page.
+- **Layout and appearance.** No browser test, no screenshot, no playwright. jsdom (above)
+  can now assert *wiring* — that an element exists, keeps focus, responds to a click —
+  but it does no layout and no paint, so a card that renders empty, overlaps, or throws
+  in the console is still invisible to every gate. Look at the page.
 - **The WebSocket contract.** `ws-transport.ts` broadcasts and `ws-client.ts` consumes;
   nothing asserts they agree. Renaming a message `type` on one side is silent.
-- **The MCP surface.** Neither the tool list nor `MCP.md`'s accuracy is verified — the
-  doc can be wrong and no gate notices (see [mcp.md](mcp.md)).
+- **The MCP surface's *behaviour*.** `mcp-doc-parity.test.ts` does check that `MCP.md`
+  lists exactly the registered tools and resources, by standing the server up and asking
+  it — so a renamed tool without a doc edit is caught. But that is a **documentation**
+  check: it never invokes a handler, so a tool that is listed, documented and completely
+  broken passes (see [mcp.md](mcp.md)).
 - **The compatibility layers against a real client.** Mainsail/Fluidd/KlipperScreen
   compatibility is only ever proven by pointing one of them at `:7125`.
 - **Anything about the deployed service.** The gates run in the checkout;
