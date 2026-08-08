@@ -48,7 +48,7 @@ jobs:
           # `git describe` needs tags and history, not a shallow clone.
           fetch-depth: 0
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
 
       - uses: docker/setup-buildx-action@v4
 
