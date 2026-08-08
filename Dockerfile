@@ -44,6 +44,21 @@ LABEL org.opencontainers.image.source=https://github.com/runnane/elegoo-web
 LABEL org.opencontainers.image.description="Web frontend and service for the Elegoo Centauri Carbon 2 printer"
 LABEL org.opencontainers.image.licenses=MIT
 
+# Fonts, for the camera overlay (ELEG-71).
+#
+# `/api/stream/overlay` builds an SVG with `font-family="monospace"` and has sharp
+# composite it. node:*-slim ships NO fonts at all — not even a fallback — so librsvg has
+# nothing to resolve `monospace` to and every glyph renders as a tofu box. It looks fine
+# on metal only because the host happens to have ~2400 fonts installed.
+#
+# fonts-dejavu-core carries DejaVu Sans Mono and is ~1 MB; fontconfig is what actually
+# does the resolving. Both are needed — the font alone is not enough.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fonts-dejavu-core fontconfig \
+ && rm -rf /var/lib/apt/lists/* \
+ && fc-cache -f \
+ && fc-match monospace
+
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
