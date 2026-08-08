@@ -3,6 +3,8 @@ import {
   octoprintApiSettings,
   octoprintLoginPayload,
   NO_API_KEY_MESSAGE,
+  NO_SESSIONS_MESSAGE,
+  ONESHOT_TOKEN,
   MOONRAKER_NO_API_KEY_CODE,
 } from '../compat-auth.js';
 
@@ -63,5 +65,39 @@ describe('the no-API-key answer', () => {
 
   it('uses a JSON-RPC error code, not a success code', () => {
     expect(MOONRAKER_NO_API_KEY_CODE).toBeLessThan(0);
+  });
+});
+
+describe('the no-sessions answer (ELEG-53)', () => {
+  it('explains itself, and points at the field that says login is unnecessary', () => {
+    // A client's UI shows this string. "Unauthorized" would send someone hunting for a
+    // password that does not exist; naming access.info tells them where to look instead.
+    expect(NO_SESSIONS_MESSAGE).toMatch(/no authentication/i);
+    expect(NO_SESSIONS_MESSAGE).toMatch(/login_required/);
+    expect(NO_SESSIONS_MESSAGE.length).toBeGreaterThan(20);
+  });
+
+  it('mentions no credential and no user account', () => {
+    // The regression this exists to catch, in the shape ELEG-26 used for the API key:
+    // a token reintroduced under any name at all.
+    expect(NO_SESSIONS_MESSAGE).not.toMatch(/elegoo-compat/i);
+    expect(NO_SESSIONS_MESSAGE).toMatch(/issues no tokens/i);
+  });
+});
+
+describe('the oneshot token, which is deliberately still issued', () => {
+  it('is a non-empty string, because withdrawing it could break the WebSocket', () => {
+    // Real Moonraker uses this where a header cannot be set (WebSocket, camera stream),
+    // and a client may fetch one BEFORE reading access.info. Refusing it would be a
+    // regression, not a security improvement — nothing validates it either way.
+    expect(typeof ONESHOT_TOKEN).toBe('string');
+    expect(ONESHOT_TOKEN.length).toBeGreaterThan(0);
+  });
+
+  it('does not read like a credential when it shows up in a URL or a log', () => {
+    // It lands in query strings, proxy logs and browser network tabs. Anyone who sees it
+    // should be able to tell at a glance that nothing is being authenticated.
+    expect(ONESHOT_TOKEN).not.toMatch(/token|key|secret|jwt|auth[^-]/i);
+    expect(ONESHOT_TOKEN).toBe('no-auth-required');
   });
 });

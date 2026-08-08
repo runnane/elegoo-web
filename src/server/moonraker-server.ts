@@ -40,7 +40,12 @@ import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import { applyCors, corsHeaders } from './cors.js';
-import { NO_API_KEY_MESSAGE, MOONRAKER_NO_API_KEY_CODE } from './compat-auth.js';
+import {
+  NO_API_KEY_MESSAGE,
+  NO_SESSIONS_MESSAGE,
+  ONESHOT_TOKEN,
+  MOONRAKER_NO_API_KEY_CODE,
+} from './compat-auth.js';
 import type { FanInfo } from '../types.js';
 import { MOONRAKER_VERSION, AVAILABLE_OBJECTS, queryObjects } from './moonraker-compat.js';
 import { createOctoPrintRouter } from './octoprint-compat.js';
@@ -996,67 +1001,38 @@ export class MoonrakerServer {
         break;
 
       case 'access.oneshot_token':
-        client.ws.send(rpcResult(msg.id, 'elegoo-compat-token'));
+        // Deliberately still answers — see ONESHOT_TOKEN in compat-auth.ts. A browser
+        // may fetch this for a WebSocket or camera URL before it reads `access.info`,
+        // so refusing it risks breaking the connection outright, and withdrawing it
+        // would remove no protection because nothing validates it coming back.
+        client.ws.send(rpcResult(msg.id, ONESHOT_TOKEN));
         break;
 
       case 'access.login':
-        client.ws.send(
-          rpcResult(msg.id, {
-            username: String(msg.params?.username ?? 'elegoo'),
-            token: 'elegoo-compat-jwt-token',
-            refresh_token: 'elegoo-compat-refresh-token',
-            action: 'user_logged_in',
-            source: 'moonraker',
-          }),
-        );
+        // No session is created, so no token is returned (ELEG-53). See `access.info`
+        // below: `login_required: false` is how a client learns not to come here.
+        client.ws.send(rpcError(msg.id, MOONRAKER_NO_API_KEY_CODE, NO_SESSIONS_MESSAGE));
         break;
 
       case 'access.logout':
         client.ws.send(rpcResult(msg.id, { username: 'elegoo', action: 'user_logged_out' }));
         break;
 
+      // There is no user store, so nothing here can create, delete or re-credential a
+      // user. Answering `user_created` was the worst of the fabrications: it implies a
+      // store that does not exist (ELEG-53).
       case 'access.post_user':
-        client.ws.send(
-          rpcResult(msg.id, {
-            username: String(msg.params?.username ?? 'elegoo'),
-            token: 'elegoo-compat-jwt-token',
-            refresh_token: 'elegoo-compat-refresh-token',
-            action: 'user_created',
-            source: 'moonraker',
-          }),
-        );
-        break;
-
       case 'access.delete_user':
-        client.ws.send(
-          rpcResult(msg.id, {
-            username: String(msg.params?.username ?? ''),
-            action: 'user_deleted',
-          }),
-        );
+      case 'access.user.password':
+      case 'access.refresh_jwt':
+        client.ws.send(rpcError(msg.id, MOONRAKER_NO_API_KEY_CODE, NO_SESSIONS_MESSAGE));
         break;
 
       case 'access.users.list':
-        client.ws.send(
-          rpcResult(msg.id, {
-            users: [{ username: 'elegoo', source: 'moonraker', created_on: Date.now() / 1000 }],
-          }),
-        );
-        break;
-
-      case 'access.user.password':
-        client.ws.send(rpcResult(msg.id, { username: 'elegoo', action: 'user_password_reset' }));
-        break;
-
-      case 'access.refresh_jwt':
-        client.ws.send(
-          rpcResult(msg.id, {
-            username: 'elegoo',
-            token: 'elegoo-compat-jwt-token',
-            source: 'moonraker',
-            action: 'user_jwt_refresh',
-          }),
-        );
+        // Empty, because there are no users — rather than inventing one called 'elegoo'.
+        // A list is still the right shape here: a client asking "who exists?" can be
+        // told "nobody" without an error, and Mainsail renders that fine.
+        client.ws.send(rpcResult(msg.id, { users: [] }));
         break;
 
       case 'access.get_api_key':
@@ -1659,18 +1635,17 @@ export class MoonrakerServer {
     }
 
     // --- GET /access/oneshot_token ---
+    // Kept on purpose — see ONESHOT_TOKEN in compat-auth.ts and the JSON-RPC case above.
     if (urlPath === '/access/oneshot_token' && method === 'GET') {
-      jsonResult(res, 'elegoo-compat-token');
+      jsonResult(res, ONESHOT_TOKEN);
       return;
     }
 
     // --- GET /access/user ---
+    // A read of "the current user". There is no user store and no session, so there is
+    // no current user to describe (ELEG-53).
     if (urlPath === '/access/user' && method === 'GET') {
-      jsonResult(res, {
-        username: 'elegoo',
-        source: 'moonraker',
-        created_on: Date.now() / 1000,
-      });
+      jsonError(res, NO_SESSIONS_MESSAGE, 404);
       return;
     }
 
@@ -1871,20 +1846,11 @@ export class MoonrakerServer {
     }
 
     // --- Auth endpoints ---
-    // POST /access/login
+    // POST /access/login — no session is created, so no token is returned (ELEG-53).
+    // `GET /access/info` reports login_required: false, which is where a client should
+    // have learned not to come here.
     if (urlPath === '/access/login' && method === 'POST') {
-      readBody(req)
-        .then((body) => {
-          const parsed = JSON.parse(body);
-          jsonResult(res, {
-            username: String(parsed.username ?? 'elegoo'),
-            token: 'elegoo-compat-jwt-token',
-            refresh_token: 'elegoo-compat-refresh-token',
-            action: 'user_logged_in',
-            source: 'moonraker',
-          });
-        })
-        .catch(() => jsonError(res, 'Invalid JSON'));
+      jsonError(res, NO_SESSIONS_MESSAGE, 404);
       return;
     }
 
@@ -1894,22 +1860,15 @@ export class MoonrakerServer {
       return;
     }
 
-    // GET /access/users/list
+    // GET /access/users/list — empty, because there are no users (ELEG-53).
     if (urlPath === '/access/users/list' && method === 'GET') {
-      jsonResult(res, {
-        users: [{ username: 'elegoo', source: 'moonraker', created_on: Date.now() / 1000 }],
-      });
+      jsonResult(res, { users: [] });
       return;
     }
 
-    // POST /access/refresh_jwt
+    // POST /access/refresh_jwt — nothing was issued, so nothing can be refreshed.
     if (urlPath === '/access/refresh_jwt' && method === 'POST') {
-      jsonResult(res, {
-        username: 'elegoo',
-        token: 'elegoo-compat-jwt-token',
-        source: 'moonraker',
-        action: 'user_jwt_refresh',
-      });
+      jsonError(res, NO_SESSIONS_MESSAGE, 404);
       return;
     }
 
@@ -1919,32 +1878,14 @@ export class MoonrakerServer {
       return;
     }
 
-    // POST /access/user (create user)
-    if (urlPath === '/access/user' && method === 'POST') {
-      readBody(req)
-        .then((body) => {
-          const parsed = JSON.parse(body);
-          jsonResult(res, {
-            username: String(parsed.username ?? 'elegoo'),
-            token: 'elegoo-compat-jwt-token',
-            refresh_token: 'elegoo-compat-refresh-token',
-            action: 'user_created',
-            source: 'moonraker',
-          });
-        })
-        .catch(() => jsonError(res, 'Invalid JSON'));
-      return;
-    }
-
-    // DELETE /access/user
-    if (urlPath === '/access/user' && method === 'DELETE') {
-      jsonResult(res, { username: query.username ?? '', action: 'user_deleted' });
-      return;
-    }
-
-    // POST /access/user/password
-    if (urlPath === '/access/user/password' && method === 'POST') {
-      jsonResult(res, { username: 'elegoo', action: 'user_password_reset' });
+    // POST /access/user (create) / DELETE /access/user / POST /access/user/password.
+    // There is no user store, so none of these can do anything. Reporting `user_created`
+    // for a user stored nowhere was the worst of the fabrications (ELEG-53).
+    if (
+      (urlPath === '/access/user' && (method === 'POST' || method === 'DELETE')) ||
+      (urlPath === '/access/user/password' && method === 'POST')
+    ) {
+      jsonError(res, NO_SESSIONS_MESSAGE, 404);
       return;
     }
 

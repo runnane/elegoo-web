@@ -26,6 +26,47 @@ export const NO_API_KEY_MESSAGE =
 export const MOONRAKER_NO_API_KEY_CODE = -32601;
 
 /**
+ * Returned in place of a fabricated JWT / refresh token / created user (ELEG-53).
+ *
+ * ELEG-26 withdrew the fake **API key** and deliberately left the session-credential
+ * surface alone, because the breakage risk was different and unassessed. This is that
+ * follow-up: `access.login`, `access.refresh_jwt` and `access.post_user` were handing
+ * back `elegoo-compat-jwt-token` / `elegoo-compat-refresh-token` and, for `post_user`, a
+ * "created" user that is stored nowhere. Nothing was ever issued, stored or checked.
+ *
+ * `post_user` was the worst of them: inventing a user implies a user store, and there is
+ * no user store.
+ *
+ * These are safe to withdraw because `access.info` reports `login_required: false`, which
+ * is how a well-behaved client learns not to log in — so a client reaching these was
+ * already off the documented path. `oneshot_token` is the exception and is kept; see
+ * `ONESHOT_TOKEN` below.
+ */
+export const NO_SESSIONS_MESSAGE =
+  'This service has no authentication and issues no tokens or user accounts. ' +
+  'See access.info: login_required is false. ' +
+  'Access is controlled by the network it is reachable from.';
+
+/**
+ * The one credential-shaped answer that is deliberately **kept**.
+ *
+ * In real Moonraker `oneshot_token` exists so a browser can open a WebSocket or a camera
+ * stream where an `Authorization` header cannot be set — the token goes in the query
+ * string instead. A client may fetch one **before** it reads `access.info`, so refusing
+ * it risks breaking the WebSocket connection outright. That is a regression, not a
+ * security improvement, and this service checks nothing either way: withdrawing it would
+ * remove no protection whatsoever, because there is none to remove.
+ *
+ * So it keeps answering — but with a string that tells the truth when it turns up in a
+ * URL, a proxy log or a browser's network tab, instead of one that reads like a
+ * credential. Any value works, since nothing validates it on the way back in.
+ *
+ * If a future change ever adds real authentication, this is one of the places that has
+ * to stop being a no-op.
+ */
+export const ONESHOT_TOKEN = 'no-auth-required';
+
+/**
  * OctoPrint's `api` block in `GET /api/settings`.
  *
  * `enabled: false` is the honest statement, and it is a statement OctoPrint clients
