@@ -99,11 +99,37 @@ docker compose up -d
 
 See [`docker-compose.example.yml`](docker-compose.example.yml) for all available environment variables (Telegram, AI monitoring, camera, etc.).
 
+### Image tags
+
+| Tag | What it is |
+|-----|------------|
+| `latest` | the newest **released** version — use this unless you have a reason not to |
+| `x.y.z`, `x.y` | a specific release |
+| `edge` | the tip of `main`; newer, less settled |
+
+Images are built for **linux/amd64 and linux/arm64**, so a Raspberry Pi next to the
+printer works. Each image carries its own build stamp — the version shows in the web UI's
+status dropdown, which is the first thing to quote when reporting a problem.
+
 ### Build Locally
 
 ```bash
 docker build -t ghcr.io/runnane/elegoo-web:local .
 docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/runnane/elegoo-web:local
+```
+
+A locally built image reports its version as `unknown`, which is expected: the stamp is
+supplied by the publish workflow, not by `docker build`.
+
+### If you enable local AI (`AI_LOCAL_ENABLED`)
+
+Mount a volume at **`/app/.cache`** as well. The CLIP model cache lives there, not under
+`/app/data`, because transformers.js resolves its cache path relative to the working
+directory. Without that volume the model is re-downloaded every time the container is
+recreated — about 200 MB and roughly 95 seconds here, and a good deal slower on a Pi.
+
+```bash
+-v elegoo-model-cache:/app/.cache
 ```
 
 ### Environment Variables

@@ -24,6 +24,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Majors are a human decision here, and ELEG-69 is why. The unattended bump in #10
+    # took the base image from node:22-slim (LTS, supported to 2027-04-30) to
+    # node:25-slim — an odd release that was never going to be LTS and has been EOL
+    # since 2026-06-01 — and broke the Docker build outright, because 25 dropped the
+    # bundled corepack. Nobody noticed for months: no workflow built the image.
+    #
+    # Patches and minors still flow. A major means choosing the next even/LTS line
+    # deliberately and rebuilding, which is a review, not a merge.
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
 
   # Added by ELEG-63. Without this, an action major goes stale until a deprecation
   # notice appears in a run log and someone reads it — which is exactly how ELEG-62
