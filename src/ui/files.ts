@@ -11,6 +11,7 @@ import {
   THUMBNAIL_PLACEHOLDER_SRC,
 } from './helpers';
 import { requestPrintDialog } from './print-dialog';
+import { type ListControls, createListControls } from './list-controls';
 
 let currentSource: 'local' | 'u-disk' = 'local';
 let currentDir = '/';
@@ -503,10 +504,45 @@ export function handleThumbnailResponse(thumbnail: string | null): void {
   }
 }
 
+/**
+ * Sort and filter controls (ELEG-49). Created lazily on the first render because the
+ * card may be hidden at startup, and once only — the bar lives in `#file-list-controls`,
+ * a static sibling of `#file-list`, so nothing here is touched when the list repaints.
+ */
+let fileControls: ListControls<FileEntry> | null = null;
+
+function ensureFileControls(): ListControls<FileEntry> {
+  if (fileControls) return fileControls;
+  fileControls = createListControls<FileEntry>({
+    id: 'files',
+    container: $('file-list-controls'),
+    noun: 'files',
+    filterPlaceholder: 'Filter files…',
+    filterText: (file) => file.filename,
+    // Folders first is a *grouping*, not a sort key: it holds whichever column is
+    // active and in both directions, which is why it is not just another comparator.
+    group: (file) => (file.type === 'folder' ? 0 : 1),
+    columns: [
+      { key: 'name', label: 'Name', value: (f) => f.filename },
+      { key: 'size', label: 'Size', value: (f) => f.size, initialDirection: 'desc' },
+      { key: 'time', label: 'Print time', value: (f) => f.print_time, initialDirection: 'desc' },
+      { key: 'layers', label: 'Layers', value: (f) => f.layer, initialDirection: 'desc' },
+      { key: 'created', label: 'Added', value: (f) => f.create_time, initialDirection: 'desc' },
+    ],
+    defaultSort: { key: 'name', dir: 'asc' },
+    onChange: () => {
+      if (_lastState && _popoverClient) renderFiles(_lastState, _popoverClient);
+    },
+  });
+  return fileControls;
+}
+
 export function renderFiles(state: PrinterState, client: CommandSender): void {
   _lastState = state;
+  _popoverClient = client;
   const container = $('file-list');
   const files = state.files;
+  const controls = ensureFileControls();
 
   let html = renderCapacityBar(state);
 
@@ -517,20 +553,18 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
 
   html += renderBreadcrumb(client);
 
-  if (!files.length) {
-    html += `<div class="file-empty">No files ${currentDir === '/' ? '' : 'in this folder '}on ${currentSource === 'u-disk' ? 'USB drive' : 'printer'}</div>`;
+  // Sorted client-side over the whole listing: 1044 returns the directory in one
+  // response and offers no ordering, so there is no server-side sort to ask for.
+  const sorted = controls.apply(files);
+
+  if (!sorted.length) {
+    html += controls.emptyHtml(
+      `No files ${currentDir === '/' ? '' : 'in this folder '}on ${currentSource === 'u-disk' ? 'USB drive' : 'printer'}`,
+    );
     container.innerHTML = html;
     ensureFileDelegation(container);
-    _popoverClient = client;
     return;
   }
-
-  // Sort: folders first, then by name
-  const sorted = [...files].sort((a, b) => {
-    if (a.type === 'folder' && b.type !== 'folder') return -1;
-    if (a.type !== 'folder' && b.type === 'folder') return 1;
-    return a.filename.localeCompare(b.filename);
-  });
 
   for (const file of sorted) {
     const isFolder = file.type === 'folder';
@@ -589,7 +623,6 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
 
   // Build file map for popover lookups
   _fileMap = new Map(sorted.filter((f) => f.type !== 'folder').map((f) => [f.filename, f]));
-  _popoverClient = client;
 
   // Close any stale popover from previous render
   closeFilePopover();

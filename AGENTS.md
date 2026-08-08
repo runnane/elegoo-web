@@ -88,6 +88,11 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   from './config.js'` — the extension is required, not decorative: production runs
   the TypeScript **directly** under `node --import tsx`, so the specifier has to be
   the one Node resolves. Dropping the `.js` works in vite and breaks the service.
+  **The rule bites on the half that Node executes.** In practice the tree is a clean
+  split — every relative import under `src/server/**` and `src/telegram/**` carries
+  `.js`, and every one in the vite-bundled browser half (`src/main.ts`, `src/ui/**`,
+  `src/types.ts`) is extensionless, which `moduleResolution: "bundler"` accepts. Match
+  the half you are editing rather than "fixing" 120 frontend imports.
 - **There are three tsconfigs and CI only checks one of them.** `tsconfig.json`
   covers the browser half and **excludes `src/server` and `src/telegram`**;
   `tsconfig.server.json` covers those (via `pnpm service:check`). `pnpm build` runs

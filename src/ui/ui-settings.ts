@@ -17,6 +17,10 @@ export interface UISettings {
   logTab: string;
   /** Theme choice: 'auto' follows the OS, 'dark'/'light' override it (ELEG-34) */
   theme: string;
+  /** Per-list sort choice, keyed by the list's control id (ELEG-49) */
+  listSort: Record<string, { key: string; dir: string }>;
+  /** Per-list dropdown filter selections, keyed by `<listId>.<selectId>` (ELEG-49) */
+  listSelect: Record<string, string>;
 }
 
 const defaults: UISettings = {
@@ -27,6 +31,8 @@ const defaults: UISettings = {
   slogMethod: 'all',
   logTab: 'structured',
   theme: 'auto',
+  listSort: {},
+  listSelect: {},
 };
 
 let cached: UISettings | null = null;
@@ -67,4 +73,36 @@ export function saveChartWindow(canvasId: string, seconds: number): void {
 /** Get saved chart window or undefined for default */
 export function getChartWindow(canvasId: string): number | undefined {
   return loadUISettings().chartWindows[canvasId];
+}
+
+/**
+ * Save one list view's sort choice (ELEG-49).
+ *
+ * Sort lives here rather than in `persistence.ts`, which the parent issue pointed at:
+ * that key holds chart and layer data for the *current print* and is cleared when the
+ * print changes, so a sort preference stored there would quietly evaporate.
+ */
+export function saveListSort(listId: string, sort: { key: string; dir: string }): void {
+  const s = loadUISettings();
+  const listSort = s.listSort ?? {};
+  listSort[listId] = sort;
+  saveUISettings({ listSort });
+}
+
+/** Get a saved list sort, or undefined — the caller supplies and validates the default. */
+export function getListSort(listId: string): unknown {
+  return loadUISettings().listSort?.[listId];
+}
+
+/** Save one dropdown filter selection, keyed `<listId>.<selectId>` (ELEG-49). */
+export function saveListSelect(key: string, value: string): void {
+  const s = loadUISettings();
+  const listSelect = s.listSelect ?? {};
+  listSelect[key] = value;
+  saveUISettings({ listSelect });
+}
+
+/** Get a saved dropdown filter selection, or undefined for "all". */
+export function getListSelect(key: string): string | undefined {
+  return loadUISettings().listSelect?.[key];
 }
