@@ -2,7 +2,14 @@
 
 import { $, escapeHtml } from './helpers';
 import type { PrinterState } from '../printer-state';
-import { type MqttPhase, mqttBannerHeadline, mqttPhaseMessage } from '../types';
+import {
+  type MqttPhase,
+  type VersionStampish,
+  UNKNOWN_VERSION_LABEL,
+  buildVersionLabel,
+  mqttBannerHeadline,
+  mqttPhaseMessage,
+} from '../types';
 
 export interface ServiceStatus {
   uptime: number;
@@ -14,6 +21,11 @@ export interface ServiceStatus {
    */
   mqttPhase?: MqttPhase;
   mqttRegisterAttempts: number;
+  /**
+   * The deploy stamp (ELEG-48). Optional for the same reason as `mqttPhase`: a browser
+   * can be holding a `service_status` from before this shipped.
+   */
+  build?: VersionStampish | null;
   printerSn: string | null;
   printerIp: string;
   wsClients: number;
@@ -132,6 +144,12 @@ export function renderServiceStatus(): void {
   const phase = phaseOf(s);
   const mqttLabel = PHASE_LABELS[phase];
 
+  // `x.y.z+aa`, the way RCP renders it — see formatBuildVersion. The dot is grey on an
+  // unstamped build rather than green, because "unknown" is a real gap: production runs
+  // from /opt/elegooweb, and a deploy where the installer never re-ran shows exactly
+  // this (ELEG-48).
+  const version = buildVersionLabel(s.build);
+
   // The banner used to fire on `broker_only && attempts >= 3`, which meant it could
   // never fire for the case that most needed it: when the printer never speaks, no SN is
   // learned, registration is never attempted and `mqttRegisterAttempts` stays 0 forever
@@ -154,6 +172,7 @@ export function renderServiceStatus(): void {
       <div class="svc-item">${dotHtml(!!s.printerSn)}<span class="svc-label">Printer</span><span class="svc-value">${s.printerSn || 'unknown'}</span></div>
       <div class="svc-item">${dotHtml(true)}<span class="svc-label">WS Clients</span><span class="svc-value">${s.wsClients}</span></div>
       <div class="svc-item">${dotHtml(true)}<span class="svc-label">Uptime</span><span class="svc-value">${formatUptime(s.uptime)}</span></div>
+      <div class="svc-item">${dotHtml(version !== UNKNOWN_VERSION_LABEL)}<span class="svc-label">Version</span><span class="svc-value">${escapeHtml(version)}</span></div>
     </div>
   `;
 }

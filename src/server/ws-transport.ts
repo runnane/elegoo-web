@@ -23,6 +23,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { TelegramIntegration } from './telegram.js';
 import type { AIMonitor } from './ai-monitor.js';
 import { getLogger } from './logger.js';
+import { getBuildInfo } from './build-info.js';
 
 const log = getLogger('WS');
 
@@ -142,6 +143,10 @@ export class WebSocketTransport {
 
     return {
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
+      // Which build is serving this (ELEG-48). Already on /api/health, but nothing in
+      // the browser fetches that, and the UI is where "which build am I looking at?"
+      // actually gets asked. Cached per process, so this costs nothing per broadcast.
+      build: getBuildInfo(),
       mqtt: mqttState,
       // The coarse `mqtt` above is kept as-is for any existing consumer; `mqttPhase`
       // splits its `broker_only` into awaiting_sn / registering / rejected, which is the

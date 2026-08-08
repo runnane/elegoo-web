@@ -274,6 +274,89 @@ export function isFilamentChangeSubStatus(subStatus: number): boolean {
   return false;
 }
 
+// ─── Running version ─────────────────────────────────────────────────
+
+/**
+ * The fields of the deploy stamp this formatter needs. Structural on purpose: the real
+ * `BuildInfo` lives in `src/server/build-info.ts`, which `tsconfig.json` excludes from
+ * the browser half, so the UI cannot import it. `BuildInfo` satisfies this by shape.
+ */
+export interface VersionStampish {
+  /** `git describe --tags --always --dirty` at install time. */
+  describe?: string | null;
+  /** `version` from the deployed `package.json`. */
+  version?: string | null;
+}
+
+/** `1.2.3`, `1.2.3-rc.1` — a leading `v` having already been stripped. */
+const SEMVER_PREFIX = /^\d+\.\d+\.\d+/;
+
+/** The `--long`-style shape: `<tag>-<distance>-g<sha>`. */
+const DESCRIBE_LONG = /^(.+)-(\d+)-g[0-9a-f]+$/;
+
+function versionFromTag(tag: string): string | null {
+  const version = tag.replace(/^v/, '');
+  return SEMVER_PREFIX.test(version) ? version : null;
+}
+
+/**
+ * `x.y.z+aa`, matching how RCP renders its running version (ELEG-48).
+ *
+ * **The `+aa` is the commit distance since the tag, not a short sha.** ELEG-48 described
+ * it as "semver plus a short build/commit suffix", which is what it looks like — but
+ * RCP's `formatVersion` parses `git describe` and emits the *number of commits* since
+ * the last tag, and drops the suffix entirely when that number is 0. Read RCP before
+ * changing this; a near-miss defeats the point of the request, which was that the two
+ * look the same.
+ *
+ * **Adapted rather than copied, because the two repos run different `describe` flags.**
+ * RCP uses `--long`, which always yields `<tag>-<n>-g<sha>` — deliberately, so there is
+ * one shape to parse. `contrib/install.sh` here runs `--tags --always --dirty`, which
+ * yields four:
+ *
+ * | `describe` | Result | Why |
+ * | --- | --- | --- |
+ * | `v0.2.1-58-g5b00442` | `0.2.1+58` | the common case |
+ * | `v0.3.0` | `0.3.0` | exactly on a tag; RCP drops the `+0` too |
+ * | `v0.2.1-58-g5b00442-dirty` | `0.2.1+58.dirty` | installed from a modified checkout — worth saying, and still valid semver |
+ * | `5b00442` | falls back | `--always` with no reachable tag: a bare sha is not a version |
+ *
+ * Anything unrecognised falls back to `package.json`'s version, and then to `null`.
+ * **Absent beats wrong**: a version string that is silently incorrect is worse than none,
+ * and this one exists to answer "which build am I looking at?".
+ */
+export function formatBuildVersion(stamp: VersionStampish | null | undefined): string | null {
+  const fallback = stamp?.version?.trim() || null;
+  const raw = stamp?.describe?.trim();
+  if (!raw) return fallback;
+
+  const dirty = raw.endsWith('-dirty');
+  const clean = dirty ? raw.slice(0, -'-dirty'.length) : raw;
+
+  const long = DESCRIBE_LONG.exec(clean);
+  const base = long ? versionFromTag(long[1]) : versionFromTag(clean);
+  if (base === null) return fallback;
+
+  const distance = long ? Number(long[2]) : 0;
+  const parts = [distance > 0 ? String(distance) : null, dirty ? 'dirty' : null].filter(Boolean);
+  return parts.length > 0 ? `${base}+${parts.join('.')}` : base;
+}
+
+/** What to show when there is no usable stamp. An unstamped deploy is normal (ELEG-10). */
+export const UNKNOWN_VERSION_LABEL = 'unknown';
+
+/**
+ * Never returns null, so a caller can render it directly.
+ *
+ * `unknown` rather than `dev`: an all-null stamp means `pnpm dev` from a checkout **or**
+ * a deploy that predates ELEG-10 **or** one where the installer failed to write the file.
+ * Those are not the same thing and this cannot tell them apart, so it does not pretend
+ * to — the whole point of ELEG-48 is that a version you cannot trust is worse than none.
+ */
+export function buildVersionLabel(stamp: VersionStampish | null | undefined): string {
+  return formatBuildVersion(stamp) ?? UNKNOWN_VERSION_LABEL;
+}
+
 // ─── MQTT connection phase ───────────────────────────────────────────
 
 /**

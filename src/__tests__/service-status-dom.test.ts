@@ -123,3 +123,50 @@ describe('a browser holding a payload from before this shipped', () => {
     expect(panel.querySelector('.svc-firmware-warning')).toBeNull();
   });
 });
+
+describe('the running version in the panel (ELEG-48)', () => {
+  it('renders x.y.z+aa from the deploy stamp', () => {
+    const panel = mountShell();
+    render({
+      mqtt: 'connected',
+      mqttPhase: 'connected',
+      build: { describe: 'v0.2.1-58-g5b00442', version: '0.2.1' },
+    });
+
+    expect(panel.textContent).toContain('Version');
+    expect(panel.textContent).toContain('0.2.1+58');
+  });
+
+  it('says "unknown" on an unstamped build, and never renders null', () => {
+    // Normal for `pnpm dev`, and for a deploy where the installer never re-ran. The
+    // issue is explicit that this must not render `null+null`.
+    const panel = mountShell();
+    render({ mqtt: 'connected', mqttPhase: 'connected', build: null });
+
+    expect(panel.textContent).toContain('unknown');
+    expect(panel.textContent).not.toContain('null');
+  });
+
+  it('marks an unstamped build as not-ok, because it is a real gap', () => {
+    const panel = mountShell();
+    render({ mqtt: 'connected', mqttPhase: 'connected', build: null });
+    const rows = [...panel.querySelectorAll('.svc-item')];
+    const versionRow = rows.find((r) => r.textContent?.includes('Version'));
+    expect(versionRow?.querySelector('.status-dot-err')).not.toBeNull();
+  });
+
+  it('marks a stamped build ok', () => {
+    const panel = mountShell();
+    render({ mqtt: 'connected', mqttPhase: 'connected', build: { describe: 'v0.3.0' } });
+    const rows = [...panel.querySelectorAll('.svc-item')];
+    const versionRow = rows.find((r) => r.textContent?.includes('Version'));
+    expect(versionRow?.querySelector('.status-dot-ok')).not.toBeNull();
+    expect(versionRow?.textContent).toContain('0.3.0');
+  });
+
+  it('survives a browser holding a payload from before this shipped', () => {
+    const panel = mountShell();
+    render({ mqtt: 'connected', mqttPhase: 'connected', build: undefined });
+    expect(panel.textContent).toContain('unknown');
+  });
+});
