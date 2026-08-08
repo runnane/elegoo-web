@@ -2,6 +2,8 @@ import type { CommandSender } from '../ws-client';
 import type { PrinterState } from '../printer-state';
 import { $, escapeHtml, escapeAttr, formatTime } from './helpers';
 import { toast } from './toast';
+import { type ListControls, createListControls } from './list-controls';
+import { nonZero, spanSeconds } from './list-sort';
 
 let historyClient: CommandSender | null = null;
 
@@ -15,13 +17,73 @@ export function requestHistory(): void {
   historyClient.sendCommand(1036, {});
 }
 
+type HistoryItem = PrinterState['printHistory'][number];
+
+/** Kept outside the render function — see `list-controls.ts` on why that matters. */
+let historyControls: ListControls<HistoryItem> | null = null;
+let lastHistoryState: PrinterState | null = null;
+
+function ensureHistoryControls(): ListControls<HistoryItem> {
+  if (historyControls) return historyControls;
+  historyControls = createListControls<HistoryItem>({
+    id: 'print-history',
+    container: $('print-history-controls'),
+    noun: 'prints',
+    filterPlaceholder: 'Filter by job name…',
+    filterText: (item) => item.filename,
+    columns: [
+      { key: 'name', label: 'Name', value: (i) => i.filename },
+      // nonZero/spanSeconds, not the raw fields: the printer sends 0 for a time it did
+      // not record, and 0 sorts as 1970 — top of "newest first" — rather than as absent.
+      {
+        key: 'started',
+        label: 'Started',
+        value: (i) => nonZero(i.begin_time),
+        initialDirection: 'desc',
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        value: (i) => spanSeconds(i.begin_time, i.end_time),
+        initialDirection: 'desc',
+      },
+      { key: 'status', label: 'Status', value: (i) => i.status },
+    ],
+    // Newest first: the last thing you printed is the thing you are asking about.
+    defaultSort: { key: 'started', dir: 'desc' },
+    selects: [
+      {
+        id: 'status',
+        label: 'Status',
+        options: [
+          { value: 'completed', label: 'completed' },
+          { value: 'failed', label: 'failed' },
+          { value: 'stopped', label: 'stopped' },
+        ],
+        match: (item, value) => item.status === value,
+      },
+    ],
+    onChange: () => {
+      if (lastHistoryState) renderPrintHistory(lastHistoryState);
+    },
+  });
+  return historyControls;
+}
+
 export function renderPrintHistory(state: PrinterState): void {
   const container = $('print-history-entries');
   if (!container) return;
+  lastHistoryState = state;
 
-  const items = state.printHistory;
-  if (!items || items.length === 0) {
-    container.innerHTML = '<div class="file-empty">No print history</div>';
+  const controls = ensureHistoryControls();
+  // Client-side over the whole set: 1036 takes no paging parameters, so there is no
+  // server-side ordering to ask for even if there were enough entries to want one.
+  const items = controls.apply(state.printHistory ?? []);
+
+  if (items.length === 0) {
+    // Two different facts: "narrow your filter" and "you have never printed".
+    container.innerHTML = controls.emptyHtml('No print history');
+    updateHistoryTotal(state);
     return;
   }
 
@@ -70,8 +132,11 @@ export function renderPrintHistory(state: PrinterState): void {
     .join('');
 
   container.innerHTML = html;
+  updateHistoryTotal(state);
+}
 
-  // Show total count
+/** The printer's own total, which is not the same number as the filtered count. */
+function updateHistoryTotal(state: PrinterState): void {
   const totalEl = $('print-history-total');
   if (totalEl) {
     totalEl.textContent = `${state.printHistoryTotal} prints`;

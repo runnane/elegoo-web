@@ -6,8 +6,10 @@ import {
   filterItems,
   matchesQuery,
   nextSortState,
+  nonZero,
   normaliseSortState,
   sortItems,
+  spanSeconds,
 } from '../ui/list-sort';
 
 interface Row {
@@ -197,6 +199,65 @@ describe('normaliseSortState', () => {
   it('returns a fresh object so the caller cannot mutate the default', () => {
     const out = normaliseSortState(null, keys, fallback);
     expect(out).not.toBe(fallback);
+  });
+});
+
+describe('nonZero', () => {
+  it('treats the printer zero as absent, not as 1970', () => {
+    expect(nonZero(0)).toBeUndefined();
+    expect(nonZero(undefined)).toBeUndefined();
+    expect(nonZero(Number.NaN)).toBeUndefined();
+  });
+
+  it('passes real values through, including negatives', () => {
+    expect(nonZero(1700000000)).toBe(1700000000);
+    expect(nonZero(-5)).toBe(-5);
+  });
+
+  it('keeps unrecorded rows at the bottom whichever way the column is sorted', () => {
+    interface Job {
+      name: string;
+      begin: number;
+    }
+    const jobs: Job[] = [
+      { name: 'unrecorded', begin: 0 },
+      { name: 'older', begin: 1000 },
+      { name: 'newer', begin: 2000 },
+    ];
+    const column: SortColumn<Job> = {
+      key: 'started',
+      label: 'Started',
+      value: (j) => nonZero(j.begin),
+    };
+    expect(sortItems(jobs, column, 'desc').map((j) => j.name)).toEqual([
+      'newer',
+      'older',
+      'unrecorded',
+    ]);
+    // Ascending is the case that actually needs `nonZero`: a raw 0 is the smallest
+    // number, so without the mapping the unrecorded row leads the oldest-first list.
+    expect(sortItems(jobs, column, 'asc').map((j) => j.name)).toEqual([
+      'older',
+      'newer',
+      'unrecorded',
+    ]);
+  });
+});
+
+describe('spanSeconds', () => {
+  it('measures a finished job', () => {
+    expect(spanSeconds(1000, 1600)).toBe(600);
+  });
+
+  it('has no answer for a job that has not finished or never started', () => {
+    expect(spanSeconds(1000, 0)).toBeUndefined();
+    expect(spanSeconds(0, 1600)).toBeUndefined();
+    expect(spanSeconds(undefined, undefined)).toBeUndefined();
+  });
+
+  it('rejects a nonsensical span rather than returning a negative duration', () => {
+    expect(spanSeconds(1600, 1000)).toBeUndefined();
+    expect(spanSeconds(1000, 1000)).toBeUndefined();
   });
 });
 
