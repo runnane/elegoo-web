@@ -199,6 +199,17 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   `include: ["comments","links","attachments"]` before acting on one, and actually
   fetch any attachment. Decisions get recorded as comments; an issue still
   `blockedBy` an open one is not ready to start.
+- **A method number in an issue is a claim, and usually an unchecked one.** Three
+  issues in the ELEG tracker named methods that do not do what they said —
+  history-delete on 1049 (really `UpdateToken`, which writes the printer's *auth
+  token*), AI detection on 2010/2011 (neither exists), OTA on 1064 (really 1039). All
+  three were copied out of `METHOD_NAMES` in `src/ui/log-methods.ts`, which is a
+  **display label for the log viewer, not a citation**, and which contradicted itself
+  by listing 1038 *and* 1049 as history delete. Cite
+  [`data/CC2_PROTOCOL_REFERENCE.md`](data/CC2_PROTOCOL_REFERENCE.md) instead, and where
+  the docs and the running code disagree, settle it by **asking the printer** — a
+  `Get…` is a read and is allowed. `.agents/testing.md` has the one-liner. Never fire a
+  `Set…` to find out what it does.
 - **An issue's stated blocker is a claim, not a fact.** "This needs X", "the firmware
   doesn't expose that", "the printer can't do it" is what someone believed when they
   filed it. Before accepting the scope a blocker implies — and especially before
