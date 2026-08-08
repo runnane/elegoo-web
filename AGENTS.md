@@ -204,6 +204,29 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   as starting it.** Stopping a runaway notification loop or disabling a feature flag is
   the safe, reversible direction; arming something — or touching the printer — is the
   direction that needs a human.
+
+  **Do the reads yourself first, then hand over only what is left.** "This needs a
+  human" is a claim about *each command*, not about the issue, and bundling them is how
+  an errand gets handed over that was mostly answerable. Both `OPERATOR:` issues filed
+  in the 2026-08-08 pass turned out to be over-scoped:
+
+  - **ELEG-68** ("confirm the deploy stamp") — `curl localhost:8088/api/health` is on
+    the *reads are fine and encouraged* list two rules above; only `sudo cat
+    /opt/elegooweb/build-info.json` needs privilege. Running the read answered all of
+    it but one line — and answered it *better*, because `/api/health` also reported
+    `mqttPhase: null`, which corroborated the stamp's claim from **behaviour** rather
+    than trusting the file's own say-so.
+  - **ELEG-67** ("does the compat layer still work") — "no test exercises the route
+    table" and "does Mainsail still work" are two questions. The first is answerable
+    with the isolated local service in [`.agents/testing.md`](.agents/testing.md)
+    (TEST-NET `PRINTER_IP`, blanked integrations, non-default ports); only the second
+    needs a client.
+
+  So before filing: **go through the commands one at a time** and ask whether *that
+  one* needs privilege, a physical presence, or software you do not have. Run the ones
+  that do not, put the results on the issue, and cross those steps off the
+  instructions. An `OPERATOR:` issue reduced to one command gets done; a ten-step one
+  that is mostly already answerable gets postponed, and deservedly.
 - **Follow-ups become issues — never inline TODO text.** Any deferred work,
   degradation or "later" item is filed via `issues_create_issue`, after a **duplicate
   search**: `issues_list_issues {project: "elegoo-web", q: "<distinctive word>",
