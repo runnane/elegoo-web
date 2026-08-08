@@ -274,6 +274,35 @@ export function isFilamentChangeSubStatus(subStatus: number): boolean {
   return false;
 }
 
+// ─── Power loss recovery ─────────────────────────────────────────────
+
+/** Machine status the CC2 reports after a power loss with a print in progress. */
+export const STATUS_POWER_LOSS_RECOVERY = 15;
+
+/** Sub-statuses the printer moves through once a recovery has been started. */
+const SUB_POWER_LOSS_RESUMING = 2405;
+const SUB_POWER_LOSS_RESUMED = 2406;
+
+/**
+ * Where a power-loss recovery has got to.
+ *
+ * The distinction that matters is `awaiting_decision` versus the rest. Status 15 alone
+ * means the printer is sitting on a half-finished job with nobody having told it what
+ * to do; once 2405 arrives the decision has been made and prompting again would invite
+ * a second resume on a print already resuming.
+ */
+export type PowerLossState = 'none' | 'awaiting_decision' | 'resuming' | 'resumed';
+
+export function powerLossState(
+  status: number | undefined | null,
+  subStatus: number | undefined | null,
+): PowerLossState {
+  if (status !== STATUS_POWER_LOSS_RECOVERY) return 'none';
+  if (subStatus === SUB_POWER_LOSS_RESUMING) return 'resuming';
+  if (subStatus === SUB_POWER_LOSS_RESUMED) return 'resumed';
+  return 'awaiting_decision';
+}
+
 // ─── Command result codes (`error_code` on a method response) ────────
 //
 // Distinct from EXCEPTION_NAMES below: an *exception* is a hardware fault the printer
