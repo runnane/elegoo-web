@@ -5,6 +5,7 @@ import { type CardLayout, CARD_NAMES, defaultCardLayout, normaliseCardLayout } f
 import { toast } from './toast';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
+import { getThemeChoice, setThemeChoice, isThemeChoice } from './theme';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
 
@@ -189,6 +190,19 @@ function buildSettingsHTML(content: HTMLElement): void {
 
   content.innerHTML = `
     <section class="settings-section">
+      <h3>Appearance</h3>
+      <p class="settings-hint">Auto follows your operating system's light/dark setting.</p>
+      <div class="settings-row">
+        <label for="settings-theme">Theme</label>
+        <select id="settings-theme" class="log-select">
+          <option value="auto">Auto</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h3>Panel Layout</h3>
       <p class="settings-hint">Assign cards to the sidebar (always-visible) or main area. Reorder within each panel.</p>
       <h4 class="settings-panel-heading">Sidebar</h4>
@@ -294,6 +308,14 @@ function buildSettingsHTML(content: HTMLElement): void {
   });
 
   // Reset button
+  const themeSelect = content.querySelector('#settings-theme') as HTMLSelectElement | null;
+  if (themeSelect) {
+    themeSelect.value = getThemeChoice();
+    themeSelect.addEventListener('change', () => {
+      if (isThemeChoice(themeSelect.value)) setThemeChoice(themeSelect.value);
+    });
+  }
+
   content.querySelector('#settings-reset-layout')?.addEventListener('click', () => {
     // Confirmed because it discards arranging work and cannot be undone. Scoped to the
     // layout key alone: chart resolution, log filters and camera selection live in a

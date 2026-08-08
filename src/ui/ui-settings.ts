@@ -15,6 +15,8 @@ export interface UISettings {
   slogMethod: string;
   /** Active log tab (structured/raw) */
   logTab: string;
+  /** Theme choice: 'auto' follows the OS, 'dark'/'light' override it (ELEG-34) */
+  theme: string;
 }
 
 const defaults: UISettings = {
@@ -24,6 +26,7 @@ const defaults: UISettings = {
   slogType: 'all',
   slogMethod: 'all',
   logTab: 'structured',
+  theme: 'auto',
 };
 
 let cached: UISettings | null = null;

@@ -17,6 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { renderLayerTimeChart } from '../ui/layer-chart';
+import { FALLBACK_PALETTE } from '../ui/chart-palette';
 import type { PrinterState } from '../printer-state';
 
 const W = 554;
@@ -70,8 +71,24 @@ function render(layerTimes: LayerTime[]): Op[] {
       // textAlign decides which side of x the text extends, so capture it per call.
       ops.push({ op: 'fillText', args: [t, x, y, ctx.textAlign] });
     },
-    fillStyle: '',
-    strokeStyle: '',
+    // Recorded, not stored: ELEG-34 moved every colour out of this file's literals and
+    // into the stylesheet, and the regression worth pinning is that they stay there.
+    _fillStyle: '',
+    _strokeStyle: '',
+    get fillStyle() {
+      return this._fillStyle;
+    },
+    set fillStyle(v: string) {
+      this._fillStyle = v;
+      ops.push({ op: 'set:fillStyle', args: [v] });
+    },
+    get strokeStyle() {
+      return this._strokeStyle;
+    },
+    set strokeStyle(v: string) {
+      this._strokeStyle = v;
+      ops.push({ op: 'set:strokeStyle', args: [v] });
+    },
     lineWidth: 0,
     lineJoin: '',
     font: '',
@@ -161,5 +178,43 @@ describe('layer chart render path', () => {
     const [left, right] = align === 'right' ? [x - width, x] : [x, x + width];
     expect(left).toBeGreaterThanOrEqual(0);
     expect(right).toBeLessThanOrEqual(W);
+  });
+});
+
+describe('chart colours', () => {
+  const series: LayerTime[] = Array.from({ length: 25 }, (_, i) => ({
+    layer: i + 1,
+    duration: 14 + (i % 3),
+    timestamp: i,
+  }));
+
+  /** Every colour the palette can legitimately supply. */
+  const allowed = new Set(Object.values(FALLBACK_PALETTE));
+
+  it('takes every colour from the palette, never from a literal', () => {
+    // The ELEG-34 regression: a hardcoded '#a0a0b8' or 'rgba(171,71,188,0.4)' here would
+    // stay dark-on-dark in the light theme, and nothing else in this repo would notice.
+    // Under vitest there is no DOM, so chartPalette() returns FALLBACK_PALETTE and every
+    // assigned colour must be one of its values.
+    const assigned = render(series)
+      .filter((o) => o.op === 'set:fillStyle' || o.op === 'set:strokeStyle')
+      .map((o) => String(o.args[0]))
+      .filter((c) => c !== '');
+
+    expect(assigned.length).toBeGreaterThan(0);
+    for (const colour of assigned) {
+      expect(allowed, `${colour} is not a palette colour`).toContain(colour);
+    }
+  });
+
+  it('actually draws with more than one palette colour', () => {
+    // Guards the test above from passing trivially if the chart stopped setting colours.
+    const distinct = new Set(
+      render([...series, { layer: 26, duration: 20, timestamp: 26 }])
+        .filter((o) => o.op === 'set:fillStyle' || o.op === 'set:strokeStyle')
+        .map((o) => String(o.args[0]))
+        .filter(Boolean),
+    );
+    expect(distinct.size).toBeGreaterThan(2);
   });
 });

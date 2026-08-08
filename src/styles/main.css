@@ -55,6 +55,97 @@
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Consolas", monospace;
   --header-height: 52px;
   --sidebar-width: 380px;
+
+  /*
+   * Canvas chart palette (ELEG-34).
+   *
+   * The charts draw to a <canvas>, where CSS does not reach — they used to hardcode
+   * these values, which is why they would have stayed dark-on-dark while everything
+   * around them flipped. They are declared here so both themes have one place that
+   * defines them, and `ui/chart-palette.ts` reads them back with getComputedStyle.
+   *
+   * The dark values are exactly the literals they replaced, so this half is a no-op.
+   */
+  --chart-grid: rgba(160, 160, 184, 0.12);
+  --chart-label: #a0a0b8;
+  --chart-series: #ab47bc;
+  --chart-series-fill: rgba(171, 71, 188, 0.12);
+  --chart-series-line: rgba(171, 71, 188, 0.4);
+  --chart-series-point: rgba(171, 71, 188, 0.5);
+  --chart-crosshair: rgba(255, 255, 255, 0.25);
+  --chart-tooltip-bg: rgba(30, 30, 44, 0.92);
+  --chart-tooltip-border: rgba(255, 255, 255, 0.15);
+  --chart-tooltip-text: #e0e0e8;
+  --chart-above-avg: #ef5350;
+  --chart-below-avg: #66bb6a;
+  --chart-temp-fill: rgba(33, 150, 243, 0.3);
+  --gcode-bg: #1e1e2e;
+  --gcode-extrusion: #2196f3;
+  --gcode-travel: #444460;
+  --gcode-top-layer: #00ffff;
+  --gcode-last-segment: #ffffff;
+  --gcode-unknown-tool: #888888;
+}
+
+/*
+ * Light theme (ELEG-34).
+ *
+ * Applied by `data-theme="light"` on <html>, which an inline script in index.html sets
+ * before first paint — from an explicit saved choice, or from `prefers-color-scheme`
+ * when there is none. Doing it with an attribute rather than a second
+ * `@media (prefers-color-scheme: light)` block keeps the palette defined exactly once.
+ *
+ * The status colours are NOT the dark theme's values reused. This UI carries meaning in
+ * colour — the status card is success/warning/danger — and the 500-weight shades that
+ * read well on #0f1117 fall to roughly 2:1 against white. These are the 700/800 weights,
+ * which hold about 5:1 or better on the light background.
+ */
+:root[data-theme="light"] {
+  --bg-primary: #f4f5fa;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f1f6;
+  --bg-hover: #e8e9f0;
+  --bg-input: #ffffff;
+  --bg-surface: #f0f1f6;
+  --text-primary: #16171f;
+  --text-secondary: #4a4c5e;
+  --text-muted: #7c7e92;
+  --accent: #2563eb;
+  --accent-light: #3b82f6;
+  --accent-dim: rgba(37, 99, 235, 0.1);
+  --success: #15803d;
+  --success-dim: rgba(21, 128, 61, 0.1);
+  --warning: #b45309;
+  --warning-dim: rgba(180, 83, 9, 0.1);
+  --danger: #b91c1c;
+  --danger-dim: rgba(185, 28, 28, 0.1);
+  --nozzle-color: #b91c1c;
+  --bed-color: #b45309;
+  --border: #d6d8e2;
+  --border-subtle: #e8e9f0;
+  --shadow: 0 1px 3px rgba(16, 18, 32, 0.1), 0 1px 2px rgba(16, 18, 32, 0.06);
+  --shadow-lg: 0 4px 12px rgba(16, 18, 32, 0.12), 0 2px 4px rgba(16, 18, 32, 0.08);
+
+  --chart-grid: rgba(60, 60, 90, 0.14);
+  --chart-label: #5c5e72;
+  --chart-series: #8e24aa;
+  --chart-series-fill: rgba(142, 36, 170, 0.1);
+  --chart-series-line: rgba(142, 36, 170, 0.35);
+  --chart-series-point: rgba(142, 36, 170, 0.5);
+  --chart-crosshair: rgba(0, 0, 0, 0.25);
+  --chart-tooltip-bg: rgba(255, 255, 255, 0.96);
+  --chart-tooltip-border: rgba(0, 0, 0, 0.15);
+  --chart-tooltip-text: #16171f;
+  --chart-above-avg: #c62828;
+  --chart-below-avg: #2e7d32;
+  --chart-temp-fill: rgba(25, 118, 210, 0.25);
+  --gcode-bg: #eef0f6;
+  --gcode-extrusion: #1976d2;
+  --gcode-travel: #b0b4c8;
+  --gcode-top-layer: #00838f;
+  --gcode-last-segment: #212121;
+  --gcode-unknown-tool: #757575;
 }
 
 * {
@@ -4104,4 +4195,17 @@ body {
 .debug-log-badge {
   font-size: 10px;
   flex-shrink: 0;
+}
+
+/* Settings row — label plus a control, used by the theme picker (ELEG-34). */
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+.settings-row label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  min-width: 120px;
 }
