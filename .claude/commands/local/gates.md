@@ -59,6 +59,27 @@ Production is why this bites: the service runs the TypeScript **directly** under
 service — the process just throws at runtime, restarts (`Restart=always`), and throws
 again.
 
+### And neither typecheck proves an import specifier actually resolves
+
+Both tsconfigs set `moduleResolution: "bundler"`, which **accepts extensionless relative
+specifiers that Node rejects**. So `./allowlist` instead of `./allowlist.js` under
+`src/server/**` passes `service:check`, passes `vite build`, passes CI — and then throws
+`ERR_MODULE_NOT_FOUND` at the running service, which restarts and throws again. This is
+the enforcement gap behind the `.js`-on-every-relative-import rule in `AGENTS.md`: the
+rule is real, and **no gate checks it.**
+
+If you move or rename a file under `src/server/**`, resolve it under real Node before
+you trust the green run (ELEG-23):
+
+```bash
+node --import tsx -e "await import('./src/server/<the-importer>.ts'); console.log('resolved')"
+```
+
+Pick an importer that has **no import-time side effects** — check the module scope first.
+`config.ts` and `allowlist.ts` are safe (a logger at most). **Do not import
+`src/server/index.ts`**, which wires the MQTT bridge and would open a second connection
+to the printer against the running service.
+
 ## `main` is green again — the two reds that used to be here are both fixed
 
 **As of ELEG-4, CI passes on `main` for the first time since July** (run 31176229965,
