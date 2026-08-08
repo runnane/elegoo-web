@@ -238,6 +238,28 @@ more here than in a repo with real coverage:
 Undo each mutation with an inverse patch, **never `git checkout <file>`** — see
 [`shared/gate-failures.md`](../shared/gate-failures.md) §6.
 
+## Nothing detects unreachable code, and it has bitten twice
+
+There is **no knip here** (RCP has it; this repo's gate list does not), and neither
+typecheck nor `vite build` complains about a module that nothing imports. `vite build`
+tree-shakes it out silently, so the bundle is fine and the file lives on.
+
+Two modules have now been found that way, both by hand:
+
+- `src/telegram/**` — a whole standalone bot with its own `MqttBridge`, no npm script and
+  no way to start it. It also meant ELEG-3's security fix had to be applied twice.
+  Deleted in **ELEG-23**.
+- `src/ui/system-info.ts` — a near-duplicate `renderSystemInfo` targeting the same
+  `#system-info` element as the live one in `service-status.ts`. `main.ts` imports the
+  other one via `dashboard.ts`, so this copy had never run. It had drifted, too: it was
+  missing the `if (!container) return` guard, so it would have thrown if it ever had.
+  Deleted in **ELEG-55**.
+
+So when a change touches a UI module, **check it is actually reached** —
+`grep -rn "from './<name>'" src/` — rather than trusting that a file in `src/ui/` is
+live. A duplicate that is never called cannot be caught by reading it; it looks correct.
+**ELEG-65** tracks adding a real check.
+
 ## Dependency advisories are deliberately NOT a gate
 
 `pnpm audit` is not in `scripts/gates.sh` and should not be added to it (ELEG-63). The

@@ -25,7 +25,7 @@ Read-only data exposed as MCP resources for context retrieval.
 | `printer://files` | JSON array of files on printer storage (name, size, type) |
 | `printer://metrics` | Structured JSON metrics snapshot (temps, print progress, filament, layers, zone) |
 | `printer://events` | Last 50 event log entries (print starts, errors, layer changes) |
-| `printer://system` | System info — firmware version, model, serial number, IP, disk usage |
+| `printer://system` | System info — firmware version, model, serial number, IP (from method 1001) |
 | `printer://zones` | Toolhead zone detection state and history (current, previous, enteredAt, history) |
 
 ## Tools
@@ -39,7 +39,7 @@ Read-only data exposed as MCP resources for context retrieval.
 | `print_progress` | — | Active print details (filename, progress, layer, elapsed, remaining, speed) |
 | `files` | — | List gcode files with sizes |
 | `events` | `count?` (number, default 20) | Recent event log entries |
-| `system_info` | — | Firmware, hardware, and network info |
+| `system_info` | — | Firmware, hardware, and network info, from method 1001 (`GET_ATTRIBUTES`) |
 | `zones` | — | Toolhead zone state (current zone, history) |
 | `layers` | `last?` (number, default all) | Layer time history |
 | `filament_usage` | — | Per-spool filament usage tracking |

@@ -199,7 +199,6 @@ export class StateStore extends EventEmitter {
   thumbnail: string | null = null;
   thumbnailFailed = false;
   fileTotalLayers: number | null = null;
-  systemInfo: Record<string, unknown> | null = null;
   timelapseList: Record<string, unknown>[] = [];
   videoUrl: string | null = null;
   // Toolhead zone tracking
@@ -637,15 +636,6 @@ export class StateStore extends EventEmitter {
         const errorCode = result.error_code as number | undefined;
         const url = result.url as string | undefined;
         if (errorCode === 0 && url) this.videoUrl = url;
-        break;
-      }
-      case 1062: {
-        const errorCode = result.error_code as number | undefined;
-        if (errorCode === 0) {
-          const info = { ...result };
-          delete info.error_code;
-          this.systemInfo = info;
-        }
         break;
       }
     }

@@ -113,7 +113,7 @@ describe('command tables', () => {
 
   it('lists only writes, never the polled reads', () => {
     // A read that comes back busy is re-polled seconds later; toasting it is noise.
-    for (const readMethod of [1002, 1036, 1044, 1045, 1046, 1048, 1050, 1062]) {
+    for (const readMethod of [1002, 1036, 1044, 1045, 1046, 1048, 1050]) {
       expect(COMMAND_METHOD_NAMES[readMethod], `read ${readMethod} must not toast`).toBeUndefined();
     }
     expect(COMMAND_METHOD_NAMES[1027]).toBe('Move');

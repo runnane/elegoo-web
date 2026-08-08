@@ -218,18 +218,18 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     'printer-system',
     'printer://system',
     {
-      description: 'System info (firmware, model, SN, IP, disk)',
+      // Everything here comes from method 1001 (GET_ATTRIBUTES). It used to also carry
+      // `systemInfo` from 1062, which was permanently null — 1062 answers
+      // `{"error_code": 1100}` on this firmware, so the key was never once populated
+      // (ELEG-55). "disk" went with it; disk usage comes from 1048, not this.
+      description: 'System info (firmware, model, SN, IP)',
     },
     async () => ({
       contents: [
         {
           uri: 'printer://system',
           mimeType: 'application/json',
-          text: JSON.stringify(
-            { attributes: store.attributes, systemInfo: store.systemInfo },
-            null,
-            2,
-          ),
+          text: JSON.stringify({ attributes: store.attributes }, null, 2),
         },
       ],
     }),
@@ -312,7 +312,7 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     'system_info',
     { description: 'Get firmware, hardware, network info' },
     async () => {
-      return json({ attributes: store.attributes, systemInfo: store.systemInfo });
+      return json({ attributes: store.attributes });
     },
   );
 
