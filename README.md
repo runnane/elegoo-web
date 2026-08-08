@@ -112,6 +112,7 @@ docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/run
 |----------|---------|-------------|
 | `PRINTER_IP` | `172.20.100.236` | Printer IP address (required) |
 | `PRINTER_PASSWORD` | `123456` | Printer access code |
+| `PRINTER_SN` | — (discovered) | Printer serial number, e.g. `F01U3UD3798YT8K`. Normally discovered automatically and then cached in `<DATA_DIR>/printer-sn.json`, so this is rarely needed. Set it if a **first** start hangs at "registering": the printer only publishes while a client is registered, so a service that has never learned the serial has nothing to overhear |
 | `SERVICE_PORT` | `8088` | Web UI / API / WebSocket port |
 | `MOONRAKER_PORT` | `7125` | Moonraker compatibility API port |
 | `CAMERA_ENABLED` | `true` | Enable camera MJPEG proxy |
