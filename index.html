@@ -12,7 +12,29 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>Elegoo Web</title>
   <link rel="stylesheet" href="/src/styles/main.css">
-</head>
+<script>
+      /*
+       * Set the theme before first paint (ELEG-34). Inline and synchronous on purpose:
+       * the app bundle is deferred, so doing this from a module would flash dark on a
+       * light-preferring system.
+       *
+       * The storage key and the values here are a contract with src/ui/theme.ts —
+       * change both together.
+       */
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('elegoo-web-ui-settings') || '{}');
+          var choice = saved.theme || 'auto';
+          var light =
+            choice === 'light' ||
+            (choice === 'auto' && window.matchMedia('(prefers-color-scheme: light)').matches);
+          document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+  </head>
 <body>
   <header id="app-header">
     <div class="header-left">

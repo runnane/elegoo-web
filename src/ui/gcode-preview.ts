@@ -13,6 +13,7 @@ import {
 import type { Object3D } from 'three';
 import type { PrinterState } from '../printer-state';
 import { $, fetchTimeout } from './helpers';
+import { chartPalette } from './chart-palette';
 
 /** Internal fields of WebGLPreview we need to access to stop the animate loop */
 interface WebGLPreviewInternals {
@@ -85,11 +86,11 @@ function updateNozzle(state: PrinterState): void {
 
 /** Build extrusionColor from colorMap — array for multi-color */
 function buildExtrusionColors(colorMap: Array<{ t: number; color: string }>): string | string[] {
-  if (colorMap.length === 0) return '#2196f3';
+  if (colorMap.length === 0) return chartPalette().gcodeExtrusion;
   if (colorMap.length === 1) return `#${colorMap[0].color.replace(/^#/, '')}`;
   // Multi-color: array indexed by tool number
   const maxTool = Math.max(...colorMap.map((c) => c.t));
-  const colors: string[] = new Array(maxTool + 1).fill('#888888');
+  const colors: string[] = new Array(maxTool + 1).fill(chartPalette().gcodeUnknownTool);
   for (const entry of colorMap) {
     colors[entry.t] = `#${entry.color.replace(/^#/, '')}`;
   }
@@ -190,6 +191,7 @@ export function renderGcodePreview(state: PrinterState): void {
 
 /** Initialize the 3D preview on the canvas */
 function initPreview(colorMap?: Array<{ t: number; color: string }>): WebGLPreview | null {
+  const pal = chartPalette();
   const canvas = $('gcode-preview-canvas') as HTMLCanvasElement | null;
   if (!canvas) return null;
 
@@ -205,15 +207,15 @@ function initPreview(colorMap?: Array<{ t: number; color: string }>): WebGLPrevi
   }
 
   const extrusionColor =
-    colorMap && colorMap.length > 0 ? buildExtrusionColors(colorMap) : '#2196f3';
+    colorMap && colorMap.length > 0 ? buildExtrusionColors(colorMap) : pal.gcodeExtrusion;
 
   const p = new WebGLPreview({
     canvas,
-    backgroundColor: '#1e1e2e',
+    backgroundColor: pal.gcodeBg,
     extrusionColor,
-    topLayerColor: '#00ffff',
-    lastSegmentColor: '#ffffff',
-    travelColor: '#444460',
+    topLayerColor: pal.gcodeTopLayer,
+    lastSegmentColor: pal.gcodeLastSegment,
+    travelColor: pal.gcodeTravel,
     buildVolume: BUILD_VOLUME,
     lineWidth: 2,
     renderExtrusion: true,

@@ -2,10 +2,10 @@
 
 import type { ChartStore, Series } from '../chart-store';
 import { saveChartWindow, getChartWindow } from './ui-settings';
+import { chartPalette } from './chart-palette';
 
 const PADDING = { top: 10, right: 12, bottom: 24, left: 48 };
-const GRID_COLOR = 'rgba(160, 160, 184, 0.12)';
-const LABEL_COLOR = '#a0a0b8';
+// Colours come from the stylesheet via chartPalette() (ELEG-34).
 const LABEL_FONT = '10px -apple-system, BlinkMacSystemFont, sans-serif';
 
 interface ChartConfig {
@@ -185,6 +185,7 @@ function startDrawTimer(): void {
 }
 
 function drawChart(config: ChartConfig): void {
+  const pal = chartPalette();
   if (!store) return;
   const canvas = document.getElementById(config.canvasId) as HTMLCanvasElement | null;
   if (!canvas) return;
@@ -246,12 +247,12 @@ function drawChart(config: ChartConfig): void {
   const yMap = (v: number) => PADDING.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
 
   // Grid lines (Y)
-  ctx.strokeStyle = GRID_COLOR;
+  ctx.strokeStyle = pal.grid;
   ctx.lineWidth = 1;
   const ySteps = 5;
   const yStep = (yMax - yMin) / ySteps;
   ctx.font = LABEL_FONT;
-  ctx.fillStyle = LABEL_COLOR;
+  ctx.fillStyle = pal.label;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
 
@@ -353,7 +354,7 @@ function drawChart(config: ChartConfig): void {
 
   // Show zoom/pan indicator if not at defaults
   if (inter && (inter.zoomFactor !== 1.0 || inter.panOffset !== 0)) {
-    ctx.fillStyle = 'rgba(33, 150, 243, 0.3)';
+    ctx.fillStyle = pal.tempFill;
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
@@ -371,7 +372,7 @@ function drawChart(config: ChartConfig): void {
     const hoverT = tMin + ((inter.hoverX - PADDING.left) / plotW) * (tMax - tMin);
 
     // Vertical crosshair line
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.strokeStyle = pal.crosshair;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
@@ -441,8 +442,8 @@ function drawChart(config: ChartConfig): void {
       const boxY = PADDING.top + 4;
 
       // Background
-      ctx.fillStyle = 'rgba(30, 30, 44, 0.92)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillStyle = pal.tooltipBg;
+      ctx.strokeStyle = pal.tooltipBorder;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.roundRect(boxX, boxY, boxW, boxH, 4);
@@ -450,7 +451,7 @@ function drawChart(config: ChartConfig): void {
       ctx.stroke();
 
       // Time header
-      ctx.fillStyle = LABEL_COLOR;
+      ctx.fillStyle = pal.label;
       ctx.font = tooltipFont;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
@@ -466,7 +467,7 @@ function drawChart(config: ChartConfig): void {
         ctx.arc(boxX + tooltipPadding + 4, ty + 6, 3, 0, Math.PI * 2);
         ctx.fill();
         // Text
-        ctx.fillStyle = '#e0e0e8';
+        ctx.fillStyle = pal.tooltipText;
         ctx.fillText(`${line.label}: ${line.value}`, boxX + tooltipPadding + 12, ty);
       }
     }

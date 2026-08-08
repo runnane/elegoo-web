@@ -54,6 +54,7 @@ import {
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
 import { installThumbnailFallback } from './ui/helpers';
+import { initTheme } from './ui/theme';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -680,6 +681,10 @@ $('connect-btn').addEventListener('click', () => {
 // icon. One delegated listener covers every thumbnail, including the ones built as
 // HTML strings (ELEG-42).
 installThumbnailFallback();
+
+// Re-assert the stored theme (the inline script in index.html already set it before
+// paint) and follow the OS while the choice is "auto" (ELEG-34).
+initTheme();
 
 // Auto-connect on page load
 connectToService();

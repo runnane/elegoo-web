@@ -3,12 +3,13 @@
 import type { PrinterState } from '../printer-state';
 import { type LayerTimeEntry, trailingLayerRun } from '../types';
 import { $ } from './helpers';
+import { chartPalette } from './chart-palette';
 
 const PADDING = { top: 10, right: 12, bottom: 28, left: 48 };
-const GRID_COLOR = 'rgba(160, 160, 184, 0.12)';
-const LABEL_COLOR = '#a0a0b8';
+// Colours come from the stylesheet via chartPalette() so the chart follows the theme
+// (ELEG-34). Canvas gets no CSS, so this is the bridge.
 const LABEL_FONT = '10px -apple-system, BlinkMacSystemFont, sans-serif';
-const SERIES_COLOR = '#ab47bc';
+
 const MAX_VISIBLE = 200;
 
 /** One entry of the layer-time series, as the server sends it over `/ws`. */
@@ -103,6 +104,7 @@ export function renderLayerTimeChart(state: PrinterState): void {
 }
 
 function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
+  const pal = chartPalette();
   const layerTimes = state.layerTimes;
 
   const dpr = window.devicePixelRatio || 1;
@@ -122,7 +124,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   // Determine visible range — the current print's last N layers
   const visible = selectVisibleLayers(layerTimes);
   if (visible.length < 2) {
-    ctx.fillStyle = LABEL_COLOR;
+    ctx.fillStyle = pal.label;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -139,10 +141,10 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   const yMap = (dur: number) => PADDING.top + plotH - (dur / yMax) * plotH;
 
   // Y grid
-  ctx.strokeStyle = GRID_COLOR;
+  ctx.strokeStyle = pal.grid;
   ctx.lineWidth = 1;
   ctx.font = LABEL_FONT;
-  ctx.fillStyle = LABEL_COLOR;
+  ctx.fillStyle = pal.label;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
 
@@ -169,7 +171,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
     ctx.moveTo(x, PADDING.top);
     ctx.lineTo(x, PADDING.top + plotH);
     ctx.stroke();
-    ctx.fillStyle = LABEL_COLOR;
+    ctx.fillStyle = pal.label;
     ctx.fillText(`L${layer}`, x, PADDING.top + plotH + 4);
   }
 
@@ -182,7 +184,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   ctx.clip();
 
   // Draw line
-  ctx.strokeStyle = SERIES_COLOR;
+  ctx.strokeStyle = pal.series;
   ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
   ctx.beginPath();
@@ -198,7 +200,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   ctx.stroke();
 
   // Fill area under the curve
-  ctx.fillStyle = 'rgba(171, 71, 188, 0.12)';
+  ctx.fillStyle = pal.seriesFill;
   ctx.beginPath();
   ctx.moveTo(xMap(visible[0].layer), yMap(0));
   for (const lt of visible) {
@@ -210,7 +212,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
 
   // Draw dots on data points (only if not too many)
   if (visible.length <= 80) {
-    ctx.fillStyle = SERIES_COLOR;
+    ctx.fillStyle = pal.series;
     for (const lt of visible) {
       const x = xMap(lt.layer);
       const y = yMap(lt.duration);
@@ -225,7 +227,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   // Current value label at rightmost point. The last point sits on the plot's right
   // edge, so the label only ever fits to its left.
   const last = visible[visible.length - 1];
-  ctx.fillStyle = SERIES_COLOR;
+  ctx.fillStyle = pal.series;
   ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textBaseline = 'middle';
   const lastLabel = `L${last.layer}: ${last.duration.toFixed(1)}s`;
@@ -242,14 +244,14 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   const avgDuration = visible.reduce((s, lt) => s + lt.duration, 0) / visible.length;
   const avgY = yMap(avgDuration);
   ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(171, 71, 188, 0.4)';
+  ctx.strokeStyle = pal.seriesLine;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(PADDING.left, avgY);
   ctx.lineTo(w - PADDING.right, avgY);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = 'rgba(171, 71, 188, 0.5)';
+  ctx.fillStyle = pal.seriesPoint;
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(`avg ${avgDuration.toFixed(1)}s`, w - PADDING.right - 4, avgY - 8);
@@ -275,7 +277,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
       const by = yMap(best.duration);
 
       // Vertical crosshair line
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.strokeStyle = pal.crosshair;
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
@@ -285,7 +287,7 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
       ctx.setLineDash([]);
 
       // Highlight dot
-      ctx.fillStyle = SERIES_COLOR;
+      ctx.fillStyle = pal.series;
       ctx.beginPath();
       ctx.arc(bx, by, 4, 0, Math.PI * 2);
       ctx.fill();
@@ -317,8 +319,8 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
       const boxY = Math.max(PADDING.top, by - boxH / 2);
 
       // Background
-      ctx.fillStyle = 'rgba(30, 30, 44, 0.92)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillStyle = pal.tooltipBg;
+      ctx.strokeStyle = pal.tooltipBorder;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.roundRect(boxX, boxY, boxW, boxH, 4);
@@ -328,11 +330,11 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
       // Text
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = LABEL_COLOR;
+      ctx.fillStyle = pal.label;
       ctx.fillText(line1, boxX + tooltipPadding, boxY + tooltipPadding);
-      ctx.fillStyle = '#e0e0e8';
+      ctx.fillStyle = pal.tooltipText;
       ctx.fillText(line2, boxX + tooltipPadding, boxY + tooltipPadding + lineHeight);
-      ctx.fillStyle = diffFromAvg > 0 ? '#ef5350' : '#66bb6a';
+      ctx.fillStyle = diffFromAvg > 0 ? pal.aboveAvg : pal.belowAvg;
       ctx.fillText(line3, boxX + tooltipPadding, boxY + tooltipPadding + lineHeight * 2);
     }
   }
