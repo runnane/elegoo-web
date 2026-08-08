@@ -104,6 +104,49 @@ and `${DATA_DIR}/state.json` is a real snapshot) rather than hand-writing an ide
 message — the CC2's actual payloads are the thing worth encoding. Strip anything
 identifying before committing a fixture.
 
+## Settling a protocol claim, read-only
+
+Several ELEG issues have been filed against method numbers that turned out not to
+exist, so it is worth writing down how to check one **without touching the machine**.
+
+**`METHOD_NAMES` in `src/ui/log-methods.ts` is a display label, not a citation.** It is
+the most readable list of methods in the repo, which is exactly why wrong numbers got
+copied out of it into issues — ELEG-38 asked for a history delete on 1049 (really
+`UpdateToken`, an auth-token write), ELEG-30 for AI detection on 2010/2011 (neither
+exists), ELEG-32 for OTA on 1064 (really 1039). It also contradicted itself, listing
+both 1038 and 1049 as history delete. ELEG-57 audits it.
+
+The citable sources are `data/CC2_PROTOCOL_REFERENCE.md` (transcribed from the official
+app, with the full method table, the `hh` error-code enum and per-method payloads) and
+`data/CC2-OFFICIAL-APP-PATTERNS.md`. When those two agree, that is usually enough. When
+they disagree with the running code — and they do, for 1062 and the 2006/2007 pair —
+neither wins on authority, because the reference may describe a different firmware.
+
+Then a **`Get…` method can simply be asked**, which is a read and therefore allowed:
+
+```bash
+# From the repo root, so `ws` resolves. Sends one Get and prints the reply.
+node -e "
+import('ws').then(({WebSocket}) => {
+  const ws = new WebSocket('ws://localhost:8088/ws');
+  ws.on('open', () => setTimeout(() =>
+    ws.send(JSON.stringify({type:'command', method:1062, params:{}})), 500));
+  ws.on('message', (r) => {
+    const m = JSON.parse(r.toString());
+    if (m.type === 'response' && m.method === 1062) { console.log(JSON.stringify(m.data)); ws.close(); }
+  });
+  setTimeout(() => process.exit(0), 8000);
+});
+"
+```
+
+That is how 1062 was shown to return `{"error_code": 1100}` on this firmware — an
+undocumented code, and the reason `systemInfo` has always been `null` (ELEG-55).
+
+**Only `Get…` methods.** A `Set…` is a write to a physical machine and must never be
+fired to find out what it does; resolve those from a vendor-app capture instead
+(`POST /api/debug/capture` records passively — see ELEG-56 for the shape).
+
 ## Do not test against the printer
 
 This is the repo's hard boundary and it is restated here because "just try it" is the
