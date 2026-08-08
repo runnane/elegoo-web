@@ -7,6 +7,7 @@ import mqtt from 'mqtt';
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { getLogger } from './logger.js';
+import { type MqttPhase, mqttPhase } from '../types.js';
 
 const log = getLogger('MQTT');
 
@@ -33,7 +34,17 @@ export class MqttBridge extends EventEmitter {
   private _connected = false;
   private _brokerConnected = false;
   private _registerAttempts = 0;
+  private _rejected = false;
   private heartbeatMissed = 0;
+  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private sawPrinterMessage = false;
+
+  /**
+   * How long to wait after the broker connects before saying out loud that the printer
+   * has not spoken. Long enough not to fire during a normal startup handshake, short
+   * enough to beat a human reaching for the journal.
+   */
+  private static readonly SILENCE_WARN_MS = 30_000;
 
   /**
    * @param initialSn Serial number already known from config or the cache. When set,
@@ -66,6 +77,23 @@ export class MqttBridge extends EventEmitter {
   }
   get registerAttempts(): number {
     return this._registerAttempts;
+  }
+  /** True once the printer has answered `register_response` with `code: 3`. */
+  get registrationRejected(): boolean {
+    return this._rejected;
+  }
+  /**
+   * The five-state phase, which is what a human should be shown. `isConnected` and
+   * `brokerConnected` are kept because the coarse `broker_only` contract on `/api/health`
+   * and `/ws` still reports them — see ELEG-59.
+   */
+  get phase(): MqttPhase {
+    return mqttPhase({
+      brokerConnected: this._brokerConnected,
+      registered: this._connected,
+      snKnown: this.sn !== '',
+      rejected: this._rejected,
+    });
   }
   get serialNumber(): string {
     return this.sn;
@@ -103,6 +131,7 @@ export class MqttBridge extends EventEmitter {
         log.info('No known SN — waiting for the printer to publish. This can hang if the');
         log.info('printer is idle and nothing is registered; set PRINTER_SN to skip it.');
       }
+      this.startSilenceWatch();
     });
 
     this.client.on('message', (topic: string, payload: Buffer) => {
@@ -117,9 +146,15 @@ export class MqttBridge extends EventEmitter {
       this._connected = false;
       this._brokerConnected = false;
       this._registerAttempts = 0;
+      // Cleared with the connection: a refusal describes one session's client count, and
+      // carrying it across a reconnect would report `rejected` for a printer that has
+      // since freed a slot.
+      this._rejected = false;
+      this.sawPrinterMessage = false;
       this.stopHeartbeat();
       this.stopRegisterRetry();
       this.stopSlowRegisterRetry();
+      this.stopSilenceWatch();
       this.emit('disconnected');
     });
   }
@@ -136,6 +171,9 @@ export class MqttBridge extends EventEmitter {
 
     // Any message from the printer resets the heartbeat miss counter
     this.heartbeatMissed = 0;
+    // ...and proves the printer is not the silent one, which is what separates
+    // `awaiting_sn` from a genuine registration problem (ELEG-59).
+    this.sawPrinterMessage = true;
 
     // Discover SN from any elegoo/<sn>/... topic
     if (!this.sn && topic.startsWith('elegoo/')) {
@@ -154,8 +192,10 @@ export class MqttBridge extends EventEmitter {
         log.info('Registered successfully');
         this._connected = true;
         this._registerAttempts = 0;
+        this._rejected = false;
         this.stopRegisterRetry();
         this.stopSlowRegisterRetry();
+        this.stopSilenceWatch();
         this.subscribeAll();
         this.startHeartbeat();
         // Request initial data
@@ -166,6 +206,7 @@ export class MqttBridge extends EventEmitter {
         this.emit('connected', this.sn);
       } else if ((data.code as number) === 3) {
         log.warn('Registration rejected: too many clients (max 2). Will retry every 30s...');
+        this._rejected = true;
         this.stopRegisterRetry();
         this.startSlowRegisterRetry();
       }
@@ -206,6 +247,47 @@ export class MqttBridge extends EventEmitter {
     if (this.registerTimer) {
       clearInterval(this.registerTimer);
       this.registerTimer = null;
+    }
+  }
+
+  /**
+   * Say out loud that the printer has not spoken (ELEG-59).
+   *
+   * The failure this exists for produces **no log line at all**: the broker accepts the
+   * connection, `elegoo/#` is subscribed, and then nothing ever arrives — so the most
+   * informative thing in the journal is the absence of a line, which is indistinguishable
+   * from "still trying". One timer turns that silence into a sentence.
+   */
+  private startSilenceWatch(): void {
+    this.stopSilenceWatch();
+    this.silenceTimer = setTimeout(() => {
+      if (this._connected || this.sawPrinterMessage) return;
+      const secs = Math.round(MqttBridge.SILENCE_WARN_MS / 1000);
+      log.warn(
+        `Broker connected but the printer has been silent for ${secs}s — no message on ` +
+          'elegoo/# has arrived.',
+      );
+      if (!this.sn) {
+        log.warn(
+          "No SN discovered, so registration has NOT been attempted. The printer's " +
+            'control application is probably not running; a power cycle usually fixes it. ' +
+            'Set PRINTER_SN to register without waiting to overhear the printer.',
+        );
+      } else {
+        log.warn(
+          `Registering with SN ${this.sn} (${this._registerAttempts} attempts) but the ` +
+            'printer is not answering.',
+        );
+      }
+    }, MqttBridge.SILENCE_WARN_MS);
+    // Never hold the process open just to complain about silence.
+    this.silenceTimer.unref?.();
+  }
+
+  private stopSilenceWatch(): void {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
     }
   }
 

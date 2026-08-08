@@ -30,7 +30,13 @@ import { generateReportPDF } from './print-report-pdf.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
 import { getLogger } from './logger.js';
-import { STATUS_NAMES, SUB_STATUS_NAMES, SPEED_MODE_NAMES, EXCEPTION_NAMES } from '../types.js';
+import {
+  STATUS_NAMES,
+  SUB_STATUS_NAMES,
+  SPEED_MODE_NAMES,
+  EXCEPTION_NAMES,
+  mqttPhaseMessage,
+} from '../types.js';
 import type { FanInfo } from '../types.js';
 
 const log = getLogger('REST');
@@ -744,6 +750,15 @@ export function createRestRouter(
             : _bridge?.brokerConnected
               ? 'broker_only'
               : 'disconnected',
+          // `mqtt` above stays as it was for existing consumers. These three are what
+          // make a `broker_only` diagnosable without a journal read (ELEG-59):
+          // `mqttPhase` separates "printer never spoke" from "registration refused",
+          // `mqttRegisterAttempts` separates 0 (never started) from 12 (trying and
+          // failing), and `mqttMessage` is the sentence to show a human.
+          mqttPhase: _bridge?.phase ?? 'disconnected',
+          mqttRegisterAttempts: _bridge?.registerAttempts ?? 0,
+          mqttMessage: mqttPhaseMessage(_bridge?.phase ?? 'disconnected'),
+          printerSn: _bridge?.serialNumber || null,
           clients: 0, // filled in by ws-transport if needed
           // Which commit is serving this. All-null on an unstamped deploy or a dev
           // run; cached, because this endpoint is polled.

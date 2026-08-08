@@ -9,6 +9,9 @@ import {
   BUSY_ERROR_CODES,
   REJECTED_ERROR_CODES,
   powerLossState,
+  mqttPhase,
+  mqttPhaseMessage,
+  mqttBannerHeadline,
 } from '../types';
 
 describe('detectZone', () => {
@@ -145,5 +148,80 @@ describe('powerLossState', () => {
     // 2401/2402 are an ordinary resume and never accompany status 15.
     expect(powerLossState(2, 2401)).toBe('none');
     expect(powerLossState(15, 2401)).toBe('awaiting_decision');
+  });
+});
+
+describe('mqttPhase — telling the two broker_only cases apart (ELEG-59)', () => {
+  const base = { brokerConnected: true, registered: false, snKnown: false, rejected: false };
+
+  it('reports disconnected whenever the broker is down, whatever else is set', () => {
+    // Guards against a stale flag outliving the connection it described.
+    expect(mqttPhase({ ...base, brokerConnected: false })).toBe('disconnected');
+    expect(mqttPhase({ ...base, brokerConnected: false, snKnown: true })).toBe('disconnected');
+    expect(mqttPhase({ ...base, brokerConnected: false, rejected: true })).toBe('disconnected');
+    expect(mqttPhase({ ...base, brokerConnected: false, registered: true })).toBe('disconnected');
+  });
+
+  it('separates "printer never spoke" from "registering" by whether an SN is known', () => {
+    // THE distinction this exists for. Both were `broker_only`, and the UI said
+    // `registering…` for both — pointing the diagnosis at the service when the fault was
+    // a printer whose control application had stopped.
+    expect(mqttPhase({ ...base, snKnown: false })).toBe('awaiting_sn');
+    expect(mqttPhase({ ...base, snKnown: true })).toBe('registering');
+  });
+
+  it('reports rejected in preference to registering, because a refusal is more specific', () => {
+    expect(mqttPhase({ ...base, snKnown: true, rejected: true })).toBe('rejected');
+  });
+
+  it('lets a successful registration win over a stale rejection', () => {
+    // A refusal followed by a slow-retry that succeeded must read `connected`, not
+    // `rejected` — otherwise a working service reports a fault forever.
+    expect(mqttPhase({ ...base, snKnown: true, rejected: true, registered: true })).toBe(
+      'connected',
+    );
+  });
+});
+
+describe('mqttBannerHeadline — the warning that could never fire (ELEG-59)', () => {
+  it('warns immediately when the printer never spoke, with zero attempts', () => {
+    // The regression this pins. The old rule was `broker_only && attempts >= 3`, but in
+    // this phase registration is never attempted, so the counter stays 0 for ever and the
+    // banner was structurally unreachable for the one case that most needed it.
+    expect(mqttBannerHeadline('awaiting_sn', 0)).toBe('Printer not responding');
+  });
+
+  it('warns immediately on a refusal, which does not improve by waiting', () => {
+    expect(mqttBannerHeadline('rejected', 0)).toBe('Registration refused');
+  });
+
+  it('stays quiet while registration is merely young, then speaks up', () => {
+    // A few seconds of registering is normal startup and must not shout.
+    expect(mqttBannerHeadline('registering', 0)).toBeNull();
+    expect(mqttBannerHeadline('registering', 2)).toBeNull();
+    expect(mqttBannerHeadline('registering', 3)).toBe('Printer not answering');
+    expect(mqttBannerHeadline('registering', 12)).toBe('Printer not answering');
+  });
+
+  it('never warns about the two phases that are not problems', () => {
+    for (const attempts of [0, 3, 99]) {
+      expect(mqttBannerHeadline('connected', attempts)).toBeNull();
+      expect(mqttBannerHeadline('disconnected', attempts)).toBeNull();
+    }
+  });
+});
+
+describe('mqttPhaseMessage', () => {
+  it('gives every phase a distinct, non-empty sentence', () => {
+    const phases = ['disconnected', 'awaiting_sn', 'registering', 'rejected', 'connected'] as const;
+    const seen = new Set(phases.map((p) => mqttPhaseMessage(p)));
+    expect(seen.size).toBe(phases.length);
+    for (const p of phases) expect(mqttPhaseMessage(p).length).toBeGreaterThan(0);
+  });
+
+  it('tells the operator what to actually do in the two actionable phases', () => {
+    // These two sentences are the entire content of the 2026-08-08 incident.
+    expect(mqttPhaseMessage('awaiting_sn')).toMatch(/power cycle/i);
+    expect(mqttPhaseMessage('rejected')).toMatch(/two clients/i);
   });
 });

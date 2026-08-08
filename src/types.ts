@@ -274,6 +274,100 @@ export function isFilamentChangeSubStatus(subStatus: number): boolean {
   return false;
 }
 
+// ─── MQTT connection phase ───────────────────────────────────────────
+
+/**
+ * How far the bridge has got towards being registered with the printer.
+ *
+ * This exists because `broker_only` covered two completely different situations and the
+ * UI rendered both as `registering…` (ELEG-59). During the 2026-08-08 incident that
+ * distinction cost a journal read plus a packet-level probe:
+ *
+ * - **`awaiting_sn`** — the broker accepted us but the printer has never spoken, so no
+ *   SN was ever learned and **registration was never attempted**. `registerAttempts`
+ *   stays 0 forever. This is a *printer-side* problem: the machine's Linux side is up
+ *   (the broker answered) but its control application is not running. Nothing in the
+ *   journal marks it, because the symptom is the *absence* of a line.
+ * - **`registering`** — an SN is known and registration is genuinely in flight or being
+ *   retried. `registerAttempts` climbs.
+ * - **`rejected`** — the printer answered `register_response` with `code: 3`, i.e. it
+ *   already has its maximum of two clients. Retrying every 30s will not help until one
+ *   of them goes away.
+ *
+ * Reading `registering…` when the truth is `awaiting_sn` points the diagnosis at the
+ * service, which is the opposite of where the fault is — in the incident the service was
+ * behaving perfectly and the printer's firmware had hung.
+ */
+export type MqttPhase = 'disconnected' | 'awaiting_sn' | 'registering' | 'rejected' | 'connected';
+
+export interface MqttPhaseInput {
+  /** TCP+MQTT session with the broker is up. */
+  brokerConnected: boolean;
+  /** `register_response` came back `ok` — the only state in which commands work. */
+  registered: boolean;
+  /** An SN is known, from discovery, config or the cache. Registration needs one. */
+  snKnown: boolean;
+  /** The printer refused registration (`code: 3`, too many clients). */
+  rejected: boolean;
+}
+
+/**
+ * Pure classifier, in the shape of `powerLossState` above.
+ *
+ * Order matters: `registered` wins over everything (a stale `rejected` flag from an
+ * earlier attempt must not mask a connection that has since succeeded), and `rejected`
+ * outranks `registering` because a refusal is a more specific fact than "still trying".
+ */
+export function mqttPhase(input: MqttPhaseInput): MqttPhase {
+  if (!input.brokerConnected) return 'disconnected';
+  if (input.registered) return 'connected';
+  if (input.rejected) return 'rejected';
+  return input.snKnown ? 'registering' : 'awaiting_sn';
+}
+
+/**
+ * Whether to shout about the current phase, and what to call it.
+ *
+ * `null` means "no banner" — the two healthy-ish phases plus a registration that has only
+ * just started. The threshold applies **only** to `registering`, because that is the one
+ * phase where waiting a few seconds is normal. `awaiting_sn` and `rejected` warn
+ * immediately: neither improves by itself, and the old rule (`broker_only` **and**
+ * `attempts >= 3`) could never fire for `awaiting_sn` at all, since registration is never
+ * attempted there and the counter stays 0 forever. That was the bug (ELEG-59).
+ */
+export function mqttBannerHeadline(
+  phase: MqttPhase,
+  registerAttempts: number,
+  attemptThreshold = 3,
+): string | null {
+  switch (phase) {
+    case 'awaiting_sn':
+      return 'Printer not responding';
+    case 'rejected':
+      return 'Registration refused';
+    case 'registering':
+      return registerAttempts >= attemptThreshold ? 'Printer not answering' : null;
+    default:
+      return null;
+  }
+}
+
+/** One sentence a human can act on. The UI shows this; the incident *was* this text. */
+export function mqttPhaseMessage(phase: MqttPhase): string {
+  switch (phase) {
+    case 'connected':
+      return 'Registered with the printer.';
+    case 'disconnected':
+      return 'No MQTT connection to the printer.';
+    case 'awaiting_sn':
+      return 'The broker is reachable but the printer is not responding. Its control application may have stopped — it may need a power cycle.';
+    case 'rejected':
+      return 'The printer refused registration: it already has the maximum of two clients. Close another client (the vendor app, or a second copy of this service) and it will retry.';
+    case 'registering':
+      return 'Registering with the printer.';
+  }
+}
+
 // ─── Power loss recovery ─────────────────────────────────────────────
 
 /** Machine status the CC2 reports after a power loss with a print in progress. */
