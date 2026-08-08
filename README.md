@@ -62,7 +62,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8088:8088 \
   -p 7125:7125 \
-  -e PRINTER_IP=172.20.100.236 \
+  -e PRINTER_IP=192.168.1.150 \
   -v elegoo-data:/app/data \
   ghcr.io/runnane/elegoo-web:latest
 ```
@@ -78,7 +78,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8088:8088 \
   -p 7125:7125 \
-  -e PRINTER_IP=172.20.100.236 \
+  -e PRINTER_IP=192.168.1.150 \
   -v ./elegoo-data/reports:/app/data/reports \
   -v ./elegoo-data/gcode-cache:/app/data/gcode-cache \
   -v ./elegoo-data/logs:/app/data/logs \
@@ -115,7 +115,7 @@ status dropdown, which is the first thing to quote when reporting a problem.
 
 ```bash
 docker build -t ghcr.io/runnane/elegoo-web:local .
-docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/runnane/elegoo-web:local
+docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=192.168.1.150 ghcr.io/runnane/elegoo-web:local
 ```
 
 A locally built image reports its version as `unknown`, which is expected: the stamp is
@@ -136,7 +136,7 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PRINTER_IP` | `172.20.100.236` | Printer IP address (required) |
+| `PRINTER_IP` | `192.168.1.150` | Printer IP address (required) |
 | `PRINTER_PASSWORD` | `123456` | Printer access code |
 | `PRINTER_SN` | — (discovered) | Printer serial number, e.g. `F01U3UD3798YT8K`. Normally discovered automatically and then cached in `<DATA_DIR>/printer-sn.json`, so this is rarely needed. Set it if a **first** start hangs at "registering": the printer only publishes while a client is registered, so a service that has never learned the serial has nothing to overhear |
 | `SERVICE_PORT` | `8088` | Web UI / API / WebSocket port |
@@ -150,10 +150,10 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 | `PROGRESS_INTERVAL` | `25` | Notify every N% progress |
 | `DATA_DIR` | `./data` | Data directory for state, reports, logs |
 | `AI_ENABLED` | `false` | Enable AI print monitoring |
-| `AI_VLM_ENABLED` | `true` | Enable VLM analysis (when AI enabled) |
+| `AI_VLM_ENABLED` | `false` | Enable VLM analysis. Opt-in: `AI_ENABLED` alone does **not** turn this on |
 | `AI_VLM_PROVIDER` | `ollama` | VLM provider: `ollama` or `openai` |
 | `AI_VLM_API_KEY` | — | API key for OpenAI VLM provider |
-| `AI_VLM_BASE_URL` | `http://172.20.100.9:3000` | VLM API endpoint |
+| `AI_VLM_BASE_URL` | `http://localhost:11434` | VLM API endpoint (ollama's default port) |
 | `AI_VLM_MODEL` | `llava` | VLM model name |
 | `AI_LOCAL_ENABLED` | `true` | Enable local SigLIP zero-shot classification |
 | `AI_LOCAL_MODEL` | `Xenova/siglip-base-patch16-224` | Local classification model |
@@ -336,7 +336,7 @@ Enable with `AI_ENABLED=true`. Three detection backends run in parallel:
 
 **Motion-based stall detection**: Computes frame-to-frame pixel diff (160×120 grayscale via sharp). If motion drops below 0.5% for 3 consecutive frames while printing, injects a `print_stalled` issue.
 
-**VLM analysis** (`AI_VLM_ENABLED`): Sends camera snapshots to an external vision-language model (Ollama or OpenAI-compatible API). Can detect issues SigLIP cannot: `under_extrusion`, `nozzle_clog`, `print_stalled`.
+**VLM analysis** (`AI_VLM_ENABLED`, off by default): Sends camera snapshots to an external vision-language model (Ollama or OpenAI-compatible API). Can detect issues SigLIP cannot: `under_extrusion`, `nozzle_clog`, `print_stalled`.
 
 **Zone-aware filtering**: Analysis only runs when `sub_status === 2075` (Printing) AND `zones.current === 'print_area'`. Skipped during heating, filament changes, and when the toolhead is in the cutter/purge area.
 
