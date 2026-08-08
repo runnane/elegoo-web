@@ -1,6 +1,6 @@
 /** AI Monitor panel — shows live analysis results and alert history */
 
-import { $, escapeHtml } from './helpers';
+import { $, escapeHtml, escapeAttr } from './helpers';
 import { toast } from './toast';
 
 interface AIIssue {
@@ -157,7 +157,7 @@ function renderAlertItem(a: AIAlert): string {
   return `
     <div class="ai-alert-item ai-alert-${a.status}">
       <span>${statusIcon(a.status)}</span>
-      <span class="ai-alert-desc">${escapeHtml(a.description)}</span>
+      <span class="ai-alert-desc" title="${escapeAttr(a.description)}">${escapeHtml(a.description)}</span>
       <span class="ai-alert-issues">${issues}</span>
       <span class="ai-time">${timeAgo(a.timestamp)}</span>
     </div>
@@ -203,7 +203,7 @@ export function renderAIPanel(): void {
             return `<div class="ai-history-row ai-status-${a.status}">
         <span>${statusIcon(a.status)}</span>
         <span class="ai-source">${a.source}</span>
-        <span class="ai-hist-desc">${escapeHtml(a.description.slice(0, 80))}</span>
+        <span class="ai-hist-desc" title="${escapeAttr(a.description)}">${escapeHtml(a.description)}</span>
         <span class="ai-time">${t}</span>
       </div>`;
           })

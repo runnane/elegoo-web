@@ -157,7 +157,7 @@ export function renderEventLog(): void {
       return `<div class="event-log-row ${meta.cls}">
       <span class="event-log-icon">${meta.icon}</span>
       <span class="event-log-time">${fmtTime(entry.ts)}</span>
-      <span class="event-log-desc">${desc}</span>
+      <span class="event-log-desc" title="${desc}">${desc}</span>
     </div>`;
     })
     .join('');

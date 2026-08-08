@@ -481,12 +481,6 @@ interface AILabelConfig {
   group: string;
 }
 
-/** Shorten a CLIP label for display */
-function _shortLabel(label: string): string {
-  if (label.length <= 60) return label;
-  return label.slice(0, 57) + '...';
-}
-
 async function loadAILabels(): Promise<void> {
   const container = $('settings-ai-labels');
   if (!container) return;

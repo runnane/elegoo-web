@@ -51,7 +51,7 @@ export function renderTimelapse(state: PrinterState): void {
       <div class="file-item timelapse-item" data-filename="${escapeAttr(name)}">
         <div class="file-icon">🎬</div>
         <div class="file-details">
-          <div class="file-name">${escapeHtml(name)}</div>
+          <div class="file-name" title="${escapeAttr(name)}">${escapeHtml(name)}</div>
           <div class="file-size">${meta}${isExported ? ' · ✅ Ready' : ' · ⏳ Needs export'}</div>
         </div>
         ${actionBtn}

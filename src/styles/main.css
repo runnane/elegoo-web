@@ -1,5 +1,28 @@
 /* Elegoo Web — Modern dark theme */
 
+/*
+ * TRUNCATION RULE (ELEG-43) — truncate in CSS, never in TypeScript.
+ *
+ * Long filenames and labels are shortened with `overflow: hidden` +
+ * `text-overflow: ellipsis` here, and the element carries the full string in a `title`
+ * attribute.
+ *
+ * Slicing the string in TypeScript before rendering is the thing to avoid. It cuts at a
+ * character count with no idea of the rendered width, so it shortens text that would
+ * have fit and leaves text that does not; and it removes the full value from the DOM
+ * entirely, so there is no tooltip and nothing to select or copy. It has already caused
+ * a real bug — a filename cut mid-string across the camera overlay.
+ *
+ * The one place JS slicing is correct is the canvas charts (`layer-chart.ts`,
+ * `charts.ts`, `gcode-preview.ts`), where CSS does not apply and `ctx.measureText` is
+ * the only way to measure.
+ *
+ * One deliberate exception outside canvas: `compactPayload` in `ui/structured-log.ts`
+ * caps a raw MQTT payload at 200 characters. That is a DOM-size guard, not a layout
+ * decision — a megabyte payload across hundreds of log rows is a performance problem no
+ * stylesheet can solve — and the row expands to show the payload in full.
+ */
+
 :root {
   --bg-primary: #0f1117;
   --bg-secondary: #1a1b26;
