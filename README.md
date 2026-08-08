@@ -121,6 +121,17 @@ docker run -d -p 8088:8088 -p 7125:7125 -e PRINTER_IP=172.20.100.236 ghcr.io/run
 A locally built image reports its version as `unknown`, which is expected: the stamp is
 supplied by the publish workflow, not by `docker build`.
 
+### If you enable local AI (`AI_LOCAL_ENABLED`)
+
+Mount a volume at **`/app/.cache`** as well. The CLIP model cache lives there, not under
+`/app/data`, because transformers.js resolves its cache path relative to the working
+directory. Without that volume the model is re-downloaded every time the container is
+recreated — about 200 MB and roughly 95 seconds here, and a good deal slower on a Pi.
+
+```bash
+-v elegoo-model-cache:/app/.cache
+```
+
 ### Environment Variables
 
 | Variable | Default | Description |

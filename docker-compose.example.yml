@@ -52,5 +52,14 @@ services:
       # Option C: Single host path for everything (easy to access data)
       - ./elegoo-data:/app/data
 
+      # The local CLIP model cache. NOT under /app/data — transformers.js resolves
+      # `.cache/models` relative to the working directory, so it lands at /app/.cache.
+      #
+      # Keep this if AI_LOCAL_ENABLED is true, or the model is re-downloaded from scratch
+      # every time the container is recreated: ~200 MB and about 95 seconds on a decent
+      # connection, considerably worse on a Pi. Measured, not estimated (ELEG-69).
+      # Harmless to leave mounted when local AI is off — it just stays empty.
+      - ./elegoo-model-cache:/app/.cache
+
 # volumes:
 #   elegoo-data:
