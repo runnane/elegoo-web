@@ -1,102 +1,26 @@
 /** Settings panel — persistent card layout + Telegram config */
 
 import { $, fetchTimeout } from './helpers';
+import { type CardLayout, CARD_NAMES, defaultCardLayout, normaliseCardLayout } from './card-layout';
 import { toast } from './toast';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
 
-// ---- Card layout settings (localStorage) ----
-
-interface CardLayout {
-  sidebar: string[];
-  main: string[];
-  hidden: string[];
-  collapsed: string[];
-}
-
-/** Default sidebar cards (always-visible essentials) */
-const DEFAULT_SIDEBAR = [
-  'temps-card',
-  'canvas-card',
-  'fans-card',
-  'toolhead-card',
-  'speed-flow-card',
-];
-
-/** Default main area cards (detail/reference) */
-const DEFAULT_MAIN = [
-  'camera-card',
-  'gcode-preview-card',
-  'files-card',
-  'print-history-card',
-  'print-reports-card',
-  'timelapse-card',
-  'ai-card',
-  'event-log-card',
-  'log-card',
-];
-
-/** All known card IDs */
-const ALL_CARD_IDS = [...DEFAULT_SIDEBAR, ...DEFAULT_MAIN];
-
-/** Human-readable names for cards */
-const CARD_NAMES: Record<string, string> = {
-  'temps-card': '🌡️ Temperatures',
-  'canvas-card': '🎨 Canvas / AMS',
-  'camera-card': '📷 Camera',
-  'ai-card': '🤖 AI Monitor',
-  'event-log-card': '📜 Event Log',
-  'gcode-preview-card': '📐 Layer Preview',
-  'toolhead-card': '🎯 Toolhead',
-  'fans-card': '🌀 Fans',
-  'speed-flow-card': '⚡ Speed & Flow',
-  'files-card': '📁 Files',
-  'print-history-card': '📜 Print History',
-  'print-reports-card': '📊 Print Reports',
-  'timelapse-card': '🎬 Timelapse',
-  'log-card': '📋 MQTT Log',
-};
-
 const STORAGE_KEY = 'elegoo-web-card-layout';
+
+// ---- Card layout settings (localStorage) ----
+//
+// What the layout *is* lives in `card-layout.ts`, free of DOM and storage so it can be
+// unit-tested (ELEG-44). This half owns persistence and the DOM.
 
 function loadCardLayout(): CardLayout {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Migrate from old format { order: string[], hidden: string[] }
-      if (Array.isArray(parsed.order)) {
-        return migrateOldLayout(parsed);
-      }
-      return {
-        sidebar: Array.isArray(parsed.sidebar) ? parsed.sidebar : [...DEFAULT_SIDEBAR],
-        main: Array.isArray(parsed.main) ? parsed.main : [...DEFAULT_MAIN],
-        hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
-        collapsed: Array.isArray(parsed.collapsed) ? parsed.collapsed : [],
-      };
-    }
+    if (raw) return normaliseCardLayout(JSON.parse(raw));
   } catch {
-    /* ignore */
+    /* unreadable or malformed — fall through to the defaults */
   }
-  return { sidebar: [...DEFAULT_SIDEBAR], main: [...DEFAULT_MAIN], hidden: [], collapsed: [] };
-}
-
-/** Migrate from old single-list layout to sidebar+main format */
-function migrateOldLayout(old: { order: string[]; hidden: string[] }): CardLayout {
-  const sidebar: string[] = [];
-  const main: string[] = [];
-  for (const id of old.order) {
-    if (DEFAULT_SIDEBAR.includes(id)) sidebar.push(id);
-    else main.push(id);
-  }
-  // Add any cards missing from old layout
-  for (const id of DEFAULT_SIDEBAR) {
-    if (!sidebar.includes(id)) sidebar.push(id);
-  }
-  for (const id of DEFAULT_MAIN) {
-    if (!main.includes(id)) main.push(id);
-  }
-  return { sidebar, main, hidden: old.hidden || [], collapsed: [] };
+  return defaultCardLayout();
 }
 
 function saveCardLayout(layout: CardLayout): void {
@@ -124,16 +48,9 @@ export function applyCardLayout(): void {
   const main = document.getElementById('dashboard-main');
   if (!sidebar || !main) return;
 
-  // Ensure all known card IDs exist in either sidebar or main
-  for (const id of ALL_CARD_IDS) {
-    if (!currentLayout.sidebar.includes(id) && !currentLayout.main.includes(id)) {
-      if (DEFAULT_SIDEBAR.includes(id)) {
-        currentLayout.sidebar.push(id);
-      } else {
-        currentLayout.main.push(id);
-      }
-    }
-  }
+  // Backfilling a newly added card used to happen here, on the in-memory copy only —
+  // so the settings panel, which re-reads from storage, never saw it. It is part of
+  // `normaliseCardLayout` now, which both paths go through (ELEG-44).
 
   // Move cards into sidebar in order
   for (const id of currentLayout.sidebar) {
@@ -378,12 +295,20 @@ function buildSettingsHTML(content: HTMLElement): void {
 
   // Reset button
   content.querySelector('#settings-reset-layout')?.addEventListener('click', () => {
-    currentLayout = {
-      sidebar: [...DEFAULT_SIDEBAR],
-      main: [...DEFAULT_MAIN],
-      hidden: [],
-      collapsed: [],
-    };
+    // Confirmed because it discards arranging work and cannot be undone. Scoped to the
+    // layout key alone: chart resolution, log filters and camera selection live in a
+    // separate store (`ui-settings.ts`) and are untouched — which is the whole reason
+    // to have this rather than telling people to clear site data (ELEG-44).
+    if (
+      !confirm(
+        'Reset the dashboard layout to its default?\n\n' +
+          'Card order, panel assignment, and hidden and collapsed cards are all restored. ' +
+          'Other settings — chart resolution, log filters, camera selection — are kept.',
+      )
+    ) {
+      return;
+    }
+    currentLayout = defaultCardLayout();
     saveCardLayout(currentLayout);
     applyCardLayout();
     settingsRendered = false;
