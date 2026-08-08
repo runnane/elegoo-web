@@ -466,6 +466,9 @@
             <h3>📜 Print History</h3>
             <button id="btn-history-refresh" class="btn btn-sm btn-ghost" title="Refresh print history">⟳ Refresh</button>
           </div>
+          <!-- Sibling of the list (ELEG-50), for the same reason as Files: the entries
+               are replaced wholesale whenever a 1036 response lands. -->
+          <div id="print-history-controls"></div>
           <div id="print-history-entries" class="print-history-entries">
             <div class="file-empty">Click refresh to load history</div>
           </div>

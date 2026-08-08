@@ -152,6 +152,34 @@ export function normaliseSortState(
   return { key, dir };
 }
 
+/**
+ * Treat 0 as "no value" (ELEG-50).
+ *
+ * The printer sends `0` for a timestamp, size or duration it did not record, and 0 is a
+ * perfectly good number — sorted as one it means 1970, which puts every unrecorded row
+ * at the top of "newest first". Mapping it to `undefined` hands it to the missing-last
+ * rule instead, where it belongs. Also catches NaN, which `Number()` on a bad field
+ * produces and which silently poisons a comparator.
+ */
+export function nonZero(value: number | undefined): number | undefined {
+  return value === undefined || value === 0 || Number.isNaN(value) ? undefined : value;
+}
+
+/**
+ * The seconds between two epoch-second stamps, or `undefined` when either is missing or
+ * the pair does not describe a finished job (a print still running has no end time, and
+ * an end before its start is corrupt rather than negative-length).
+ */
+export function spanSeconds(
+  begin: number | undefined,
+  end: number | undefined,
+): number | undefined {
+  const from = nonZero(begin);
+  const to = nonZero(end);
+  if (from === undefined || to === undefined) return undefined;
+  return to > from ? to - from : undefined;
+}
+
 /** The arrow shown on the active column's button. */
 export function directionIndicator(dir: SortDirection): string {
   return dir === 'asc' ? '↑' : '↓';
