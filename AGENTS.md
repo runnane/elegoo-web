@@ -101,6 +101,22 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   (There used to be a third, `tsconfig.bot.json` — a byte-identical copy of
   `tsconfig.server.json` that no script ever referenced. It went with the dead bot in
   ELEG-23.)
+- **Everything the service writes goes under `config.dataDir`, via `data-paths.ts`.**
+  Never `process.cwd()`, never a relative `join('data', …)`. The gcode cache and the
+  debug-capture endpoints did exactly that until ELEG-70, and it survived unnoticed for
+  the life of the repo **because the default makes the two coincide**: `DATA_DIR`
+  defaults to `./data`, so `$CWD/data` is the same directory on metal
+  (`WorkingDirectory=/opt/elegooweb`) and in the container (`WORKDIR /app`). It only
+  diverges for someone who sets `DATA_DIR` elsewhere — which `README.md` and
+  `docker-compose.example.yml` document as supported — and then the writes land in a
+  directory nobody mounted or backs up.
+
+  That is a shape worth recognising on its own: **a hardcoded value that happens to equal
+  a default is untested by every environment you have.** Grep for `process.cwd()` before
+  adding a path, and if a helper needs the directory but has no `config` to hand, add a
+  getter to `src/server/data-paths.ts` rather than a parameter — `initDataPaths` sits
+  beside `initLogger` in `index.ts` precisely so process-wide paths stay in one place.
+
 - **One MQTT connection, and it belongs to `MqttBridge`.** Never open a second
   client, from a route, a tool, the bot or a test — the printer's broker is small and
   a second registration fights the first. New consumers read from `StateStore` (or
