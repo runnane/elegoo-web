@@ -29,6 +29,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import { generateReportPDF } from './print-report-pdf.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
+import { captureLogDir, gcodeCacheDir } from './data-paths.js';
 import { getLogger } from './logger.js';
 import {
   STATUS_NAMES,
@@ -54,7 +55,8 @@ let fetchInFlight: Promise<Buffer | null> | null = null;
 let activeCapture: { file: string } | null = null;
 
 // ── Gcode file cache ────────────────────────────────────────────
-const GCODE_CACHE_DIR = join(process.cwd(), 'data', 'gcode-cache');
+// Path helpers live in data-paths.ts so DATA_DIR is honoured — this used to be
+// join(process.cwd(), 'data', 'gcode-cache'), which ignored it (ELEG-70).
 const GCODE_CACHE_MAX = 10; // keep at most N cached files
 
 function gcodeCacheKey(fileName: string): string {
@@ -62,14 +64,14 @@ function gcodeCacheKey(fileName: string): string {
 }
 
 async function ensureCacheDir(): Promise<void> {
-  await mkdir(GCODE_CACHE_DIR, { recursive: true });
+  await mkdir(gcodeCacheDir(), { recursive: true });
 }
 
 /** Cache a gcode file from a Buffer (e.g. after upload) */
 export async function cacheGcodeBuffer(fileName: string, data: Buffer): Promise<void> {
   try {
     await ensureCacheDir();
-    const cachePath = join(GCODE_CACHE_DIR, gcodeCacheKey(fileName));
+    const cachePath = join(gcodeCacheDir(), gcodeCacheKey(fileName));
     await writeFile(cachePath, data);
     await evictOldCache();
     log.info(`Cached uploaded gcode: ${fileName} (${data.length} bytes)`);
@@ -80,7 +82,7 @@ export async function cacheGcodeBuffer(fileName: string, data: Buffer): Promise<
 
 async function getCachedGcode(fileName: string): Promise<string | null> {
   try {
-    const cached = join(GCODE_CACHE_DIR, gcodeCacheKey(fileName));
+    const cached = join(gcodeCacheDir(), gcodeCacheKey(fileName));
     const s = await stat(cached);
     if (s.size > 0) return cached;
   } catch {
@@ -91,11 +93,11 @@ async function getCachedGcode(fileName: string): Promise<string | null> {
 
 async function evictOldCache(): Promise<void> {
   try {
-    const files = await readdir(GCODE_CACHE_DIR);
+    const files = await readdir(gcodeCacheDir());
     if (files.length <= GCODE_CACHE_MAX) return;
     const entries = await Promise.all(
       files.map(async (f) => {
-        const p = join(GCODE_CACHE_DIR, f);
+        const p = join(gcodeCacheDir(), f);
         const s = await stat(p).catch(() => null);
         return { path: p, mtime: s?.mtimeMs ?? 0 };
       }),
@@ -175,7 +177,7 @@ async function handleFileDownload(
 
       // For gcode files, tee the stream to a cache file
       if (isGcode) {
-        const cachePath = join(GCODE_CACHE_DIR, gcodeCacheKey(fileName));
+        const cachePath = join(gcodeCacheDir(), gcodeCacheKey(fileName));
         const cacheStream = createWriteStream(cachePath);
         const tee = new PassThrough();
         tee.pipe(res);
@@ -247,7 +249,7 @@ export async function precacheGcodeAsync(
     const dlPath = pathMap[source] ?? '/download';
     log.info(`Precache: downloading ${fileName} from ${dlPath}`);
 
-    const cachePath = join(GCODE_CACHE_DIR, gcodeCacheKey(fileName));
+    const cachePath = join(gcodeCacheDir(), gcodeCacheKey(fileName));
 
     const size = await new Promise<number>((resolve, reject) => {
       const proxyReq = httpRequest(
@@ -1052,7 +1054,7 @@ export function createRestRouter(
         setTimeout(async () => {
           store.off('raw', listener);
           activeCapture = null;
-          const filePath = join('data', 'logs', filename);
+          const filePath = join(captureLogDir(), filename);
           await writeFile(filePath, JSON.stringify(messages, null, 2));
           debugLog.info(`Capture saved: ${filename} (${messages.length} messages, ${duration}s)`);
         }, duration * 1000);
@@ -1071,7 +1073,7 @@ export function createRestRouter(
 
     // List available captures
     if (url === '/api/debug/captures' && req.method === 'GET') {
-      readdir(join('data', 'logs'))
+      readdir(captureLogDir())
         .then((files) => {
           const captures = files
             .filter((f) => f.startsWith('mqtt-capture-'))
@@ -1100,7 +1102,7 @@ export function createRestRouter(
         res.end(JSON.stringify({ error: 'Invalid filename' }));
         return;
       }
-      readFile(join('data', 'logs', filename), 'utf-8')
+      readFile(join(captureLogDir(), filename), 'utf-8')
         .then((content) => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(content);
@@ -1185,7 +1187,7 @@ export function createRestRouter(
       void (async () => {
         try {
           await ensureCacheDir();
-          const cacheFiles = await readdir(GCODE_CACHE_DIR);
+          const cacheFiles = await readdir(gcodeCacheDir());
           const cacheHashes = new Set(cacheFiles.map((f) => f.replace(/\.gcode$/, '')));
           const params = new URL(req.url || '', 'http://localhost').searchParams;
           const checkFiles = params.getAll('file');
