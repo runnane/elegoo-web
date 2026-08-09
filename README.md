@@ -69,23 +69,28 @@ docker run -d \
 
 Web UI: `http://localhost:8088` · Moonraker API: `http://localhost:7125`
 
-To mount specific data directories as host paths instead of a named volume:
+To keep the data on a host path you can browse, instead of a named volume:
 
 ```bash
-mkdir -p ./elegoo-data/{reports,gcode-cache,logs}
+mkdir -p ./elegoo-data
 docker run -d \
   --name elegoo-web \
   --restart unless-stopped \
   -p 8088:8088 \
   -p 7125:7125 \
   -e PRINTER_IP=192.168.1.150 \
-  -v ./elegoo-data/reports:/app/data/reports \
-  -v ./elegoo-data/gcode-cache:/app/data/gcode-cache \
-  -v ./elegoo-data/logs:/app/data/logs \
-  -v ./elegoo-data/state.json:/app/data/state.json \
-  -v ./elegoo-data/moonraker-db.json:/app/data/moonraker-db.json \
+  -v ./elegoo-data:/app/data \
   ghcr.io/runnane/elegoo-web:latest
 ```
+
+Everything then appears under `./elegoo-data` — `reports/`, `gcode-cache/`, `logs/`,
+`state.json`, `moonraker-db.json`.
+
+> **Mount the directory, not the individual files.** A bind mount whose source does not
+> exist yet is created by Docker as a **directory**, so `-v ./elegoo-data/state.json:
+> /app/data/state.json` gives the service a directory where it expects a file. It does
+> not crash — the container stays `Up` and the UI works — it just logs
+> `EISDIR: illegal operation on a directory` and silently never persists anything.
 
 ### Docker Compose
 
