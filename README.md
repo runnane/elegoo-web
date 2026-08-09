@@ -103,9 +103,8 @@ See [`docker-compose.example.yml`](docker-compose.example.yml) for all available
 
 | Tag | What it is |
 |-----|------------|
-| `latest` | the newest **released** version — use this unless you have a reason not to |
-| `x.y.z`, `x.y` | a specific release |
-| `edge` | the tip of `main`; newer, less settled |
+| `latest` | the newest build of `main` — use this unless you have a reason not to |
+| `x.y.z`, `x.y` | a specific release, pinned |
 
 Images are built for **linux/amd64 and linux/arm64**, so a Raspberry Pi next to the
 printer works. Each image carries its own build stamp — the version shows in the web UI's
