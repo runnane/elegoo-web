@@ -26,10 +26,14 @@ import { PrintReportCollector } from './print-report-collector.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
+import { initDataPaths } from './data-paths.js';
 import { readCachedSn, writeCachedSn } from './sn-cache.js';
 
 const config = loadConfig();
 initLogger(config.dataDir);
+// Beside initLogger on purpose: both exist so DATA_DIR is honoured from one place, and
+// keeping them adjacent is what stops the next path from drifting back to cwd (ELEG-70).
+initDataPaths(config.dataDir);
 const log = getLogger('Service');
 
 // Read the deploy stamp here so it is in the startup banner and in the process cache
