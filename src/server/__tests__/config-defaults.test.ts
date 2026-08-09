@@ -75,4 +75,32 @@ describe('PRINTER_IP validation', () => {
     process.env.PRINTER_IP = 'not-an-ip';
     expect(() => loadConfig()).toThrow(/PRINTER_IP/);
   });
+
+  it('is required, with no fallback address (ELEG-73)', () => {
+    // It used to default to a real printer on the maintainer's LAN, which shipped in a
+    // public image: a user who forgot to set it got a service that started cleanly and
+    // dialled a machine they had never heard of, then sat in `awaiting_sn` for ever.
+    process.env.PRINTER_IP = undefined as unknown as string;
+    delete process.env.PRINTER_IP;
+    expect(() => loadConfig()).toThrow(/PRINTER_IP is not set/);
+  });
+
+  it('says what to do, not just what is wrong', () => {
+    // The whole point of failing at startup is that the message replaces a silent hang.
+    delete process.env.PRINTER_IP;
+    expect(() => loadConfig()).toThrow(/192\.168\.1\.150|\.env\.example/);
+  });
+
+  it('never falls back to a private address belonging to anyone else', () => {
+    delete process.env.PRINTER_IP;
+    let message = '';
+    try {
+      loadConfig();
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    // The example in the message is documentation; what must not exist is a silent
+    // default. Assert the throw happened rather than a config coming back.
+    expect(message).toContain('PRINTER_IP');
+  });
 });

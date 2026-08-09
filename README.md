@@ -136,7 +136,7 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PRINTER_IP` | `192.168.1.150` | Printer IP address (required) |
+| `PRINTER_IP` | **required** | Printer IPv4 address. The service refuses to start without it |
 | `PRINTER_PASSWORD` | `123456` | Printer access code |
 | `PRINTER_SN` | — (discovered) | Printer serial number, e.g. `F01U3UD3798YT8K`. Normally discovered automatically and then cached in `<DATA_DIR>/printer-sn.json`, so this is rarely needed. Set it if a **first** start hangs at "registering": the printer only publishes while a client is registered, so a service that has never learned the serial has nothing to overhear |
 | `SERVICE_PORT` | `8088` | Web UI / API / WebSocket port |
