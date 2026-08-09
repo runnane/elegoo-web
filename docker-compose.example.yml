@@ -27,9 +27,14 @@ services:
       # AI_ENABLED: "false"              # Enable AI monitoring (default: false)
       # AI_LOCAL_ENABLED: "true"         # Local CLIP/SigLIP model (default: true)
       # AI_LOCAL_MODEL: "Xenova/siglip-base-patch16-224"
-      # AI_VLM_ENABLED: "true"           # Vision LLM analysis (default: true)
+      # AI_VLM_ENABLED: "true"           # Vision LLM analysis (default: FALSE — opt-in;
+      #                                  # AI_ENABLED alone does not turn this on)
       # AI_VLM_PROVIDER: "ollama"        # ollama or openai (default: ollama)
       # AI_VLM_BASE_URL: "http://host.docker.internal:11434"
+      #   ⚠ On LINUX, host.docker.internal does not resolve unless you also uncomment the
+      #   `extra_hosts` block below — it is provided automatically only on Docker Desktop
+      #   (macOS/Windows). Without it the VLM fails with a name-resolution error that
+      #   looks nothing like the actual cause. A plain host IP works too.
       # AI_VLM_MODEL: "llava"
       # AI_VLM_API_KEY: ""               # Required for openai provider
       # AI_INTERVAL: "60"                # Seconds between AI checks (default: 60)
@@ -38,16 +43,26 @@ services:
 
       # ── Optional: Data persistence ────────────────────
       # DATA_DIR: "./data"               # Data directory (default: ./data)
+
+    # Needed on Linux for AI_VLM_BASE_URL=http://host.docker.internal:… (see above).
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
     volumes:
       # Option A: Single named volume (simplest)
       #- elegoo-data:/app/data
 
-      # Option B: Host paths for granular access (uncomment and remove Option A)
-      # - ./data/reports:/app/data/reports       # Print reports + snapshots
+      # Option B: Per-directory host paths (uncomment and remove Option A)
+      # - ./data/reports:/app/data/reports          # Print reports + snapshots
       # - ./data/gcode-cache:/app/data/gcode-cache  # Downloaded gcode files
-      # - ./data/logs:/app/data/logs             # MQTT capture logs
-      # - ./data/state.json:/app/data/state.json # Persisted printer state
-      # - ./data/moonraker-db.json:/app/data/moonraker-db.json  # Moonraker database
+      # - ./data/logs:/app/data/logs                # MQTT capture logs
+      #
+      # Directories only. Do NOT bind the individual files (state.json,
+      # moonraker-db.json): Docker creates a DIRECTORY for a bind source that does not
+      # exist yet, so the service finds a directory where it expects a file. It does not
+      # crash — the container stays Up and the UI works — it just logs
+      # `EISDIR: illegal operation on a directory` and silently never persists anything
+      # (ELEG-76). Option C avoids the question entirely.
 
       # Option C: Single host path for everything (easy to access data)
       - ./elegoo-data:/app/data
