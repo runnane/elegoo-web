@@ -64,10 +64,22 @@ function validatePort(value: number, name: string): void {
 }
 
 export function loadConfig(): ServiceConfig {
-  const printerIp = env('PRINTER_IP', '172.20.100.236');
+  // No default. It used to fall back to a real address on the maintainer's own LAN,
+  // which shipped in a public image (ELEG-73) — so a user who forgot to set this got a
+  // service that started cleanly and then dialled a machine they had never heard of.
+  //
+  // Required rather than a placeholder: without a printer the service cannot do anything
+  // useful, and failing at startup with a clear message beats sitting in `awaiting_sn`
+  // (ELEG-59) looking like it is still trying.
+  const printerIp = env('PRINTER_IP');
 
-  // Validate required values
-  if (!printerIp || !IP_RE.test(printerIp)) {
+  if (!printerIp) {
+    throw new Error(
+      "PRINTER_IP is not set. Set it to your printer's IPv4 address, e.g. " +
+        'PRINTER_IP=192.168.1.150 (see .env.example).',
+    );
+  }
+  if (!IP_RE.test(printerIp)) {
     throw new Error(`Invalid PRINTER_IP: "${printerIp}" (must be a valid IPv4 address)`);
   }
   const octets = printerIp.split('.').map(Number);
