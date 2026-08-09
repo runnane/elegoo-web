@@ -143,6 +143,19 @@ export class MqttBridge extends EventEmitter {
     });
 
     this.client.on('close', () => {
+      // `close` fires on every FAILED RECONNECT ATTEMPT, not just on a real drop —
+      // mqtt.js retries every `reconnectPeriod` (5s) and each cycle lands here. Emitting
+      // unconditionally turned that into one `disconnected` event every ~5 seconds for as
+      // long as the printer was off, and Telegram sends one urgent message per event:
+      // ~780/hour. Measured at 7 events in 32s against a port that refuses (ELEG-74).
+      //
+      // So announce the TRANSITION, not the attempt. Captured before the flags below are
+      // reset, because they are what "was it up?" means.
+      //
+      // Fixed here rather than in telegram.ts on purpose: the same storm reaches the
+      // WebSocket broadcast and the event log, so one guard covers every consumer. The UI
+      // loses nothing — ws-transport rebroadcasts service_status on its own 5s timer.
+      const wasUp = this._connected || this._brokerConnected;
       this._connected = false;
       this._brokerConnected = false;
       this._registerAttempts = 0;
@@ -155,7 +168,9 @@ export class MqttBridge extends EventEmitter {
       this.stopRegisterRetry();
       this.stopSlowRegisterRetry();
       this.stopSilenceWatch();
-      this.emit('disconnected');
+      // Never connected in the first place? Then there is no disconnection to report —
+      // which is also the case when the printer is simply off when the service starts.
+      if (wasUp) this.emit('disconnected');
     });
   }
 
