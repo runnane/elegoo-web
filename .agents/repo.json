@@ -1,0 +1,17 @@
+{
+  "repo": "runnane/elegoo-web",
+  "trackerKey": "ELEG",
+  "trackerSlug": "elegoo-web",
+  "visibility": "public",
+  "gates": {
+    "all": "pnpm gates",
+    "fix": "pnpm gates --fix"
+  },
+  "release": "release-it",
+  "ci": "github-hosted",
+  "liveBoundary": "printer",
+  "worktreeSafe": true,
+  "deepDives": ".agents/",
+  "gatesDoc": ".agents/gates.md",
+  "userspaceBundle": "github:runnane/agent-userspace"
+}

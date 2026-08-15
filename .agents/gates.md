@@ -1,13 +1,13 @@
----
-description: LOCAL to elegoo-web — the gate command (which is what CI runs), why green still means very little here, and the printer boundary no gate can enforce.
----
+# This repo's gates
 
-# local: this repo's gates
+The gate command (which is what CI runs), why green still means very little here, and the
+printer boundary no gate can enforce.
 
-The **repo-flavoured addon** to [`shared/gate-failures.md`](../shared/gate-failures.md).
-That file is byte-identical across the sibling repos and therefore names no tool; this one
-is owned by this repo alone, is never synced, and holds every particular the shared file
-deliberately left out. Read them together the first time a gate fails in a pass.
+`.agents/repo.json` names this file as `gatesDoc`, which is how a repo-agnostic command
+finds this repo's particulars without carrying them. Its counterpart is the
+**`gate-failures` skill** in the userspace bundle: that one names no command or runner, so
+it can be shared; this one is nothing but commands and runners, so it never leaves the
+repo. Read them together the first time a gate fails in a pass.
 
 ## The command
 
@@ -140,27 +140,31 @@ your change should add none, and because the count is currently zero you can see
 glance instead of diffing against a baseline. (This is the opposite of the VTK sibling,
 which made warnings hard errors; do not paste either repo's framing into the other.)
 
-## biome does not reach `.claude/**` — measured
+## biome does not reach the instruction files — measured
 
-[`shared/agent-isolation.md`](../shared/agent-isolation.md) warns that a formatter reaching
-`.claude/**` rewrites a `commands/shared/` file and breaks byte-identity with nobody having
-edited a word — and the next drift check then reports it as *drift*, whose obvious repair
-(re-copy) makes it recur.
+**The original reason for this section is gone; the measurement is worth keeping.** It used
+to be about protecting `commands/shared/` byte-identity from a formatter. ELEG-81 deleted
+that tier — the shared rules are skills in the userspace bundle now — so nothing here has
+to stay identical with anything.
 
-**No exemption is needed here today.** `biome.json` scopes `files.includes` to `src/**`
-with `!**/*.md`, and it was confirmed rather than assumed:
+What remains true: `biome.json` scopes `files.includes` to `src/**` with `!**/*.md`, so no
+markdown in this repo is formatted at all, including `AGENTS.md` and `.agents/**`. Confirmed
+rather than assumed:
 
 ```
-$ pnpm exec biome check .claude/commands/shared/pr-hygiene.md
+$ pnpm exec biome check .agents/gates.md
 Checked 0 files in 782µs.
   × No files were processed in the specified paths.
   i These paths were provided but ignored:
-  - .claude/commands/shared/pr-hygiene.md
+  - .agents/gates.md
 ```
 
-If `files.includes` is ever widened to `**`, add `!.claude/commands/shared/**` in the same
-change — and do **not** exempt `commands/local/` or the command bodies, which are
-repo-owned and should be formatted normally.
+So hand-formatting here is fine — unlike VTK, where root `*.md` **is** formatted and
+`--error-on-warnings` turns a formatting complaint into a hard gate failure.
+
+If `files.includes` is ever widened to `**`, decide deliberately whether the instruction
+files should be formatted. There is no longer any byte-identity to protect, so the only
+question is whether you want a formatter reflowing prose nobody edited.
 
 ## There is a pre-commit hook, and it writes
 
