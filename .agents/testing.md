@@ -65,7 +65,7 @@ picks up both.
 pnpm test              # vitest run
 pnpm test:watch
 pnpm test:coverage
-pnpm gates             # the whole set — see .claude/commands/local/gates.md
+pnpm gates             # the whole set — see .agents/gates.md
 ```
 
 `vitest.config.ts` runs in the **node** environment by default and picks up
@@ -108,7 +108,7 @@ With almost no tests, `tsc` is doing most of the work — which is exactly why
 `tsconfig.json` **excluding `src/server`** matters so much. `pnpm build` and CI both run
 only that one, so **the whole backend can be type-broken while everything looks green.**
 Run `pnpm service:check` (or just `pnpm gates`) after touching `src/server/**`. See
-[`.claude/commands/local/gates.md`](../.claude/commands/local/gates.md).
+[`.agents/gates.md`](gates.md).
 
 ## Where a test is worth writing here
 

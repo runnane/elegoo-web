@@ -59,7 +59,7 @@ pnpm gates --fix    # biome --write first, then the gates — commit what it rew
 `tsc` (the browser half), **`pnpm service:check`** (the server + telegram half),
 `vite build`, and `vitest run`. The individual scripts still exist for a tight inner
 loop; details, traps and the known gaps are in
-[`.claude/commands/local/gates.md`](.claude/commands/local/gates.md).
+[`.agents/gates.md`](.agents/gates.md) — the file `.agents/repo.json` names as `gatesDoc`.
 
 **`ci.yml` runs `pnpm gates` as a single step** (ELEG-5), so the gate list lives in one
 place and CI cannot fall behind it — adding a gate to `scripts/gates.sh` needs no
@@ -172,9 +172,8 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   topic branch, stop and report it** — that is someone else's work in flight, and
   `git switch` carries modified files across. Unrelated dirt is left alone; a dirty
   file *this* issue will touch is an overlap and also a reason to stop. Never stash,
-  reset or `git checkout <file>` to clear your path. See
-  [`shared/agent-isolation.md`](.claude/commands/shared/agent-isolation.md) and
-  [`shared/pr-hygiene.md`](.claude/commands/shared/pr-hygiene.md).
+  reset or `git checkout <file>` to clear your path. The bundle's `agent-isolation` and
+  `pr-hygiene` skills carry the full rules.
 - **One issue → one PR → one merge, and the status is automated.** The tracker's PR
   webhook moves ELEG issues off GitHub events: draft PR → `IN_PROGRESS`,
   opened/readied → `IN_REVIEW`, merged → `MERGED`, closed unmerged → `TODO`. Two
@@ -243,23 +242,6 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   that do not, put the results on the issue, and cross those steps off the
   instructions. An `OPERATOR:` issue reduced to one command gets done; a ten-step one
   that is mostly already answerable gets postponed, and deservedly.
-- **Follow-ups become issues — never inline TODO text.** Any deferred work,
-  degradation or "later" item is filed via `issues_create_issue`, after a **duplicate
-  search**: `issues_list_issues {project: "elegoo-web", q: "<distinctive word>",
-  order: "newest"}` with **no** `status` filter (a duplicate that is already `DONE` is
-  still a duplicate). Paging the project instead does not work. This applies
-  everywhere — issue comments, code, docs, chat output. Never write "follow-up:",
-  "TODO:" or "worth doing later" as prose without an issue key attached.
-- **Never leave an issue partly implemented — split it instead.** If an issue is too
-  big, or part of it is blocked, decompose the **entire** scope into sub-issues
-  (`issues_create_issue` with `parent`), each independently completable, so the
-  original becomes a small epic that finishes when its last child does. A remainder
-  that exists only as prose in a comment is the failure mode this prevents.
-- **Reading an issue means reading all of it.** `issues_get_issue` is slim by default
-  — comments, links and attachments come back as *counts*. Always pass
-  `include: ["comments","links","attachments"]` before acting on one, and actually
-  fetch any attachment. Decisions get recorded as comments; an issue still
-  `blockedBy` an open one is not ready to start.
 - **A method number in an issue is a claim, and usually an unchecked one.** Three
   issues in the ELEG tracker named methods that do not do what they said —
   history-delete on 1049 (really `UpdateToken`, which writes the printer's *auth
@@ -271,30 +253,13 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   the docs and the running code disagree, settle it by **asking the printer** — a
   `Get…` is a read and is allowed. `.agents/testing.md` has the one-liner. Never fire a
   `Set…` to find out what it does.
-- **An issue's stated blocker is a claim, not a fact.** "This needs X", "the firmware
-  doesn't expose that", "the printer can't do it" is what someone believed when they
-  filed it. Before accepting the scope a blocker implies — and especially before
-  deferring — spend the two minutes that settle it: read the MQTT log, grep the
-  protocol handling, check the file is actually in this tree. Then **record the
-  outcome on the issue either way**.
-- **Comment on the issue when you start and when you finish** (`issues_add_comment`):
-  on pickup, that work has begun and what the approach is; at the end, what changed
-  (files, surfaces, config), what you ran, and the PR URL.
-- **Label issues where a label adds value.** Type — `bug` / `feature` /
-  `improvement` / `chore` / `docs` / `tests` — and optionally area — `UI` / `API` /
-  `MCP` / `infra` / `monitoring`. Reuse the project's existing labels
-  (`issues_list_labels`) rather than inventing near-duplicates, and don't force one
-  when none fits.
-- **The full text goes in the description; the title is a summary of it.** `title` is
-  capped at 200 characters and `description` at 20 000. Never truncate a long report
-  into the title and pass the truncated string as the description — everything past
-  the cut is lost permanently, and that exact shape is refused with a 400.
 - **Capture durable learnings — don't relearn them.** A gotcha, a workflow step, a
   project constraint: write it down in the same change. Project facts → this file or
-  the relevant [`.agents/`](.agents/) deep-dive. Workflow / how-to-run steps → the
-  matching command under [`.claude/commands/`](.claude/commands/) (repo particulars go
-  in `local/gates.md`). Cross-session context → persistent memory. Prefer updating the
-  existing entry over adding a near-duplicate.
+  the relevant [`.agents/`](.agents/) deep-dive; gate particulars →
+  [`.agents/gates.md`](.agents/gates.md); a convention no repo owns → the userspace
+  bundle, not here; a fact that varies per repo → [`.agents/repo.json`](.agents/repo.json),
+  not prose. Cross-session context → persistent memory. Prefer updating the existing
+  entry over adding a near-duplicate.
 
 ## This file is the source of truth for conventions
 
@@ -303,42 +268,38 @@ plus a pointer at the `.agents/` deep-dives. Put project conventions **here** (o
 the relevant deep-dive), not there — a rule that lives in only one of the two will be
 missed by whichever tool reads the other.
 
-## The agent tooling is shared across five sibling repos
+## How agent instructions reach this repo
 
-`~/dev/respawn-control` (**RCP**), `~/ansible` (**ANS**), `~/dev/spond-js` (**SPND**),
-`~/dev/vaulali-trial-klubb-webpage` (**VTK**) and this repo (**ELEG**) run the **same
-agent workflow against the same tracker** — `/plan`, `/research`, `/fix`, `/auto`,
-`/sweep`, one PR per issue, follow-ups-become-issues. They are meant to stay in sync
-**in every direction**: when any side learns something, it reaches the others *adapted
-to their gates*, never pasted.
+Ten repos run the same agent workflow against **one tracker and one PR webhook**. They
+used to do it by copying `.claude/commands/` between each other, which drifted
+measurably; RCP-878 replaced that with one bundle plus one manifest per repo, and
+ELEG-81 adopted it here. There is nothing left to sync, and no `sha256sum` check to run.
 
-**How it reaches them: by a filed issue, not by editing their checkout.** An agent
-commits only in the repo it was invoked in. A lesson that belongs in a sibling is
-ported by filing a linked issue in that repo's project — that repo has its own gates,
-its own reviewer, and quite possibly its own agent working in it right now.
+- **The bundle** — `runnane/agent-userspace`: the constitution, the repo-agnostic
+  workflow commands (`/fix`, `/auto`, `/plan`, `/research`, `/sweep`), and the
+  `pr-hygiene`, `gate-failures` and `agent-isolation` skills. Bare on a workstation, or
+  `/agent-userspace:fix` under `--plugin-dir`.
+- **[`.agents/repo.json`](.agents/repo.json)** — the facts that differ between repos, and
+  three of ELEG's differ from most of the set: `visibility: "public"`,
+  `release: "release-it"` (**not** changesets — those are RCP's alone) and
+  `liveBoundary: "printer"`.
+- **What stays tracked here** — `CLAUDE.md`, this file, the five `.agents/` deep dives
+  and [`.agents/gates.md`](.agents/gates.md).
 
-**Three tiers, by who owns the bytes:**
+**This repo is public, and that changes what may be written, not just how it is
+verified.** Nothing in a commit, an issue link or a generated file here may carry
+anything the org keeps internal: credentials, keys, customer or employee data, contract
+terms, pricing, security configuration, or infrastructure detail that could aid an
+attacker. Where a fixture would otherwise contain such data, **generate it** rather than
+sanitise it — sanitising is a process that fails silently once.
 
-- **`.claude/commands/shared/*.md` — byte-identical in every sibling**, verified with
-  `sha256sum`. They name **no** command, runner or linter; that is what makes
-  byte-identity achievable. **Never edit one in a single repo** — a shared file edited
-  in one place is the bug, not the fix, and that includes a *formatter* reaching
-  `.claude/**`, which rewrites the bytes with nobody having edited a word. (biome is
-  scoped to `src/**` here, so it does not — re-check if `files.includes` is ever
-  widened.)
-- **`.claude/commands/local/*.md` — the repo-flavoured addon**, owned by this repo and
-  **never synced**. `local/gates.md` holds the exact gate command, the known gaps and
-  the traps. A difference here is not drift.
-- **The command bodies stay repo-flavoured** and merely *point* at both, on demand.
+**Adding a lesson.** Does it name a command, a runner or a repo-specific path? No → the
+bundle, written once. Yes → this file or a `.agents/` deep dive. Is it a fact that varies
+per repo? Then it is a manifest field, not prose.
 
-**Adapt, don't copy.** What changes in translation to this repo:
-
-| Elsewhere | Here (ELEG) |
-| --- | --- |
-| `pnpm gates` = build / biome / vitest / knip / playwright (RCP) | `biome ci` / `tsc` / **`service:check`** / `vite build` / `vitest run` — no knip, **no e2e, no browser test at all** |
-| changesets on every user-visible change (RCP, SPND, VTK) | none — `release-it` + conventional commits are the changelog |
-| ANS's live-infrastructure boundary (never `ansible-playbook` at a host) | the **physical-printer** boundary — never command the machine to test |
-| no live-host concept (SPND) | production is systemd on *this* host, from a non-git `/opt/elegooweb` |
+**An agent commits only in the repo it was invoked in.** A lesson that belongs in a
+sibling is ported by filing a linked issue in that repo's project, never by editing its
+checkout.
 
 ## Where things are
 

@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Entry point for Claude Code. The project conventions live in **AGENTS.md**,
+Entry point for Claude Code, and **load-bearing** — measured 2026-08-14 on Claude
+Code 2.1.232, a project-root `AGENTS.md` with no `CLAUDE.md` is not discovered.
+Shrink this file, never delete it. The project conventions live in **AGENTS.md**,
 imported below so they load every session.
 
 @AGENTS.md
@@ -8,6 +10,8 @@ imported below so they load every session.
 Topic deep-dives are in `.agents/` and are **not** auto-loaded — open the relevant one
 on demand when working in that area:
 
+- `.agents/gates.md` — the gate command (which is what CI runs), why green means very
+  little here, and the printer boundary no gate can enforce
 - `.agents/architecture.md` — one MQTT connection fanned out to WebSocket / REST /
   `/mcp` / Moonraker / OctoPrint / Telegram; which layer a change belongs in
 - `.agents/deployment.md` — production is systemd `elegooweb.service` running from
@@ -21,20 +25,21 @@ on demand when working in that area:
 
 ## Commands — you invoke these
 
-`.claude/commands/*.md`, run as `/name`:
+These come from the **userspace bundle** (`runnane/agent-userspace`), not from this repo
+— ELEG-81 deleted the copies. Bare `/name` on a workstation, or `/agent-userspace:name`
+when loaded with `--plugin-dir`. They read [`.agents/repo.json`](.agents/repo.json) to
+learn this repo's gate command, tracker project, CI and release model, so they behave
+correctly here without carrying a paragraph about ELEG.
 
 - `/fix <ELEG-123>` — one issue end to end: branch, implement, gates, PR, tracker.
 - `/auto <ELEG-1 ELEG-2 …>` — a given, ordered list, worked serially and autonomously.
 - `/sweep` — discovers its own queue and fans out to subagents in worktrees.
 - `/plan`, `/research` — think first, record the outcome on the issue.
 
-Two reference files are read **on demand**, at the moment they apply:
-
-- `/shared:gate-failures` — what to do when a gate goes red (byte-identical across the
-  sibling repos, so it names no tool).
-- `/local:gates` — this repo's exact gate command, its gaps and its traps.
-- `/shared:pr-hygiene`, `/shared:agent-isolation` — PR/tracker rules and the
-  one-checkout-one-agent rules, also byte-identical across the siblings.
+Three skills load on their own when they apply, also from the bundle:
+`gate-failures` (a gate went red), `pr-hygiene` (opening or verifying a PR) and
+`agent-isolation` (whose checkout is this). This repo's own gate particulars — the exact
+command, the gaps, the traps — are in [`.agents/gates.md`](.agents/gates.md).
 
 ## The hard rule that is specific to this repo
 
