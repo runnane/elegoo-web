@@ -36,7 +36,7 @@
     "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1 && simple-git-hooks >/dev/null 2>&1 || true"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.7",
+    "@biomejs/biome": "^2.5.9",
     "@release-it/conventional-changelog": "^12.0.0",
     "@types/jsdom": "^30.0.0",
     "@types/pdfkit": "^0.17.6",
