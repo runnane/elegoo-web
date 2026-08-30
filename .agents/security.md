@@ -106,6 +106,21 @@ get this right.
 - **There are two `.env` files** on a host that runs the service locally: the
   checkout's and production's. Neither is in git; see
   [deployment.md](deployment.md).
+- **Environment-specific hostnames are the same category, and are easier to miss than a
+  secret.** `vite.config.ts`'s `server.allowedHosts` hardcoded a deployment hostname and
+  a private RFC1918 address for the life of the repo (ELEG-82). Neither is a credential,
+  which is exactly why nobody looked twice — but a hostname naming the production
+  deployment plus an internal addressing scheme is *"infrastructure detail that could aid
+  an attacker"*, and it sat in a **public** repo. They now come from
+  `VITE_ALLOWED_HOSTS` in the gitignored `.env`, defaulting to `localhost`.
+
+  Two things worth carrying forward. First, **dev-only config still gets committed** —
+  `server.*` never reaches production, so it reads as harmless and escapes the review
+  that a runtime setting would get. Second, **the values remain in git history and that
+  is a deliberate accepted decision, not an oversight**: rewriting published history is
+  disruptive and out of proportion for a public DNS name and an unreachable LAN address.
+  Do not re-file it. If a genuine *secret* ever lands here, the calculus is different and
+  rotation — not a rewrite — is the remedy, as above.
 - Org data-protection policy applies to everything an agent writes, not just code: no
   real credentials, no personal data, no internal network detail in issue comments, PR
   bodies, commit messages or committed docs. Use placeholders, and redact before pasting
