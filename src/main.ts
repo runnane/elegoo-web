@@ -56,6 +56,7 @@ import { renderLog, bindLogControls } from './ui/log';
 import { installThumbnailFallback } from './ui/helpers';
 import { initTheme } from './ui/theme';
 import { maybeAlertForEvent } from './ui/alert-sound';
+import { startTimestampTicker } from './ui/relative-time';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -701,6 +702,10 @@ installThumbnailFallback();
 // Re-assert the stored theme (the inline script in index.html already set it before
 // paint) and follow the OS while the choice is "auto" (ELEG-34).
 initTheme();
+// ELEG-45. Rewrites the text of existing timestamp spans once a second; it does NOT
+// re-render the logs, so the auto-scroll, the pause button and expanded rows are all
+// unaffected. A no-op while the setting is off.
+startTimestampTicker();
 
 // Auto-connect on page load
 connectToService();
