@@ -7,6 +7,7 @@ import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
 import { getThemeChoice, setThemeChoice, isThemeChoice } from './theme';
 import { playAlert } from './alert-sound';
+import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
@@ -202,6 +203,11 @@ function buildSettingsHTML(content: HTMLElement): void {
           <option value="light">Light</option>
         </select>
       </div>
+      <p class="settings-hint">Relative log timestamps read as &ldquo;2m ago&rdquo; instead of a clock. The exact time stays on hover. Absolute is the default, because it is what you need when comparing against <code>journalctl</code>, the printer&rsquo;s display or someone else&rsquo;s screenshot.</p>
+      <div class="settings-row">
+        <label for="settings-relative-time">Relative log timestamps</label>
+        <input type="checkbox" id="settings-relative-time">
+      </div>
     </section>
 
     <section class="settings-section">
@@ -332,6 +338,19 @@ function buildSettingsHTML(content: HTMLElement): void {
     themeSelect.value = getThemeChoice();
     themeSelect.addEventListener('change', () => {
       if (isThemeChoice(themeSelect.value)) setThemeChoice(themeSelect.value);
+    });
+  }
+
+  // ---- Relative log timestamps (ELEG-45) ----
+  const relTime = content.querySelector('#settings-relative-time') as HTMLInputElement | null;
+  if (relTime) {
+    relTime.checked = loadUISettings().relativeTimestamps;
+    relTime.addEventListener('change', () => {
+      saveUISettings({ relativeTimestamps: relTime.checked });
+      // Apply immediately rather than waiting up to a second for the next tick — and
+      // note this rewrites the existing spans in place, so the log is not re-rendered
+      // and the scroll position and expanded rows survive the switch.
+      refreshTimestamps();
     });
   }
 

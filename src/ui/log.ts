@@ -1,6 +1,7 @@
 import type { LogStore, LogEntry } from '../log-store';
 import { $, escapeHtml } from './helpers';
 import { exportLogEntries } from './log-export';
+import { timestampSpan } from './relative-time';
 import { toast } from './toast';
 
 let autoScroll = true;
@@ -63,7 +64,7 @@ export function renderLog(store: LogStore): void {
     const isExpanded = expandedEntries.has(e.timestamp);
 
     html += `<div class="log-row ${dirClass}" data-idx="${i}" data-ts="${e.timestamp}">`;
-    html += `<span class="log-time">${formatTimestamp(e.timestamp)}</span>`;
+    html += timestampSpan('log-time', e.timestamp, formatTimestamp(e.timestamp));
     html += `<span class="log-dir">${dirArrow}</span>`;
     html += `<span class="log-topic">${escapeHtml(shortTopic(e.topic))}</span>`;
     html += `<span class="log-method">${escapeHtml(methodLabel(e))}</span>`;

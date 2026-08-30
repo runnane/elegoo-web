@@ -1,6 +1,7 @@
 /** Event Log panel — shows important printer events (start, error, milestones, layer changes) */
 
 import { $, escapeHtml } from './helpers';
+import { timestampSpan } from './relative-time';
 
 interface EventLogEntry {
   ts: number;
@@ -156,7 +157,7 @@ export function renderEventLog(): void {
       const desc = eventDescription(entry.event);
       return `<div class="event-log-row ${meta.cls}">
       <span class="event-log-icon">${meta.icon}</span>
-      <span class="event-log-time">${fmtTime(entry.ts)}</span>
+      ${timestampSpan('event-log-time', entry.ts, fmtTime(entry.ts))}
       <span class="event-log-desc" title="${desc}">${desc}</span>
     </div>`;
     })

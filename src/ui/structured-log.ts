@@ -4,6 +4,7 @@ import type { LogStore, LogEntry } from '../log-store';
 import { $, escapeHtml } from './helpers';
 import { METHOD_NAMES } from './log-methods';
 import { loadUISettings, saveUISettings } from './ui-settings';
+import { timestampSpan } from './relative-time';
 import { exportLogEntries } from './log-export';
 import { toast } from './toast';
 
@@ -187,7 +188,7 @@ function renderSlogRow(e: LogEntry, prevStatusRaw: unknown): string {
   row += `<div class="slog-row ${dirClass} ${typeClass} ${isPinned ? 'slog-pinned' : ''}" data-ts="${e.timestamp}">`;
   row += `<div class="slog-row-header">`;
   row += `<span class="slog-icon">${icon}</span>`;
-  row += `<span class="slog-time">${formatTimestamp(e.timestamp)}</span>`;
+  row += timestampSpan('slog-time', e.timestamp, formatTimestamp(e.timestamp));
   row += `<span class="slog-dir">${e.direction === 'sent' ? '→' : '←'}</span>`;
   row += `<span class="slog-method">${highlightMatch(method)}</span>`;
   row += `<span class="slog-topic">${highlightMatch(shortTopic(e.topic))}</span>`;
