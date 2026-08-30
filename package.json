@@ -45,7 +45,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.4",
     "jsdom": "^30.0.1",
-    "release-it": "^21.0.1",
+    "release-it": "^21.0.2",
     "simple-git-hooks": "^2.11.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
