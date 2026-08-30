@@ -21,7 +21,7 @@ this table is CI's step list too. Add a gate here and CI picks it up with no wor
 
 | # | Check | Command | Notes |
 | --- | --- | --- | --- |
-| 1 | lint | `biome ci src/` | **non-writing**, as CI does it; covers formatting as well as lint |
+| 1 | lint | `biome ci` | **non-writing**, as CI does it; covers formatting as well as lint |
 | 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`** |
 | 3 | typecheck (service) | `tsc -p tsconfig.server.json` | `tsconfig.server.json` — the other half. See below |
 | 4 | build | `vite build` | writes `dist/`, which is gitignored |
@@ -29,6 +29,47 @@ this table is CI's step list too. Add a gate here and CI picks it up with no wor
 
 Grep the log for `✗` to get the failing gate, then read upward for that check's own
 output.
+
+
+## What the checks are scoped to, and the path-argument trap
+
+**`biome.json`'s `includes` is the only place the lint scope is written** (ELEG-79).
+Every biome invocation — the gate, `lint`, `format`, `check` — is passed **no path
+argument**, deliberately.
+
+A CLI path argument **silently overrides** `includes`: it narrows the file set and no
+warning says so. Until ELEG-79 the gate ran `biome ci src/` while `includes` said
+`src/**`, so the two agreed by accident and widening `includes` alone would have changed
+nothing. Measured at the time — with `"*.config.ts"` added to `includes`:
+
+```
+pnpm exec biome ci src/   -> Checked 84 files, PASS   (path arg wins; config files unseen)
+pnpm exec biome ci        -> Checked 87 files, FAIL   (real formatting drift in both)
+```
+
+Both root config files had genuine drift sitting there uncaught. So **do not reintroduce
+a path argument** to any biome script; change `includes` instead, and the writing
+(`--write`) and non-writing (`ci`) variants stay in agreement by construction rather than
+by two edits remembered together.
+
+`biome ci` also emits two `infos` about `biome.json` itself — a `$schema` version behind
+the CLI, and the deprecated `recommended` field. Both are **infos, not errors**: they do
+not affect the exit code. Do not read them as a red gate.
+
+## Both root config files are typechecked, via `tsconfig.json`
+
+`vite.config.ts` and `vitest.config.ts` are in `tsconfig.json`'s `include` (ELEG-79), so
+`pnpm exec tsc` and `pnpm build` cover them. Before that they were in **no** tsconfig and
+**no** biome scope: a type error in either was caught by nothing, and in
+`vitest.config.ts` it surfaced as a *test* gate failure, which reads like a broken test
+rather than a broken config.
+
+The audit that stays accurate as the repo grows is one line — anything it lists must be
+in a tsconfig `include` and matched by `biome.json`'s `includes`:
+
+```bash
+git ls-files '*.ts' '*.tsx' | grep -v '^src/'
+```
 
 ## There are two typechecks, and `pnpm build` is only one of them
 
@@ -135,7 +176,7 @@ a GitHub problem or a workflow-trigger problem, not a runner problem.
 `noUnusedFunctionParameters`. `biome ci` **exits 0** on warnings, so they cannot fail a
 gate.
 
-Measured on `main`: **zero warnings** across 60 files. That makes the honest rule simple —
+Measured on this branch: **zero warnings** across the 87 files `biome ci` now checks. That makes the honest rule simple —
 your change should add none, and because the count is currently zero you can see that at a
 glance instead of diffing against a baseline. (This is the opposite of the VTK sibling,
 which made warnings hard errors; do not paste either repo's framing into the other.)
@@ -147,8 +188,8 @@ to be about protecting `commands/shared/` byte-identity from a formatter. ELEG-8
 that tier — the shared rules are skills in the userspace bundle now — so nothing here has
 to stay identical with anything.
 
-What remains true: `biome.json` scopes `files.includes` to `src/**` with `!**/*.md`, so no
-markdown in this repo is formatted at all, including `AGENTS.md` and `.agents/**`. Confirmed
+What remains true: `biome.json` scopes `files.includes` to `src/**` and `*.config.ts` with
+`!**/*.md`, so no markdown in this repo is formatted at all, including `AGENTS.md` and `.agents/**`. Confirmed
 rather than assumed:
 
 ```

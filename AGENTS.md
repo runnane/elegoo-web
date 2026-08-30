@@ -55,7 +55,7 @@ pnpm gates          # ⭐ everything (scripts/gates.sh) — and this is literall
 pnpm gates --fix    # biome --write first, then the gates — commit what it rewrites
 ```
 
-`pnpm gates` is the one to run: `biome ci src/` (**non-writing**, as CI does it),
+`pnpm gates` is the one to run: `biome ci` (**non-writing**, as CI does it),
 `tsc` (the browser half), **`pnpm service:check`** (the server + telegram half),
 `vite build`, and `vitest run`. The individual scripts still exist for a tight inner
 loop; details, traps and the known gaps are in

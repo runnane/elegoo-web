@@ -10,11 +10,7 @@ export default defineConfig({
     dedupe: ['three'],
   },
   server: {
-    allowedHosts: [
-      'localhost',
-      'elegooweb.srv.jont.no',
-      '172.20.100.9'
-    ],
+    allowedHosts: ['localhost', 'elegooweb.srv.jont.no', '172.20.100.9'],
     host: '0.0.0.0',
     port: 5173,
     proxy: {

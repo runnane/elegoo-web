@@ -20,6 +20,13 @@
 # so an auto-fix you did not commit still fails CI's lint step — hence --fix runs the
 # writer first and then re-checks, and you commit what it rewrote.
 #
+# NOTE the deliberate absence of a path argument (ELEG-79). A path narrows the file set
+# and SILENTLY OVERRIDES biome.json's `includes`, with no warning that it did. This ran
+# `biome ci src/` while `includes` said `src/**`, so the two agreed by accident and the
+# root config files were linted by nothing — `biome ci src/` checked 84 files and passed
+# while `biome ci` checked 87 and found real formatting drift in both. Scope belongs in
+# biome.json alone; do not reintroduce a path here or in package.json's biome scripts.
+#
 # What this cannot check is in .agents/gates.md. In short: the suite is
 # small and almost entirely pure functions, nothing exercises a connection or a route,
 # there is no browser and no screenshot, and no gate on earth can tell you whether a
@@ -62,7 +69,7 @@ if [ "$fix" = 1 ]; then
 fi
 
 # Order mirrors ci.yml: cheapest signal first.
-run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci src/
+run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci
 run 'typecheck: browser half (tsconfig.json)' pnpm exec tsc
 run 'typecheck: service half (tsconfig.server.json)' pnpm run service:check
 run 'build (vite)' pnpm exec vite build
