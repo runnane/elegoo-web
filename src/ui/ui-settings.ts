@@ -21,6 +21,10 @@ export interface UISettings {
   listSort: Record<string, { key: string; dir: string }>;
   /** Per-list dropdown filter selections, keyed by `<listId>.<selectId>` (ELEG-49) */
   listSelect: Record<string, string>;
+  /** Play a sound on print completion and critical errors (ELEG-46). Off by default. */
+  alertSound: boolean;
+  /** Alert volume, 0..1 (ELEG-46) */
+  alertVolume: number;
 }
 
 const defaults: UISettings = {
@@ -33,6 +37,10 @@ const defaults: UISettings = {
   theme: 'auto',
   listSort: {},
   listSelect: {},
+  // Off by default: a dashboard that starts making noise is a bad first impression,
+  // and the autoplay policy means it would often be refused anyway (ELEG-46).
+  alertSound: false,
+  alertVolume: 0.5,
 };
 
 let cached: UISettings | null = null;

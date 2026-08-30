@@ -6,6 +6,8 @@ import { toast } from './toast';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
 import { getThemeChoice, setThemeChoice, isThemeChoice } from './theme';
+import { playAlert } from './alert-sound';
+import { loadUISettings, saveUISettings } from './ui-settings';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
 
@@ -203,6 +205,23 @@ function buildSettingsHTML(content: HTMLElement): void {
     </section>
 
     <section class="settings-section">
+      <h3>Alerts</h3>
+      <p class="settings-hint">Play a sound when a print finishes, fails, or hits a critical error. Off by default. Only events arriving live make a sound — reconnecting never replays old ones.</p>
+      <div class="settings-row">
+        <label for="settings-alert-sound">Audible alerts</label>
+        <input type="checkbox" id="settings-alert-sound">
+      </div>
+      <div class="settings-row">
+        <label for="settings-alert-volume">Volume</label>
+        <input type="range" id="settings-alert-volume" min="0" max="100" step="5">
+      </div>
+      <div class="settings-actions">
+        <button id="settings-alert-test" class="btn btn-sm btn-ghost">Test sound</button>
+      </div>
+      <div id="settings-alert-status" class="settings-hint"></div>
+    </section>
+
+    <section class="settings-section">
       <h3>Panel Layout</h3>
       <p class="settings-hint">Assign cards to the sidebar (always-visible) or main area. Reorder within each panel.</p>
       <h4 class="settings-panel-heading">Sidebar</h4>
@@ -313,6 +332,42 @@ function buildSettingsHTML(content: HTMLElement): void {
     themeSelect.value = getThemeChoice();
     themeSelect.addEventListener('change', () => {
       if (isThemeChoice(themeSelect.value)) setThemeChoice(themeSelect.value);
+    });
+  }
+
+  // ---- Audible alerts (ELEG-46) ----
+  const alertToggle = content.querySelector('#settings-alert-sound') as HTMLInputElement | null;
+  const alertVolume = content.querySelector('#settings-alert-volume') as HTMLInputElement | null;
+  const alertTest = content.querySelector('#settings-alert-test') as HTMLButtonElement | null;
+  const alertStatus = content.querySelector('#settings-alert-status') as HTMLElement | null;
+
+  if (alertToggle && alertVolume) {
+    const settings = loadUISettings();
+    alertToggle.checked = settings.alertSound;
+    alertVolume.value = String(Math.round(settings.alertVolume * 100));
+
+    alertToggle.addEventListener('change', () => {
+      saveUISettings({ alertSound: alertToggle.checked });
+    });
+    alertVolume.addEventListener('change', () => {
+      saveUISettings({ alertVolume: Number(alertVolume.value) / 100 });
+    });
+  }
+
+  if (alertTest && alertStatus) {
+    alertTest.addEventListener('click', async () => {
+      // The test button exists because otherwise the only way to find out whether this
+      // works is to wait for a failed print (ELEG-46). It reports the blocked state
+      // explicitly rather than appearing to do nothing.
+      const state = await playAlert('success');
+      if (state === 'blocked') {
+        alertStatus.textContent =
+          'The browser is blocking audio for this page. Interact with the page (click anywhere), then try again.';
+      } else if (state === 'unsupported') {
+        alertStatus.textContent = 'This browser has no Web Audio support, so alerts cannot play.';
+      } else {
+        alertStatus.textContent = 'Played.';
+      }
     });
   }
 

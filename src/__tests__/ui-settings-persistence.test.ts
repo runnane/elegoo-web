@@ -97,3 +97,26 @@ describe('ui-settings persistence', () => {
     expect(loadUISettings().theme).toBe('auto');
   });
 });
+
+describe('audible alert settings (ELEG-46)', () => {
+  it('is OFF by default', async () => {
+    // An explicit requirement of ELEG-46, and the one most likely to be broken by a
+    // careless edit to the defaults object — a dashboard that starts making noise on
+    // first load is the failure this asserts against.
+    const { loadUISettings } = await import('../ui/ui-settings');
+    expect(loadUISettings().alertSound).toBe(false);
+    expect(loadUISettings().alertVolume).toBe(0.5);
+  });
+
+  it('persists the toggle and volume across a reload', async () => {
+    const first = await import('../ui/ui-settings');
+    first.saveUISettings({ alertSound: true, alertVolume: 0.2 });
+
+    vi.resetModules();
+    const second = await import('../ui/ui-settings');
+
+    // Both differ from the defaults, so absent storage fails this rather than passing.
+    expect(second.loadUISettings().alertSound).toBe(true);
+    expect(second.loadUISettings().alertVolume).toBe(0.2);
+  });
+});

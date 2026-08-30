@@ -55,6 +55,7 @@ import {
 import { renderLog, bindLogControls } from './ui/log';
 import { installThumbnailFallback } from './ui/helpers';
 import { initTheme } from './ui/theme';
+import { maybeAlertForEvent } from './ui/alert-sound';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -650,6 +651,10 @@ function connectToService(): void {
     },
     onEventLog(entry) {
       handleEventLog(entry);
+      // ELEG-46. This is the LIVE event path; `loadEventLogHistory` below restores the
+      // history on connect and deliberately does NOT sound, so reconnecting never
+      // replays a sound for a print that finished an hour ago.
+      maybeAlertForEvent(entry.event);
     },
     onLayerTime(entry) {
       state.addLayerTime(entry);
