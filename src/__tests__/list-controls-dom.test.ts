@@ -55,12 +55,16 @@ const COLUMNS = [
  *  1. `ui-settings.ts` memoises the whole settings object in a module-level `cached`, so
  *     clearing storage between tests would not reset it — a persisted sort from one test
  *     would leak into the next.
- *  2. **There is no `localStorage` in this environment at all.** Measured: `localStorage`,
- *     `window.localStorage` and `globalThis.localStorage` are all `undefined` under
- *     jsdom 30 on Node 26. `ui-settings.ts` wraps every access in try/catch, so it
- *     degrades silently to defaults rather than throwing — which means a test that
- *     *appeared* to assert persistence would be vacuous. Do not write one until the
- *     environment actually provides storage (ELEG-64).
+ *  2. There **used** to be no `localStorage` in this environment at all, so a test that
+ *     appeared to assert persistence was vacuous. **ELEG-64 fixed that** — a setup file
+ *     now installs one, and `ui-settings-persistence.test.ts` asserts real round-trips.
+ *     Reason 1 above still stands entirely on its own, which is why unique ids remain
+ *     the right approach here.
+ *
+ *     If you do write a persistence test, follow that file: never assert a value equal
+ *     to the module's default, because `ui-settings.ts` still wraps every access in
+ *     try/catch and still degrades silently to defaults. The environment is fixed; the
+ *     way such a test can pass for the wrong reason is not.
  *
  * Distinct ids sidestep both, and are cheaper and less brittle than resetting modules.
  */

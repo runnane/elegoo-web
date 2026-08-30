@@ -93,10 +93,30 @@ another; the two things it establishes:
   the re-rendered container and asserts focus **is** lost. A test that cannot go red is
   not coverage, so the failure mode is encoded permanently rather than demonstrated once
   by hand. Verified: moving the bar inside turns three of the focus tests red.
-- **There is no `localStorage`** — `bare`, `window.` and `globalThis.` are all
-  `undefined` under jsdom 30 on Node 26. `ui-settings.ts` catches and falls back to
-  defaults, so a persistence test would **pass for the wrong reason**. Give each case a
-  unique list id instead, and do not assert persistence until **ELEG-64** lands.
+- **`localStorage` works now, and the reason it did not is worth knowing** (ELEG-64).
+  `src/__tests__/setup/jsdom-localstorage.ts` installs one; `ui-settings-persistence.test.ts`
+  asserts real round-trips across a simulated reload.
+
+  The cause was **not** the obvious one. jsdom does refuse `localStorage` on an opaque
+  origin — `new JSDOM('')` throws `SecurityError`, reproducibly — but inside vitest the
+  origin is already `http://localhost:3000`, so `environmentOptions.jsdom.url` fixes
+  nothing. The real cause is **Node 26's own experimental `localStorage`**, installed on
+  `globalThis` as an accessor whose getter returns `undefined` without
+  `--localstorage-file` (hence the `ExperimentalWarning` on every jsdom file). Since
+  `window === globalThis` under vitest, it **shadows jsdom's**. The descriptor is
+  `configurable: true`, so the setup file replaces it with an in-memory `Storage`.
+
+  **The trap it created has not gone away.** `ui-settings.ts` still wraps every access in
+  try/catch and still degrades silently to defaults, so a persistence test whose expected
+  value equals the default still passes for the wrong reason. Never assert a default:
+  use `'dark'` (not `'auto'`) for theme, a populated object for `listSort`. And re-import
+  the module rather than calling `loadUISettings()` twice — it memoises in a module-level
+  `cached`, so a second call returns the cache without touching storage, testing the
+  variable rather than the persistence.
+
+  Existing DOM tests still give each case a unique list id. That was always the better
+  approach for reason 1 in that file's header (the memoisation), which is independent of
+  storage and unchanged.
 
 What jsdom still does not give you: layout, paint, real fonts, or `getContext('2d')`.
 Colour, overlap and appearance are still `pnpm dev:web` and eyes, and there is still no
