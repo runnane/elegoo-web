@@ -158,6 +158,35 @@ app, with the full method table, the `hh` error-code enum and per-method payload
 they disagree with the running code — and they do, for 1062 and the 2006/2007 pair —
 neither wins on authority, because the reference may describe a different firmware.
 
+**Both are local-only. Neither is in a clone (ELEG-66).** `.gitignore` line 7 is a bare
+`data/`, and `git log --all --diff-filter=A -- 'data/*'` returns nothing: no file under
+`data/` has ever been committed. That directory is also the runtime `DATA_DIR` — state
+snapshots, `data/logs/` captures, timelapses — and ignoring *that* content is right,
+since it carries serial numbers, local addresses and operational captures that have no
+place in a public repo. The protocol documents simply live in the same directory and got
+swept up with it.
+
+So check before you cite:
+
+```bash
+ls data/CC2_PROTOCOL_REFERENCE.md data/CC2-OFFICIAL-APP-PATTERNS.md
+```
+
+**If they are absent, say so and use the `Get…` probe below instead.** Do not cite a
+file you cannot open — that is indistinguishable from inventing one, and inventing
+method numbers is the thing this whole section exists to prevent. Do not reconstruct
+them from `METHOD_NAMES` either, for the reason above.
+
+**Anything you learn goes into code, not into `data/`.** A finding recorded only in
+`data/CC2_PROTOCOL_REFERENCE.md` is invisible to everyone else and lost with the
+machine, because that file never commits. ELEG-55 put `error_code 1100` in a comment in
+`src/ui/log-methods.ts` precisely for this reason. Follow it: the comment commits, the
+`data/` edit does not.
+
+Whether these two documents could be committed at all — they are transcribed from the
+vendor's own application and firmware headers, into a **public** repo — is an open
+question tracked separately, and is a call for a human rather than an agent.
+
 Then a **`Get…` method can simply be asked**, which is a read and therefore allowed:
 
 ```bash
