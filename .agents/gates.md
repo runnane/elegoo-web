@@ -169,6 +169,50 @@ sibling repos are out of minutes and need self-hosted runners, so their "no chec
 no runner" reasoning does **not** transfer here. If no run appears for a push here, it is
 a GitHub problem or a workflow-trigger problem, not a runner problem.
 
+## Running the gates concurrently — the split RCP needs, this repo does not (ELEG-78)
+
+The bundle's `/auto --parallel N` carries a gate split: **subagents run the fast gate; the
+orchestrator runs anything binding a fixed port or a fixed database name, serially,
+itself.** That rule has a specific cause, and the cause is absent here — so do not port the
+ceremony along with the command.
+
+RCP's hazard is Playwright: it binds a fixed port and `reuseExistingServer` will **adopt**
+a server another worktree already started, so two concurrent runs silently test each
+other's build and both report plausible, wrong results. A per-repo lock does not help,
+because the adoption happens outside it.
+
+**Measured here:** the five gates are `biome ci`, `tsc`, `tsc -p tsconfig.server.json`,
+`vite build` and `vitest run`. None starts a server, none binds a port, none touches a
+database. `package.json` has no `playwright` or `puppeteer` dependency and there is no e2e
+or browser-driving test of any kind. `vitest run` is in-process and finishes in a few
+hundred milliseconds.
+
+Three consequences, all of them the *opposite* of RCP's:
+
+- **There is nothing for the orchestrator to run serially.** Every worktree runs the whole
+  of `pnpm gates` concurrently and the results are independent.
+- **There is no fast gate to split off, and adding one would be inventing a field.**
+  `.agents/repo.json` lists `gates.all` and `gates.fix` and no `gates.quick`; absent means
+  absent. `pnpm gates` *is* the fast gate here.
+- **N is not capped by test-server adoption**, because nothing serialises behind the
+  orchestrator. The real ceilings are CI (a public repo on `ubuntu-latest`, so minutes are
+  free but runs still queue) and the reviewer's own capacity to verify N branches — which
+  is a human limit, not a mechanical one, and the bundle's "3 is a sane ceiling" is about
+  exactly that. Treat it as advice here rather than as a hardware constraint.
+
+**What does not relax, and is the reason this section is not simply "parallelism is free
+here":**
+
+- **The printer boundary.** `pnpm gates` cannot touch the printer, so more concurrency adds
+  no hardware risk *from the gates* — but N agents is N chances for one of them to decide a
+  `Set…` would settle a question. The boundary is per-agent and does not scale with
+  cleverness. See "The gate no script can run" below.
+- **This repo is public.** More agents writing concurrently is more chances for a hostname,
+  an address or a capture to reach a commit, a branch name or a generated file. ELEG-82 is
+  what that looks like when a single developer does it unhurried.
+- **Green still proves very little**, exactly as the honest list below says. Running five
+  green gates in parallel produces five results that each mean as little as one does.
+
 ## Warnings exit 0 here — the baseline is zero, keep it there
 
 `biome.json` sets a number of rules to `warn` rather than `error`, including
