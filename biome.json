@@ -9,6 +9,7 @@
     "ignoreUnknown": true,
     "includes": [
       "src/**",
+      "*.config.ts",
       "!**/dist",
       "!**/data",
       "!**/public",
