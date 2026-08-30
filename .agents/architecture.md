@@ -73,7 +73,14 @@ the first match wins, and the static/SPA fallback is last.
 `index.html` + `src/main.ts` compose hand-written DOM modules from `src/ui/*.ts` — no
 framework, no JSX, no component library. Each card is a module that owns its own DOM
 subtree and subscribes to `ws-client.ts` updates. Layout state (which cards are
-collapsed / reordered) is persisted client-side by `persistence.ts`.
+collapsed / reordered) is persisted client-side by `ui-settings.ts`.
+
+There used to be a `persistence.ts` here too, saving chart and layer data to
+localStorage. It was superseded when chart history moved server-side and then sat
+unreachable for the life of the repo; knip found it and ELEG-65 deleted it, along with
+`mqtt-client.ts` — a browser-side MQTT client from before the service existed, replaced
+by `ws-client.ts`. Both are worth knowing about only because their names still read as
+plausible in older notes.
 
 `gcode-preview.ts` and `canvas.ts` are the heavy ones (Three.js). Gcode is fetched
 through the service, which pre-caches a file when a print starts

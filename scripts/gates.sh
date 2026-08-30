@@ -72,6 +72,12 @@ fi
 run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci
 run 'typecheck: browser half (tsconfig.json)' pnpm exec tsc
 run 'typecheck: service half (tsconfig.server.json)' pnpm run service:check
+# Dead-code check (ELEG-65). Neither typecheck complains about a module nothing
+# imports, and `vite build` tree-shakes it out SILENTLY — so an unreachable file
+# survives looking perfectly legitimate. Four have been found that way, all by hand.
+# Scoped to `files` only: unused *exports* are noisy here because dashboard.ts
+# re-exports a barrel, and a check that cries wolf gets ignored. See .agents/gates.md.
+run 'dead code (knip)' pnpm exec knip --no-config-hints
 run 'build (vite)' pnpm exec vite build
 run 'unit tests (vitest)' pnpm exec vitest run
 

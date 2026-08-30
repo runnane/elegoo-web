@@ -16,7 +16,7 @@ pnpm gates          # scripts/gates.sh — the whole set, with a ✓/✗ summary
 pnpm gates --fix    # biome check --write first; commit what it rewrites
 ```
 
-Five checks — and since ELEG-5, **`ci.yml` runs this exact script as its only step**, so
+Six checks — and since ELEG-5, **`ci.yml` runs this exact script as its only step**, so
 this table is CI's step list too. Add a gate here and CI picks it up with no workflow edit.
 
 | # | Check | Command | Notes |
@@ -24,8 +24,9 @@ this table is CI's step list too. Add a gate here and CI picks it up with no wor
 | 1 | lint | `biome ci` | **non-writing**, as CI does it; covers formatting as well as lint |
 | 2 | typecheck (browser) | `tsc` | `tsconfig.json` — **excludes `src/server`** |
 | 3 | typecheck (service) | `tsc -p tsconfig.server.json` | `tsconfig.server.json` — the other half. See below |
-| 4 | build | `vite build` | writes `dist/`, which is gitignored |
-| 5 | tests | `vitest run` | ~350 ms; it prints its own count, so none is quoted here |
+| 4 | dead code | `knip --no-config-hints` | ELEG-65; scoped to unused **files**, not exports. See below |
+| 5 | build | `vite build` | writes `dist/`, which is gitignored |
+| 6 | tests | `vitest run` | ~350 ms; it prints its own count, so none is quoted here |
 
 Grep the log for `✗` to get the failing gate, then read upward for that check's own
 output.
@@ -327,13 +328,15 @@ more here than in a repo with real coverage:
 Undo each mutation with an inverse patch, **never `git checkout <file>`** — see
 [`shared/gate-failures.md`](../shared/gate-failures.md) §6.
 
-## Nothing detects unreachable code, and it has bitten twice
+## Unreachable code is now gated — knip, after it had bitten four times
 
-There is **no knip here** (RCP has it; this repo's gate list does not), and neither
-typecheck nor `vite build` complains about a module that nothing imports. `vite build`
-tree-shakes it out silently, so the bundle is fine and the file lives on.
+**This is now gate 4** (`knip`, ELEG-65). Before it, nothing noticed a module that
+nothing imports: neither typecheck complains — an unimported file typechecks fine on its
+own — and `vite build` tree-shakes it out **silently**, so the bundle is correct and the
+file survives in the tree looking perfectly legitimate.
 
-Two modules have now been found that way, both by hand:
+Four modules were found that way, and every one of them by a human reading, never by a
+check:
 
 - `src/telegram/**` — a whole standalone bot with its own `MqttBridge`, no npm script and
   no way to start it. It also meant ELEG-3's security fix had to be applied twice.
@@ -343,11 +346,77 @@ Two modules have now been found that way, both by hand:
   other one via `dashboard.ts`, so this copy had never run. It had drifted, too: it was
   missing the `if (!container) return` guard, so it would have thrown if it ever had.
   Deleted in **ELEG-55**.
+- `src/mqtt-client.ts` — a browser-side `CC2MqttClient`, i.e. **a second MQTT client
+  implementation**, superseded by `ws-client.ts`, whose own header comment says it
+  *"provides the same interface as the old CC2MqttClient"*. Found by knip's first run in
+  **ELEG-65** and deleted there.
+- `src/persistence.ts` — client-side localStorage chart persistence, superseded when
+  chart history moved server-side (`main.ts` still carries the comment *"Load chart
+  history from service (replaces localStorage persistence)"*). Also **ELEG-65**.
 
-So when a change touches a UI module, **check it is actually reached** —
-`grep -rn "from './<name>'" src/` — rather than trusting that a file in `src/ui/` is
-live. A duplicate that is never called cannot be caught by reading it; it looks correct.
-**ELEG-65** tracks adding a real check.
+The last two are the argument for the gate rather than the vigilance: they had been dead
+for the life of the repo, through several passes of people reading this very file, and
+knip found them in under a second. Note also that two of the four were *second copies of
+something live* — which is why this matters beyond tidiness. A dead duplicate rots
+(ELEG-55's had already lost a guard) and it reads as live code to whoever edits next; and
+a security fix applied to the reachable copy only is a fix that looks done and is not.
+
+### Why it is scoped to `files`, and what that gives up
+
+`knip.json` sets `"include": ["files"]`. Measured on the first run, the unscoped default
+also reported **21 unused exports and 19 unused exported types**, and they are
+overwhelmingly false positives here:
+
+- `src/ui/dashboard.ts` re-exports a barrel, so a live function is reported **twice** —
+  once at its definition and once at the re-export.
+- `src/types.ts` is a shared type module; an interface used only as a structural shape is
+  not an "unused export" in any sense that matters.
+
+A dead-code check that cries wolf gets ignored, which is worse than not having one — so
+the gate is the deterministic, quiet signal, and the noisier one stays available
+on demand:
+
+```bash
+pnpm exec knip --include exports,types   # report only; deliberately NOT a gate
+```
+
+That is a judgement call and it does give something up: a genuinely unused export will
+not fail the gate. The two known classes of defect were both whole unreachable *files*,
+which is what this gates.
+
+### Acceptance — it was checked against the cases it exists for
+
+ELEG-65 required this, and it would have been dishonest to skip: a dead-code check that
+would not have caught the two known cases is not worth adding. Both were restored from
+the commit **before** each deletion (`git checkout 1fbb3d0^ -- src/telegram`,
+`git checkout dd31334^ -- src/ui/system-info.ts`) and knip run against the result:
+
+```
+Unused files (8)
+src/telegram/allowlist.ts
+src/telegram/bot.ts
+src/telegram/camera.ts
+src/telegram/commands.ts
+src/telegram/config.ts
+src/telegram/mqtt-bridge.ts
+src/telegram/notifications.ts
+src/ui/system-info.ts
+```
+
+Exit 1, all seven telegram files including the duplicate `mqtt-bridge.ts`, plus
+`system-info.ts`. Restored into the *current* tree rather than checking out the old
+commits wholesale, which is the stricter test: today's tree has more live code that could
+have accidentally imported them.
+
+### Two traps if you change `knip.json`
+
+- **`--no-config-hints` is deliberate.** With `src/main.ts` and `src/server/index.ts`
+  listed explicitly, knip prints a "redundant entry pattern" hint on every run because it
+  auto-detects both. The entries are kept explicit anyway — auto-detection reads
+  `package.json`'s scripts, so removing the `service` script would silently narrow what is
+  checked — and the hint is suppressed rather than the config weakened.
+- **The test files are entry points.** `src/__tests__/**/*.test.ts` is in `entry`; without
+  it every test file is itself "unused" and the gate is instantly useless.
 
 ## Dependency advisories are deliberately NOT a gate
 

@@ -253,7 +253,6 @@ src/
 ├── printer-state.ts     # Browser-side state with delta merge + zones
 ├── log-store.ts         # Ring buffer (500 entries) for MQTT log
 ├── chart-store.ts       # Ring-buffer time-series store for charts
-├── persistence.ts       # Save/restore chart + layer data to localStorage
 ├── server/
 │   ├── index.ts             # Service entry point
 │   ├── mqtt-bridge.ts       # Singleton MQTT connection to printer
