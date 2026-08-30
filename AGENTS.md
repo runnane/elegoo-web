@@ -57,7 +57,8 @@ pnpm gates --fix    # biome --write first, then the gates — commit what it rew
 
 `pnpm gates` is the one to run: `biome ci` (**non-writing**, as CI does it),
 `tsc` (the browser half), **`pnpm service:check`** (the server + telegram half),
-`vite build`, and `vitest run`. The individual scripts still exist for a tight inner
+**`knip`** (unreachable modules — ELEG-65), `vite build`, and `vitest run`. The
+individual scripts still exist for a tight inner
 loop; details, traps and the known gaps are in
 [`.agents/gates.md`](.agents/gates.md) — the file `.agents/repo.json` names as `gatesDoc`.
 
@@ -138,9 +139,11 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   Reports and Timelapse each pair `#<view>-list` with a `#<view>-controls` div beside
   it, and `src/ui/list-controls.ts` mounts into that once (ELEG-49…52). Sort/filter
   state lives in that module's closure, **outside** the render function, and is
-  persisted in `ui-settings.ts` — not `persistence.ts`, which is cleared when the print
-  changes. New list views follow the same shape; the pure half of any list logic belongs
-  in `src/ui/list-sort.ts`, which is the only half a test can reach.
+  persisted in `ui-settings.ts`. New list views follow the same shape; the pure half of
+  any list logic belongs in `src/ui/list-sort.ts`, which is the only half a test can
+  reach. (This rule used to warn against `src/persistence.ts` as the wrong home for such
+  state. That file was unreachable and is gone — ELEG-65 — so `ui-settings.ts` is now
+  simply the only client-side preference store there is.)
 - **MCP tools and [`MCP.md`](MCP.md) change together.** `MCP.md` is the documented
   contract for the `/mcp` surface (resources, tools, parameters). A tool added,
   renamed, or given a new parameter without the doc edit in the same commit is drift
@@ -353,6 +356,6 @@ checkout.
 
 ## Definition of done
 
-`pnpm gates` green (biome + both typechecks + build + tests), `MCP.md` / `README.md`
+`pnpm gates` green (biome + both typechecks + knip + build + tests), `MCP.md` / `README.md`
 updated if a documented surface changed, a conventional commit subject that reads as a
 release note, no secrets committed, the issue commented and its PR open.
