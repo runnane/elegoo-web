@@ -1,6 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["index.html", "src/main.ts", "src/server/index.ts", "src/__tests__/**/*.test.ts"],
+  "entry": [
+    "index.html",
+    "src/main.ts",
+    "src/server/index.ts",
+    "src/__tests__/**/*.test.ts",
+    "src/__tests__/setup/*.ts"
+  ],
   "project": ["src/**/*.ts", "*.config.ts"],
   "include": ["files"]
 }
