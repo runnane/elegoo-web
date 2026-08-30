@@ -11,7 +11,8 @@ Topic deep-dives are in `.agents/` and are **not** auto-loaded — open the rele
 on demand when working in that area:
 
 - `.agents/gates.md` — the gate command (which is what CI runs), why green means very
-  little here, and the printer boundary no gate can enforce
+  little here, the printer boundary no gate can enforce, and why `/auto --parallel N`'s
+  gate split is unnecessary in this repo (no e2e, no port-binding gate)
 - `.agents/architecture.md` — one MQTT connection fanned out to WebSocket / REST /
   `/mcp` / Moonraker / OctoPrint / Telegram; which layer a change belongs in
 - `.agents/deployment.md` — production is systemd `elegooweb.service` running from
