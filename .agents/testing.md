@@ -118,9 +118,28 @@ another; the two things it establishes:
   approach for reason 1 in that file's header (the memoisation), which is independent of
   storage and unchanged.
 
+- **Keyboard focus *is* testable here** (ELEG-41). jsdom implements `focus()`,
+  `document.activeElement` and event dispatch, so a focus trap can be asserted properly:
+  `src/__tests__/focus-trap.test.ts` dispatches Tab and Shift+Tab and checks where focus
+  lands, including the case that matters — focus that has reached the page behind being
+  pulled back. Several older issues assume focus needs a real browser; it does not, and
+  that assumption is worth checking before deferring one.
+
+  **Where it stops:** jsdom does not implement the *native behaviour* of `inert`. A test
+  can assert the attribute is applied and removed — and should — but that a browser
+  actually honours it is not verifiable here. Say which of the two you checked; they are
+  not the same claim.
+
 What jsdom still does not give you: layout, paint, real fonts, or `getContext('2d')`.
 Colour, overlap and appearance are still `pnpm dev:web` and eyes, and there is still no
 browser or screenshot in any gate.
+
+One consequence worth knowing before writing a focus or visibility test: **do not filter
+focusable elements on geometry.** `offsetParent` and `getClientRects()` are the usual
+visibility check in a browser, but jsdom has no layout engine and reports every element
+as having none — so a geometry filter matches nothing under test and the code looks
+broken exactly where it is being verified. Filter on explicit hiding (`inert`,
+`aria-hidden`, `hidden`, this repo's `.hidden` class) instead.
 
 ## The typechecks are the real safety net, and one of them is easy to miss
 

@@ -57,6 +57,7 @@ import { installThumbnailFallback } from './ui/helpers';
 import { initTheme } from './ui/theme';
 import { maybeAlertForEvent } from './ui/alert-sound';
 import { startTimestampTicker } from './ui/relative-time';
+import { createFocusTrap } from './ui/focus-trap';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -225,24 +226,36 @@ function showDashboard(): void {
     const cameraModal = $('camera-modal');
     const cameraModalImg = $('camera-modal-img') as HTMLImageElement;
     const cameraFeed = $('camera-feed') as HTMLImageElement;
+    // ELEG-41. The overlay covers the dashboard but the dashboard stays interactive, so
+    // without a trap Tab walks focus onto the move, temperature and stop controls the
+    // user cannot see — controls that drive a physical machine. The trap also owns
+    // Escape and restores focus to the opener on close.
+    let releaseCameraTrap: (() => void) | null = null;
+
+    const closeModal = () => {
+      // Guard: the click handler on the overlay fires for the close button too, so this
+      // can run twice. Releasing a trap twice would restore focus to the wrong element.
+      if (cameraModal.classList.contains('hidden')) return;
+      cameraModal.classList.add('hidden');
+      cameraModalImg.src = '';
+      releaseCameraTrap?.();
+      releaseCameraTrap = null;
+    };
+
     cameraWrap.addEventListener('click', () => {
       if (!cameraFeed.src || cameraFeed.alt === 'Camera off') return;
       cameraModalImg.src = cameraFeed.src;
       cameraModal.classList.remove('hidden');
-      cameraModal.focus();
+      // Created after `.hidden` is removed: the trap reads the focusable children, and
+      // this repo's `.hidden` class is one of the things it treats as not focusable.
+      releaseCameraTrap = createFocusTrap(cameraModal, { onEscape: closeModal });
     });
-    const closeModal = () => {
-      cameraModal.classList.add('hidden');
-      cameraModalImg.src = '';
-    };
+
     $('camera-modal-close').addEventListener('click', (e) => {
       e.stopPropagation();
       closeModal();
     });
     cameraModal.addEventListener('click', closeModal);
-    cameraModal.addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key === 'Escape') closeModal();
-    });
 
     // Camera expand toggle
     const cameraCard = $('camera-card');
