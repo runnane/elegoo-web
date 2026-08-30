@@ -199,6 +199,16 @@ pnpm dev
 
 This starts both the backend service and Vite dev server. Open `http://localhost:5173`.
 
+The dev server answers to `localhost` only. To reach it by another name — a machine
+hostname, a LAN address, a tunnel — list them in `.env` (which is gitignored), so that
+no environment-specific hostname is committed:
+
+```bash
+VITE_ALLOWED_HOSTS=my-box.example.internal,10.0.0.5
+```
+
+This is a **dev-server** setting: `vite build` ignores it, and production never runs vite.
+
 ## Build
 
 ```bash
