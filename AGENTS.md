@@ -248,11 +248,28 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   token*), AI detection on 2010/2011 (neither exists), OTA on 1064 (really 1039). All
   three were copied out of `METHOD_NAMES` in `src/ui/log-methods.ts`, which is a
   **display label for the log viewer, not a citation**, and which contradicted itself
-  by listing 1038 *and* 1049 as history delete. Cite
-  [`data/CC2_PROTOCOL_REFERENCE.md`](data/CC2_PROTOCOL_REFERENCE.md) instead, and where
-  the docs and the running code disagree, settle it by **asking the printer** — a
-  `Get…` is a read and is allowed. `.agents/testing.md` has the one-liner. Never fire a
-  `Set…` to find out what it does.
+  by listing 1038 *and* 1049 as history delete.
+
+  **The protocol references are local-only, and are not in a clone (ELEG-66).**
+  `data/` is gitignored in full and no file under it has ever been committed, so
+  `data/CC2_PROTOCOL_REFERENCE.md` and `data/CC2-OFFICIAL-APP-PATTERNS.md` exist only on
+  a machine where someone generated them. Check before citing:
+
+  ```bash
+  ls data/CC2_PROTOCOL_REFERENCE.md data/CC2-OFFICIAL-APP-PATTERNS.md
+  ```
+
+  If you have them, cite them — they remain the authority, and `.agents/testing.md`
+  says how to weigh them against the running code. **If you do not, say so rather than
+  citing them anyway**: a citation of a file you cannot open is indistinguishable from
+  an invented one, which is the exact failure this rule exists to stop. Fall back to
+  **asking the printer** — a `Get…` is a read and is allowed; `.agents/testing.md` has
+  the one-liner. Never fire a `Set…` to find out what it does.
+
+  **Record what you learn in code, not only in `data/`.** A protocol finding written
+  into a `data/` file is lost to everyone else, because that file never commits. ELEG-55
+  put `error_code 1100` in a comment in `src/ui/log-methods.ts` for exactly this reason.
+  Do the same.
 - **Capture durable learnings — don't relearn them.** A gotcha, a workflow step, a
   project constraint: write it down in the same change. Project facts → this file or
   the relevant [`.agents/`](.agents/) deep-dive; gate particulars →
