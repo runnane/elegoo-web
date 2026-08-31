@@ -226,6 +226,45 @@ your change should add none, and because the count is currently zero you can see
 glance instead of diffing against a baseline. (This is the opposite of the VTK sibling,
 which made warnings hard errors; do not paste either repo's framing into the other.)
 
+### `vite build` exits 0 on its own warnings too — and one of them is dated (ELEG-87)
+
+biome is not the only gate that warns without failing. **`vite build` exits 0 while
+printing warnings about your config**, so a green `pnpm gates` says nothing about
+whether `vite.config.ts` still loads under the loader vite is moving to:
+
+```
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`,
+    which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:25:29). Use `import.meta.dirname` instead
+```
+
+The useful part is that **you do not have to wait for the default to flip to find
+out.** vite 8.2.1 has a CLI flag for it, so the future default is testable today:
+
+```bash
+npx vite build --configLoader native    # exit 1 today = a red build after the bump
+```
+
+That turns "this will break later" from a forecast into a measurement, and it is the
+only check that actually proves a config fix. ELEG-87 used it in both directions:
+`__dirname` gave `ReferenceError: __dirname is not defined` and exit 1, and
+`import.meta.dirname` built clean with **byte-identical output hashes** to the bundle
+loader — which is the stronger claim, because it shows both loaders resolve the
+config the same way rather than merely not crashing.
+
+Two traps worth keeping:
+
+- **The warning names only the first occurrence.** `vite.config.ts` had two
+  `__dirname` uses; fixing the one the warning pointed at just moved the warning to
+  the other line, and the native build still failed. **Grep the file, do not trust
+  the line number.**
+- **Never reach for `VITE_CONFIG_NATIVE_IGNORE_WARNING=true`.** It silences the
+  notice and keeps the breakage, so the bump lands with no warning at all.
+
+The general shape, which is the reason this sits in this file: **a gate that exits 0
+while printing a dated notice is a gate that will go red on a day nobody connects to
+the change that caused it.** Read the build log, not just the exit code.
+
 ## biome does not reach the instruction files — measured
 
 **The original reason for this section is gone; the measurement is worth keeping.** It used
