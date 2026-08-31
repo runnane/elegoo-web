@@ -20,15 +20,18 @@ export function allowedHostsFrom(raw: string | undefined): string[] {
 }
 
 export default defineConfig(({ mode }) => {
-  // envDir is __dirname rather than process.cwd() so the value is the same
-  // whichever directory vite was invoked from.
-  const env = loadEnv(mode, __dirname, 'VITE_');
+  // envDir is import.meta.dirname rather than process.cwd() so the value is the same
+  // whichever directory vite was invoked from. Not `__dirname`: that is undefined
+  // under `configLoader: 'native'`, which vite plans to make the default, and both
+  // uses in this file have to change together — the warning only names the first
+  // (ELEG-87).
+  const env = loadEnv(mode, import.meta.dirname, 'VITE_');
 
   return {
     resolve: {
       alias: {
         // Ensure only one copy of three.js is loaded (gcode-preview peer dep)
-        three: path.resolve(__dirname, 'node_modules/three'),
+        three: path.resolve(import.meta.dirname, 'node_modules/three'),
       },
       dedupe: ['three'],
     },
