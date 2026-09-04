@@ -31,8 +31,8 @@ importers:
         specifier: ^17.4.2
         version: 17.4.2
       gcode-preview:
-        specifier: 3.0.0-alpha.4
-        version: 3.0.0-alpha.4
+        specifier: 3.0.0-alpha.5
+        version: 3.0.0-alpha.5
       grammy:
         specifier: ^1.45.1
         version: 1.45.1
@@ -1948,8 +1948,8 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
-  gcode-preview@3.0.0-alpha.4:
-    resolution: {integrity: sha512-vNHQ72WHkfqbbmDkRJ36j9cIIrafaoB8l+4rJWscez6uZ3V6G8X/8gCmTV8Qije4hdEMygMbrS57Gjb0125Vsg==}
+  gcode-preview@3.0.0-alpha.5:
+    resolution: {integrity: sha512-DWkw6Kv83QC7BxPHqhNk0dso9ILNgH/J5Mz+xvx7j4jqjCIg33xRmU9rkdmdlC6K1uduPVF5cb50LpA1TBLr6A==}
 
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
@@ -4680,7 +4680,7 @@ snapshots:
 
   function-bind@1.1.2: {}
 
-  gcode-preview@3.0.0-alpha.4:
+  gcode-preview@3.0.0-alpha.5:
     dependencies:
       lil-gui: 0.20.0
       three: 0.178.0

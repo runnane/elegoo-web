@@ -57,7 +57,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "dotenv": "^17.4.2",
-    "gcode-preview": "3.0.0-alpha.4",
+    "gcode-preview": "3.0.0-alpha.5",
     "grammy": "^1.45.1",
     "mqtt": "^5.15.2",
     "pdfkit": "^0.19.1",
