@@ -34,8 +34,8 @@ importers:
         specifier: 3.0.0-alpha.4
         version: 3.0.0-alpha.4
       grammy:
-        specifier: ^1.45.1
-        version: 1.45.1
+        specifier: ^1.46.0
+        version: 1.46.0
       mqtt:
         specifier: ^5.15.2
         version: 5.15.2
@@ -442,8 +442,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@grammyjs/types@4.0.0':
-    resolution: {integrity: sha512-Z8lDLTvOlo12e5Vnly/vQh3JC9ppaitS1dGZ3w068gNitOd/y8tTSiib+Xm38aBGbtYGmUZwOc6afYrLs2CSTg==}
+  '@grammyjs/types@5.0.0':
+    resolution: {integrity: sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A==}
 
   '@hono/node-server@2.1.0':
     resolution: {integrity: sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==}
@@ -1999,8 +1999,8 @@ packages:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
 
-  grammy@1.45.1:
-    resolution: {integrity: sha512-Y4VL/hqJMZZxwlUr5ZgM68CFu2iIeEkNLR1cY3+Ww68CIvWARDsoXFix7+31rmyC0+7L85ZI+Pq3E5JSG5+nLQ==}
+  grammy@1.46.0:
+    resolution: {integrity: sha512-/8Qw+iisrUdOMk+p2mjEHouMm/BBdBEN1DHh16wiTpRUZkxDG3PxexdjCvR+wvK3LWPdrEvnQbdrwpU954sPhg==}
     engines: {node: ^12.20.0 || >=14.13.1}
 
   guid-typescript@1.0.9:
@@ -3384,7 +3384,7 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 1.8.0
 
-  '@grammyjs/types@4.0.0': {}
+  '@grammyjs/types@5.0.0': {}
 
   '@hono/node-server@2.1.0(hono@4.13.1)':
     dependencies:
@@ -4738,9 +4738,9 @@ snapshots:
 
   gopd@1.2.0: {}
 
-  grammy@1.45.1:
+  grammy@1.46.0:
     dependencies:
-      '@grammyjs/types': 4.0.0
+      '@grammyjs/types': 5.0.0
       abort-controller: 3.0.0
       debug: 4.4.3
       node-fetch: 2.7.0
