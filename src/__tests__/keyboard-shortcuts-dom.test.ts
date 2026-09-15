@@ -113,18 +113,32 @@ describe('keyboard shortcuts — DOM wiring', () => {
     expect(btn.classList.contains('active')).toBe(!before);
   });
 
-  it('Pause is a bare key and never asks for confirmation', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('bare "p" (no Shift) does not pause the print', () => {
+    sendCommand.mockClear();
     press('p');
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('bare "r" (no Shift) does not resume the print', () => {
+    sendCommand.mockClear();
+    press('r');
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('Shift+P pauses immediately — no confirmation, but Shift is required', () => {
+    sendCommand.mockClear();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    press('p', { shiftKey: true });
     expect(sendCommand).toHaveBeenCalledWith(1021, {});
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
     onCommandResponse(1021);
   });
 
-  it('Resume is a bare key and never asks for confirmation', () => {
+  it('Shift+R resumes immediately — no confirmation, but Shift is required', () => {
+    sendCommand.mockClear();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    press('r');
+    press('r', { shiftKey: true });
     expect(sendCommand).toHaveBeenCalledWith(1023, {});
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
@@ -188,7 +202,7 @@ describe('keyboard shortcuts — DOM wiring', () => {
     filter.focus();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    press('p');
+    press('p', { shiftKey: true });
     press('s', { shiftKey: true });
 
     expect(sendCommand).not.toHaveBeenCalled();

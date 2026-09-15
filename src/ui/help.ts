@@ -21,9 +21,10 @@ function renderShortcutsTable(): string {
   return `
 <div class="help-section">
   <h3>Keyboard Shortcuts</h3>
-  <p>Bare keys are used only for non-destructive actions and never fire while a text
-  input has focus or while a modal/confirmation/overlay is open. Stop and Home need
-  <code>Shift</code> and both still show a confirmation dialog before anything is
+  <p>Bare keys are used only for actions that do not command the printer — switching
+  tabs, the file filter, the camera overlay, Help — and never fire while a text input
+  has focus or while a modal/confirmation/overlay is open. Every printer action needs
+  <code>Shift</code>; Stop and Home also show a confirmation dialog before anything is
   sent to the printer — a shortcut is never allowed to do less checking than the
   on-screen button. Emergency Stop has no keyboard shortcut; use the button.</p>
   <table class="help-api">

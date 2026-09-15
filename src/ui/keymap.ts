@@ -11,17 +11,23 @@
  *
  * ## The scheme
  *
- * - **Bare keys only for non-destructive actions**: switching tabs, focusing the file
- *   filter, toggling the camera overlay, opening Help.
- * - **Pause and Resume are also bare.** The issue itself calls Pause "arguably safe",
- *   and the existing buttons (`src/ui/controls.ts`) confirm neither — Resume
- *   continues a job the user already started rather than initiating a new physical
- *   action, so it gets the same treatment.
- * - **Stop and Home require the Shift modifier**, chosen because it needs no
+ * - **Bare keys only for non-destructive, non-printer actions**: switching tabs,
+ *   focusing the file filter, toggling the camera overlay, opening Help. The issue's
+ *   own list of what may be bare is exactly this set — Pause and Resume are printer
+ *   commands and are not on it, so they do not get a bare key either, even though
+ *   neither needs a confirmation.
+ * - **Every printer action sits behind Shift**, chosen because it needs no
  *   Cmd-vs-Ctrl distinction between macOS and everything else, and collides with none
  *   of the browser-reserved `Ctrl+`/`Cmd+` combos (`Ctrl+W`, `Ctrl+R`, `Ctrl+H`, …).
- *   They resolve to an action here; the DOM wiring in `keyboard-shortcuts.ts` is what
- *   actually shows the confirmation before sending anything.
+ *   The issue's page-left-open-on-a-second-monitor argument applies just as much to a
+ *   bare `P` pausing a 14-hour print or a bare `R` restarting motion on a paused one as
+ *   it does to Stop or Home — a stray keystroke commands the printer either way. Pause
+ *   and Resume resolve to an action on `Shift+P`/`Shift+R` with **no confirmation**
+ *   (the issue's "Pause is arguably safe" is about the confirmation, not the modifier,
+ *   and the existing buttons in `src/ui/controls.ts` confirm neither). Stop and Home
+ *   also require Shift, **and** additionally go through a confirmation — the DOM
+ *   wiring in `keyboard-shortcuts.ts` is what actually shows it before sending
+ *   anything.
  * - **Emergency Stop has no binding at all** — it is not in the original proposal, it
  *   already has an always-visible button, and adding a keyboard path to it only grows
  *   the accidental-trigger surface without anyone having asked for it.
@@ -83,7 +89,7 @@ function bareSymbol(key: string): (e: KeyLikeEvent) => boolean {
   return (e) => e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey;
 }
 
-/** The Shift-modified form used for destructive actions. */
+/** The Shift-modified form used for every printer action (Pause, Resume, Stop, Home). */
 function shiftOnly(key: string): (e: KeyLikeEvent) => boolean {
   return (e) =>
     e.key.toLowerCase() === key && e.shiftKey === true && !e.ctrlKey && !e.metaKey && !e.altKey;
@@ -153,15 +159,15 @@ export const BINDINGS: ReadonlyArray<Binding> = [
     label: 'Open this Help tab',
   },
   {
-    match: bare('p'),
+    match: shiftOnly('p'),
     action: { type: 'pause' },
-    display: 'P',
+    display: 'Shift+P',
     label: 'Pause the current print',
   },
   {
-    match: bare('r'),
+    match: shiftOnly('r'),
     action: { type: 'resume' },
-    display: 'R',
+    display: 'Shift+R',
     label: 'Resume the paused print',
   },
   {

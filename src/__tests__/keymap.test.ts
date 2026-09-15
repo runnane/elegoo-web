@@ -22,8 +22,8 @@ const CANONICAL_EVENTS: readonly KeyLikeEvent[] = [
   { key: 'f' },
   { key: 'c' },
   { key: '?', shiftKey: true },
-  { key: 'p' },
-  { key: 'r' },
+  { key: 'p', shiftKey: true },
+  { key: 'r', shiftKey: true },
   { key: 's', shiftKey: true },
   { key: 'h', shiftKey: true },
 ];
@@ -63,9 +63,9 @@ describe('resolveShortcut — explicit bindings', () => {
     expect(resolveShortcut({ key: '?', shiftKey: true }, OPEN)).toEqual({ type: 'help' });
   });
 
-  it('"p" pauses and "r" resumes, bare, with no modifier required', () => {
-    expect(resolveShortcut({ key: 'p' }, OPEN)).toEqual({ type: 'pause' });
-    expect(resolveShortcut({ key: 'r' }, OPEN)).toEqual({ type: 'resume' });
+  it('Shift+P pauses; Shift+R resumes — no confirmation needed, but Shift is required', () => {
+    expect(resolveShortcut({ key: 'p', shiftKey: true }, OPEN)).toEqual({ type: 'pause' });
+    expect(resolveShortcut({ key: 'r', shiftKey: true }, OPEN)).toEqual({ type: 'resume' });
   });
 
   it('Shift+S stops; Shift+H homes', () => {
@@ -74,12 +74,20 @@ describe('resolveShortcut — explicit bindings', () => {
   });
 
   it('is case-insensitive on the letter', () => {
-    expect(resolveShortcut({ key: 'P' }, OPEN)).toEqual({ type: 'pause' });
+    expect(resolveShortcut({ key: 'P', shiftKey: true }, OPEN)).toEqual({ type: 'pause' });
     expect(resolveShortcut({ key: 'S', shiftKey: true }, OPEN)).toEqual({ type: 'stop' });
   });
 });
 
-describe('resolveShortcut — destructive actions require the modifier', () => {
+describe('resolveShortcut — every printer action requires the modifier, not just the destructive ones', () => {
+  it('bare "p" (no Shift) resolves to nothing — it does NOT pause the print', () => {
+    expect(resolveShortcut({ key: 'p' }, OPEN)).toBeNull();
+  });
+
+  it('bare "r" (no Shift) resolves to nothing — it does NOT resume the print', () => {
+    expect(resolveShortcut({ key: 'r' }, OPEN)).toBeNull();
+  });
+
   it('bare "s" (no Shift) resolves to nothing — it does NOT stop the print', () => {
     expect(resolveShortcut({ key: 's' }, OPEN)).toBeNull();
   });
@@ -88,13 +96,15 @@ describe('resolveShortcut — destructive actions require the modifier', () => {
     expect(resolveShortcut({ key: 'h' }, OPEN)).toBeNull();
   });
 
-  it('Ctrl/Meta/Alt is never substituted for Shift on a destructive binding', () => {
+  it('Ctrl/Meta/Alt is never substituted for Shift on a printer-action binding', () => {
+    expect(resolveShortcut({ key: 'p', ctrlKey: true }, OPEN)).toBeNull();
+    expect(resolveShortcut({ key: 'r', metaKey: true }, OPEN)).toBeNull();
     expect(resolveShortcut({ key: 's', ctrlKey: true }, OPEN)).toBeNull();
     expect(resolveShortcut({ key: 's', metaKey: true }, OPEN)).toBeNull();
     expect(resolveShortcut({ key: 'h', altKey: true }, OPEN)).toBeNull();
   });
 
-  it('every destructive binding is flagged by isDestructiveAction, and non-destructive ones are not', () => {
+  it('every destructive binding is flagged by isDestructiveAction; Pause/Resume are not, despite also needing Shift', () => {
     for (const binding of BINDINGS) {
       const destructive = binding.action.type === 'stop' || binding.action.type === 'home';
       expect(isDestructiveAction(binding.action)).toBe(destructive);
