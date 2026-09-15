@@ -1,6 +1,38 @@
-import { $ } from './helpers';
+import { $, escapeHtml } from './helpers';
+import { BINDINGS, isDestructiveAction } from './keymap';
 
 let helpRendered = false;
+
+/**
+ * Built from `keymap.ts`'s `BINDINGS`, not hand-copied — so this table and the live
+ * shortcuts cannot drift apart the way `log-methods.ts`'s citations once did (ELEG-33
+ * follows the AGENTS.md lesson from that: a display string is not a hardcoded copy).
+ */
+function renderShortcutsTable(): string {
+  const rows = BINDINGS.map((b) => {
+    const destructive = isDestructiveAction(b.action);
+    const keyCell = `<code>${escapeHtml(b.display)}</code>`;
+    const labelCell = destructive
+      ? `${escapeHtml(b.label)} <span class="help-shortcut-destructive">⚠️ confirmation required</span>`
+      : escapeHtml(b.label);
+    return `<tr><td>${keyCell}</td><td>${labelCell}</td></tr>`;
+  }).join('');
+
+  return `
+<div class="help-section">
+  <h3>Keyboard Shortcuts</h3>
+  <p>Bare keys are used only for actions that do not command the printer — switching
+  tabs, the file filter, the camera overlay, Help — and never fire while a text input
+  has focus or while a modal/confirmation/overlay is open. Every printer action needs
+  <code>Shift</code>; Stop and Home also show a confirmation dialog before anything is
+  sent to the printer — a shortcut is never allowed to do less checking than the
+  on-screen button. Emergency Stop has no keyboard shortcut; use the button.</p>
+  <table class="help-api">
+    <thead><tr><th>Key</th><th>Action</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</div>`;
+}
 
 export function renderHelp(): void {
   const container = $('help-content');
@@ -24,6 +56,8 @@ export function renderHelp(): void {
     </tbody>
   </table>
 </div>
+
+${renderShortcutsTable()}
 
 <div class="help-section">
   <h3>Native REST API <code>/api/*</code></h3>
