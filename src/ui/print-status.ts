@@ -457,8 +457,12 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
 export function renderHeader(state: PrinterState): void {
   const attrs = state.attributes;
   if (attrs) {
-    $('printer-name').textContent =
-      `${attrs.hostname} (${attrs.machine_model}) — FW ${attrs.software_version?.ota_version}`;
+    // The header truncates this in CSS at phone widths, so the full string also goes in
+    // `title` (ELEG-43, ELEG-90).
+    const name = `${attrs.hostname} (${attrs.machine_model}) — FW ${attrs.software_version?.ota_version}`;
+    const el = $('printer-name');
+    el.textContent = name;
+    el.title = name;
   }
 }
 
