@@ -59,7 +59,7 @@ describe('BIND_ADDRESS', () => {
     expect(() => loadConfig()).toThrow(/IPv6/);
   });
 
-  it('refuses an empty explicit value rather than silently falling back', () => {
+  it('treats an empty value as unset and falls back to 0.0.0.0', () => {
     process.env.BIND_ADDRESS = '';
     // env() treats an empty string as unset and falls back to the default — assert
     // that documented behaviour explicitly, since it is easy to assume the opposite.
