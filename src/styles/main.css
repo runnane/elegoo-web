@@ -641,6 +641,42 @@ body {
   border-left: 3px solid var(--warning);
 }
 
+/* OTA firmware-update banner (ELEG-98) — read-only progress, unmissable while a
+   flash the printer itself reports is in the "do not power off" window. */
+.ota-banner {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  margin: 8px 12px;
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+.ota-banner-active {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  animation: ota-banner-pulse 1.6s ease-in-out infinite;
+}
+.ota-banner-done {
+  background: var(--success-dim);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+.ota-banner-failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+@keyframes ota-banner-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
 .print-progress-wrap {
   display: flex;
   align-items: center;

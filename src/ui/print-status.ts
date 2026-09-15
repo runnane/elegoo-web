@@ -6,6 +6,8 @@ import {
   EXCEPTION_NAMES,
   CRITICAL_EXCEPTIONS,
   powerLossState,
+  isOtaSubStatus,
+  isOtaInProgressSubStatus,
 } from '../types';
 import { maybeShowPowerLossDialog } from './power-loss-dialog';
 import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
@@ -452,6 +454,9 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
 
   // Exception banner
   renderExceptions(machineStatus?.exception_status ?? []);
+
+  // OTA firmware-update banner (ELEG-98) — read-only, derived from live sub_status
+  renderOtaBanner(machineStatus?.sub_status);
 }
 
 export function renderHeader(state: PrinterState): void {
@@ -486,6 +491,44 @@ function renderExceptions(codes: number[]): void {
   });
 
   banner.innerHTML = items.join('');
+  banner.classList.remove('hidden');
+}
+
+/**
+ * Show a "do not power off" banner while the printer reports an OTA sub-status
+ * (ELEG-98). Read-only — this app never triggers or probes an OTA flash (method
+ * 1039, parked in ELEG-99); it only names states the printer reports on its own.
+ *
+ * Derived entirely from the live `sub_status` on every render, so a page reload
+ * mid-flash shows it again by construction — there is deliberately no client-side
+ * storage for this.
+ *
+ * The two terminal codes (2704 complete, 2705 failed) get their own, calmer
+ * message: the flash has already stopped one way or the other, so continuing to
+ * say "do not power off" would be a lie the moment it is read, and the firmware
+ * reboots on its own once an update completes (see the protocol reference's
+ * key-notes §19.8).
+ */
+export function renderOtaBanner(subStatus: number | undefined): void {
+  const banner = $('ota-banner');
+  if (subStatus == null || !isOtaSubStatus(subStatus)) {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+    return;
+  }
+
+  if (isOtaInProgressSubStatus(subStatus)) {
+    banner.innerHTML =
+      '⚠️ <strong>Firmware update in progress — do not power off the printer.</strong>';
+    banner.className = 'ota-banner ota-banner-active';
+  } else if (subStatus === 2704) {
+    banner.innerHTML = '✅ Firmware update complete — the printer will restart on its own.';
+    banner.className = 'ota-banner ota-banner-done';
+  } else {
+    // 2705 OTAFailed
+    banner.innerHTML = '❌ Firmware update failed.';
+    banner.className = 'ota-banner ota-banner-failed';
+  }
   banner.classList.remove('hidden');
 }
 

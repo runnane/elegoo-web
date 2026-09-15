@@ -274,6 +274,35 @@ export function isFilamentChangeSubStatus(subStatus: number): boolean {
   return false;
 }
 
+/**
+ * Returns true if the sub_status is an OTA firmware-update code — the printer
+ * reporting progress on a flash that was triggered elsewhere (vendor app, or a
+ * future ELEG-99). Read-only: this app never sends the trigger (method 1039).
+ *
+ * Codes verified against the local protocol reference (`data/CC2_PROTOCOL_REFERENCE.md`
+ * §3, not in a clone — ELEG-66, gitignored): 2601 OTAInfoUpdating, 2701 OTADownloading,
+ * 2702 OTAExtracting, 2703 OTAUpdating (flashing), 2704 OTAComplete, 2705 OTAFailed.
+ * 2602–2700 is not a gap worth spanning — 2603 (InitializeComplete) sits in it and is
+ * unrelated to OTA, so the range is written as two discrete pieces rather than one span.
+ */
+export function isOtaSubStatus(subStatus: number): boolean {
+  if (subStatus === 2601) return true;
+  if (subStatus >= 2701 && subStatus <= 2705) return true;
+  return false;
+}
+
+/**
+ * Returns true for the OTA sub-statuses where firmware is actively being written to
+ * the printer — the window a "do not power off" warning covers. Excludes the two
+ * terminal codes, 2704 (complete) and 2705 (failed), where the flash has already
+ * stopped one way or the other.
+ */
+export function isOtaInProgressSubStatus(subStatus: number): boolean {
+  if (subStatus === 2601) return true;
+  if (subStatus >= 2701 && subStatus <= 2703) return true;
+  return false;
+}
+
 // ─── Running version ─────────────────────────────────────────────────
 
 /**

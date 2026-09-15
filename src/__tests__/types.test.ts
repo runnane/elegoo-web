@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   detectZone,
   isFilamentChangeSubStatus,
+  isOtaSubStatus,
+  isOtaInProgressSubStatus,
   classifyCommandOutcome,
   describeCommandError,
   COMMAND_METHOD_NAMES,
@@ -15,6 +17,7 @@ import {
   formatBuildVersion,
   buildVersionLabel,
   UNKNOWN_VERSION_LABEL,
+  SUB_STATUS_NAMES,
 } from '../types';
 
 describe('detectZone', () => {
@@ -51,6 +54,56 @@ describe('isFilamentChangeSubStatus', () => {
     expect(isFilamentChangeSubStatus(0)).toBe(false);
     expect(isFilamentChangeSubStatus(1000)).toBe(false);
     expect(isFilamentChangeSubStatus(2075)).toBe(false);
+  });
+});
+
+describe('isOtaSubStatus (ELEG-98)', () => {
+  const OTA_CODES = [2601, 2701, 2702, 2703, 2704, 2705];
+
+  it('names every OTA code in SUB_STATUS_NAMES', () => {
+    // A code classified but unnamed would surface to the user as a bare number.
+    for (const code of OTA_CODES) {
+      expect(SUB_STATUS_NAMES[code], `code ${code} has no name`).toBeTruthy();
+    }
+    expect(SUB_STATUS_NAMES[2601]).toBe('OTA Info Updating');
+    expect(SUB_STATUS_NAMES[2701]).toBe('OTA Downloading');
+    expect(SUB_STATUS_NAMES[2702]).toBe('OTA Extracting');
+    expect(SUB_STATUS_NAMES[2703]).toBe('OTA Updating');
+    expect(SUB_STATUS_NAMES[2704]).toBe('OTA Complete');
+    expect(SUB_STATUS_NAMES[2705]).toBe('OTA Failed');
+  });
+
+  it('returns true for every OTA code, 2601 and 2701 through 2705', () => {
+    for (const code of OTA_CODES) {
+      expect(isOtaSubStatus(code), `code ${code}`).toBe(true);
+    }
+  });
+
+  it('returns false for neighbours the range must not swallow', () => {
+    // 2600/2706 bracket the codes; 2603 (InitializeComplete) sits inside the
+    // 2601-2701 gap and is a different, unrelated code; 2075 is ordinary printing;
+    // 1061 is the unrelated extruder sub-status range this issue is not about.
+    for (const code of [2600, 2706, 2603, 2075, 1061, 0]) {
+      expect(isOtaSubStatus(code), `code ${code}`).toBe(false);
+    }
+  });
+});
+
+describe('isOtaInProgressSubStatus (ELEG-98)', () => {
+  it('is true for the codes where firmware is actively being written', () => {
+    for (const code of [2601, 2701, 2702, 2703]) {
+      expect(isOtaInProgressSubStatus(code), `code ${code}`).toBe(true);
+    }
+  });
+
+  it('is false for the two terminal codes — the flash has already stopped', () => {
+    expect(isOtaInProgressSubStatus(2704)).toBe(false);
+    expect(isOtaInProgressSubStatus(2705)).toBe(false);
+  });
+
+  it('is false for anything that is not an OTA code at all', () => {
+    expect(isOtaInProgressSubStatus(2075)).toBe(false);
+    expect(isOtaInProgressSubStatus(0)).toBe(false);
   });
 });
 
