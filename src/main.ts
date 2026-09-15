@@ -51,6 +51,7 @@ import {
   renderDebugPanel,
   bindDebugPanel,
   trackStateChanges,
+  bindKeyboardShortcuts,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
 import { installThumbnailFallback } from './ui/helpers';
@@ -200,6 +201,7 @@ function showDashboard(): void {
     bindReportControls();
     bindGcodePreviewControls();
     bindDebugPanel();
+    bindKeyboardShortcuts();
     $('timelapse-close').addEventListener('click', () => {
       const player = $('timelapse-player') as HTMLVideoElement;
       player.pause();
