@@ -15,6 +15,14 @@ export interface ServiceConfig {
 
   // Service
   servicePort: number;
+  /**
+   * The interface both HTTP servers (the main service and the separate Moonraker
+   * `:7125` server) bind to. Defaults to `0.0.0.0` — today's behaviour, unchanged —
+   * because who *should* be able to reach this is a decision for a human (ELEG-27,
+   * ELEG-94), not something this issue forces. Also reported back to Moonraker compat
+   * clients in `server.config` responses, since that is what real Moonraker does.
+   */
+  bindAddress: string;
 
   // Camera
   cameraEnabled: boolean;
@@ -63,6 +71,30 @@ function validatePort(value: number, name: string): void {
   }
 }
 
+/**
+ * Validates a dotted-quad IPv4 address, the same shape `PRINTER_IP` requires. Throws
+ * with an actionable message rather than letting a bad value reach `listen()`, where a
+ * malformed bind address surfaces as an opaque `EADDRNOTAVAIL` (or, worse, a value that
+ * happens to resolve to something else entirely).
+ *
+ * IPv6 (`::`, `::1`) is deliberately out of scope: every example, test fixture and the
+ * TEST-NET convention this repo uses (`.agents/testing.md`) is IPv4-only, and `0.0.0.0`
+ * / `127.0.0.1` already cover both binds this issue asks for. Extending validation to
+ * IPv6 is future work if a real need for it shows up — not a silent accept-anything.
+ */
+function validateIPv4(value: string, name: string): void {
+  if (!IP_RE.test(value)) {
+    throw new Error(
+      `Invalid ${name}: "${value}" (must be a valid IPv4 address, e.g. 0.0.0.0 or ` +
+        '127.0.0.1 — IPv6 is not supported)',
+    );
+  }
+  const octets = value.split('.').map(Number);
+  if (octets.some((o) => o > 255)) {
+    throw new Error(`Invalid ${name}: "${value}" (octet out of range)`);
+  }
+}
+
 export function loadConfig(): ServiceConfig {
   // No default. It used to fall back to a real address on the maintainer's own LAN,
   // which shipped in a public image (ELEG-73) — so a user who forgot to set this got a
@@ -90,6 +122,11 @@ export function loadConfig(): ServiceConfig {
   const servicePort = parseInt(env('SERVICE_PORT', '8088'), 10);
   validatePort(servicePort, 'SERVICE_PORT');
 
+  // Default unchanged from today's behaviour (ELEG-93). What production SHOULD bind is
+  // a human decision (ELEG-94) — this only makes the value configurable.
+  const bindAddress = env('BIND_ADDRESS', '0.0.0.0');
+  validateIPv4(bindAddress, 'BIND_ADDRESS');
+
   const moonrakerPort = parseInt(env('MOONRAKER_PORT', '7125'), 10);
   validatePort(moonrakerPort, 'MOONRAKER_PORT');
 
@@ -116,6 +153,7 @@ export function loadConfig(): ServiceConfig {
     printerPassword: env('PRINTER_PASSWORD', '123456'),
     printerSn: env('PRINTER_SN', '').trim(),
     servicePort,
+    bindAddress,
     cameraEnabled: env('CAMERA_ENABLED') !== 'false',
     cameraUrl: env('CAMERA_URL') || `http://${printerIp}:8080`,
     corsPolicy: parseCorsPolicy(env('CORS_ALLOWED_ORIGINS')),
