@@ -186,8 +186,8 @@ All persistent data lives under `/app/data` inside the container:
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm
+- Node.js 22.13+
+- pnpm 11. The exact version is pinned by `packageManager` in `package.json`, and an older `pnpm` switches to it by itself.
 - An Elegoo CC2 printer on the same network, set to **LAN-only mode**
 
 ## Quick Start

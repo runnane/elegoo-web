@@ -142,8 +142,8 @@ historical reds are kept below because their shapes recur, not because they are 
    The fix was both halves: the settings moved to `pnpm-workspace.yaml` (their documented
    new home, read by 10.x *and* 11.x), and the package manager is now pinned by
    `packageManager` in `package.json` with **no `version:` in the workflow**, so CI runs
-   exactly what you run. **If you bump `packageManager` to 11.x, expect the release-age
-   policy to bite** — that move is its own issue.
+   exactly what you run. ELEG-9 has since moved the pin to 11.x on purpose. The next
+   section records what that move had to deal with.
 
    The lasting lesson: `version: latest` on a package-manager action means CI drifts away
    from every developer without a commit. Don't reintroduce it. And still don't "fix" a
@@ -158,9 +158,78 @@ Either way the habit stands: **read which step failed before attributing a red c
 your branch or dismissing it. What has changed is the prior — a red check is now evidence
 about your change rather than background noise.
 
-One thing that did **not** change: the install step takes **~9 minutes** on a cold cache,
-because `onlyBuiltDependencies` lets `onnxruntime-node`, `sharp`, `protobufjs` and
-`esbuild` run native build scripts. A long-running install is not a hang.
+The install step is no longer slow. Under pnpm 10 it took **~9 minutes** on a cold cache
+(ELEG-4). Under pnpm 11 in CI it took **12.8s**, and the whole `ci` job **43s** (ELEG-9's
+PR, 2026-09-15). `allowBuilds` still lets `esbuild` and `onnxruntime-node` run their
+postinstall scripts, and onnxruntime-node's downloads its native provider libraries from
+nuget, so a slow registry or nuget can still stretch it. If the install runs long, look
+at that step's log before deciding it has hung.
+
+## pnpm 11: build approvals, the release-age policy, and the pnpm-10 purge (ELEG-9)
+
+`packageManager` is `pnpm@11.26.0`. Everything here was measured against that pin on
+2026-09-15.
+
+**Build scripts need `allowBuilds`, and a missing entry is fatal.** pnpm 11 removed
+`onlyBuiltDependencies`. The old list is ignored, not misread. `strictDepBuilds` now
+defaults to true, so the old config failed the install outright:
+
+```
+ERR_PNPM_IGNORED_BUILDS  Ignored build scripts: esbuild@0.28.2, onnxruntime-node@1.24.3, simple-git-hooks@2.13.1
+```
+
+`pnpm-workspace.yaml` now lists only the packages that **have** an install script at
+their locked version. sharp 0.35.x and protobufjs 8.x have none, so they are off the list.
+pnpm 10.33.3 reads `allowBuilds` too: with the key, `ignoredBuilds` in
+`node_modules/.modules.yaml` is `[]`; without it, it lists the three above. 10.x only
+warns about it.
+
+**A clean exit, or `require('sharp')` working, is not proof that builds ran.** sharp,
+esbuild and onnxruntime-node all load from prebuilt binaries either way. The evidence is
+the install log's `postinstall: Done` lines for esbuild and onnxruntime-node, plus
+`ignoredBuilds` being empty or absent in `.modules.yaml`.
+
+**A failed install can edit a tracked file.** On `ERR_PNPM_IGNORED_BUILDS`, pnpm 11
+writes placeholders (`esbuild: set this to true or false`) into `allowBuilds` in
+`pnpm-workspace.yaml`. A non-strict `pnpm add` of a too-new version writes a
+`minimumReleaseAgeExclude` entry. After any failed or surprising install, run
+`git diff pnpm-workspace.yaml`, and commit neither.
+
+**`minimumReleaseAge: 1440` is set explicitly, which turns strict mode on.** 1440 is
+pnpm 11's default. Setting the key explicitly also turns on `minimumReleaseAgeStrict`,
+which pnpm's config loader does only for an explicit key. Measured with a 14-day window
+against `pnpm@11.26.0`, then 9 days old:
+
+| | `pnpm add pnpm@11.26.0` | frozen install of a lockfile holding it |
+| --- | --- | --- |
+| explicit key (strict) | `ERR_PNPM_NO_MATURE_MATCHING_VERSION` | `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` |
+| `minimumReleaseAgeStrict: false` | installs it, **and writes an exclude entry** | `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` |
+
+So strict changes what someone **adding** a dependency gets, not what CI does. A lockfile
+entry younger than 24h fails `pnpm install --frozen-lockfile` either way. That red heals
+itself once the entry is a day old. Wait it out, and do not lower the policy. A range
+such as `pkg@^1` that also matches an older, mature version resolves to that version
+under both settings.
+
+**Dependabot is kept outside the window by `cooldown`** (`default-days: 2`,
+`semver-major-days: 3` in `.github/dependabot.yml`). Cooldown does **not** apply to
+security updates, so a Dependabot security PR can still open red with
+`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` for up to a day. Re-run it after the window.
+That red is expected and says nothing about the PR. Cooldown takes effect only once it
+is on `main`, so the first Dependabot run after ELEG-9 is its first real test.
+
+**The first install over a pnpm-10 `node_modules` refuses to run without a TTY:**
+
+```
+ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY  Aborted removal of modules directory due to no TTY
+If you are running pnpm in CI, set the CI environment variable to "true", or set "confirmModulesPurge" to "false".
+```
+
+Every agent session and script hits this once per checkout. The first symptom is
+`pnpm gates` failing for a reason that has nothing to do with the gates. The measured way
+past it is `pnpm install --config.confirmModulesPurge=false`. Running `pnpm install` once
+in a real terminal and answering the prompt also works. Hosted CI never sees the refusal,
+because pnpm skips the prompt when `CI` is set.
 
 ## CI works here, unlike in the private siblings
 
