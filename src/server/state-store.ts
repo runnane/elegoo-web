@@ -543,6 +543,62 @@ export class StateStore extends EventEmitter {
     this.emit('layer_clear');
   }
 
+  /**
+   * Forget everything about the current printer, because the service is about to talk to
+   * a different one (ELEG-95).
+   *
+   * The store holds exactly one printer's state, and nearly all of it is merged from
+   * deltas — so without this, printer B's first status delta would be deep-merged *into*
+   * A's status and every field B does not happen to mention would keep showing A's value.
+   * Cleared, not kept per printer: keeping several is ELEG-96's keyed-registry refactor.
+   *
+   * Everything per-printer goes: status, attributes, canvas, files, thumbnail, zones, the
+   * layer series, filament usage, chart and AI chart history, the raw log, the event log,
+   * and the event-detection baseline (so B's first full status establishes a fresh one
+   * instead of being diffed against A's). The chart sampler keeps running.
+   *
+   * Emits `printer_switched` so consumers holding their own per-printer state can drop it.
+   */
+  resetForPrinterSwitch(): void {
+    this.attributes = null;
+    this.status = null;
+    this.canvas = null;
+    this.files = [];
+    this.thumbnail = null;
+    this.thumbnailFailed = false;
+    this.fileTotalLayers = null;
+    this.timelapseList = [];
+    this.videoUrl = null;
+    this.zones = { current: 'outside', previous: 'outside', enteredAt: 0, history: [] };
+
+    this.layerTimes = [];
+    this._lastLayer = 0;
+    this._lastLayerTime = 0;
+    this._lastExtruderE = 0;
+    this._lastExtruderSampleTime = 0;
+    this.filamentUsage.clear();
+    this.chartData = [];
+    this.aiChartData = [];
+    this.rawLog = [];
+    this.eventLog = [];
+
+    this.lastMachineStatus = -1;
+    this.lastSubStatus = -1;
+    this.lastProgressNotified = -1;
+    this.lastExceptions = [];
+    this.totalLayers = 0;
+    if (this.pendingPrintStartTimer) {
+      clearTimeout(this.pendingPrintStartTimer);
+      this.pendingPrintStartTimer = null;
+    }
+    this.pendingPrintStartRetries = 0;
+    this.baselineReady = false;
+    this.lastAutoReportId = null;
+    this.stopStatusPoll();
+
+    this.emit('printer_switched');
+  }
+
   /** Clean up timers */
   destroy(): void {
     if (this.chartTimer) clearInterval(this.chartTimer);

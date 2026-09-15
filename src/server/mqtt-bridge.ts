@@ -22,6 +22,17 @@ export interface MqttBridgeEvents {
   raw: [direction: 'sent' | 'received', topic: string, data: unknown];
 }
 
+/** How the bridge opens its client. Injectable so a test can count connections. */
+export type MqttConnectFn = (url: string, opts: mqtt.IClientOptions) => mqtt.MqttClient;
+
+/** A printer to (re)connect to — see `MqttBridge.retarget`. */
+export interface BridgeTarget {
+  ip: string;
+  password: string;
+  sn: string;
+  onSnLearned?: (sn: string) => void;
+}
+
 export class MqttBridge extends EventEmitter {
   private client: mqtt.MqttClient | null = null;
   private clientId: string;
@@ -37,6 +48,8 @@ export class MqttBridge extends EventEmitter {
   private _rejected = false;
   private heartbeatMissed = 0;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The delayed connect() scheduled by a heartbeat-forced reconnect. */
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private sawPrinterMessage = false;
 
   /**
@@ -51,12 +64,14 @@ export class MqttBridge extends EventEmitter {
    *   registration starts on the first broker connect instead of waiting to overhear a
    *   message the printer will not send while nothing is registered (ELEG-60).
    * @param onSnLearned Called when an SN is discovered, so the caller can remember it.
+   * @param connectFn Opens the MQTT client; only a test passes anything else.
    */
   constructor(
     private printerIp: string,
     private password: string,
     initialSn = '',
     private onSnLearned?: (sn: string) => void,
+    private connectFn: MqttConnectFn = (url, opts) => mqtt.connect(url, opts),
   ) {
     super();
     this.clientId = this.generateId(10);
@@ -106,7 +121,7 @@ export class MqttBridge extends EventEmitter {
     const url = `mqtt://${this.printerIp}:1883`;
     log.info(`Connecting to ${url}...`);
 
-    this.client = mqtt.connect(url, {
+    this.client = this.connectFn(url, {
       clientId: this.clientId,
       username: 'elegoo',
       password: this.password,
@@ -373,15 +388,81 @@ export class MqttBridge extends EventEmitter {
 
   /** Force a reconnect by tearing down the old client and calling connect() again */
   private reconnect(): void {
-    if (this.client) {
-      this.client.removeAllListeners();
-      this.client.end(true);
-      this.client = null;
-    }
+    this.discardClient();
     this.stopSlowRegisterRetry();
     this._brokerConnected = false;
     log.info('Reconnecting in 5s...');
-    setTimeout(() => this.connect(), 5000);
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, 5000);
+  }
+
+  /**
+   * End the current client for good.
+   *
+   * Its listeners are removed so nothing it still emits can touch state that by then
+   * describes another connection — but mqtt.js can still emit `error` after `end()`: a
+   * client ended while CONNECTING keeps its connack timer and fires `connack timeout`
+   * about 30s later. An EventEmitter with no `error` listener throws, and that took the
+   * whole service down at the receiver while verifying ELEG-95 (switch, then switch again
+   * inside 30s). So a no-op `error` listener stays on the discarded client.
+   */
+  private discardClient(): void {
+    const client = this.client;
+    if (!client) return;
+    this.client = null;
+    client.removeAllListeners();
+    client.on('error', () => {});
+    client.end(true);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  /**
+   * Point the one connection at a different printer (ELEG-95).
+   *
+   * **Tears down the client to the current printer before it creates the one to the
+   * next**, so there is never a moment with two clients alive — AGENTS.md's one-connection
+   * rule, which is about not fighting over a printer's small broker. The old client's
+   * listeners are removed before it is ended so a late `close` from printer A cannot reset
+   * flags that by then describe printer B, and a pending heartbeat reconnect is cancelled
+   * so it cannot resurrect a second client after the switch.
+   *
+   * Emits `disconnected` if the old connection was up, exactly as a real drop would.
+   */
+  retarget(target: BridgeTarget): void {
+    const wasUp = this._connected || this._brokerConnected;
+
+    this.clearReconnectTimer();
+    this.stopHeartbeat();
+    this.stopRegisterRetry();
+    this.stopSlowRegisterRetry();
+    this.stopSilenceWatch();
+    this.discardClient();
+    this._connected = false;
+    this._brokerConnected = false;
+    this._registerAttempts = 0;
+    this._rejected = false;
+    this.heartbeatMissed = 0;
+    this.sawPrinterMessage = false;
+    if (wasUp) this.emit('disconnected');
+
+    this.printerIp = target.ip;
+    this.password = target.password;
+    this.sn = target.sn;
+    this.onSnLearned = target.onSnLearned;
+    // A fresh identity per printer: request/response topics embed these ids.
+    this.clientId = this.generateId(10);
+    this.requestId = this.generateId(26);
+
+    this.connect();
   }
 
   /**
@@ -470,6 +551,7 @@ export class MqttBridge extends EventEmitter {
   }
 
   disconnect(): void {
+    this.clearReconnectTimer();
     this.stopHeartbeat();
     this.stopRegisterRetry();
     this.stopSlowRegisterRetry();
