@@ -1993,12 +1993,100 @@ body {
   .position-display {
     flex-wrap: wrap;
   }
+
+  /*
+   * Header at phone widths (ELEG-90, GitHub #88). The desktop header is one
+   * fixed-height row, and the title, five nowrap tabs and the right-hand badges do not
+   * fit in it below ~700px. The row overflowed sideways, which widened the whole
+   * *document* to ~690px while every view below stayed viewport-wide — so scrolling
+   * right showed bare body background, the "black area" in the report — and the
+   * wrapped title spilled out of the 52px box over the content.
+   *
+   * Instead: two rows. Title and badges first, then the tabs, which scroll inside
+   * their own container rather than widening the page. The header is therefore
+   * content-sized, so the views below stop subtracting a fixed --header-height and
+   * let the document scroll under the sticky header.
+   */
+  #app-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--header-height);
+    padding: 6px 12px;
+    gap: 4px 8px;
+  }
+  .header-left {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  /* Truncate in CSS, never in TS (ELEG-43); renderHeader puts the full string in title. */
+  .header-left h1,
+  .subtitle {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .header-left h1 {
     font-size: 14px;
   }
+  .header-right {
+    flex: 0 0 auto;
+  }
+  .header-center {
+    order: 1;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .main-tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
   .main-tab {
-    padding: 5px 10px;
-    font-size: 11px;
+    flex: 1 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .header-right .btn,
+  .svc-header-badge {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /*
+   * The next rules carry an ID on purpose. `.svc-header-wrap`, `.svc-dropdown` and
+   * `.settings-page` are declared *later* in this file than this block, so an override
+   * at equal specificity silently loses the cascade — measured: the dropdown stayed
+   * 320px and hung 119px off the left edge of a 320px screen.
+   */
+  /* Anchor the service dropdown to the header, not the badge, so it cannot hang off
+     the left edge of a narrow screen. */
+  #app-header .svc-header-wrap {
+    position: static;
+  }
+  #app-header .svc-dropdown {
+    top: 100%;
+    right: 8px;
+    width: min(320px, calc(100vw - 16px));
+  }
+  .dashboard,
+  #app .settings-page {
+    height: auto;
+    overflow: visible;
+  }
+  /* With the settings-page views no longer their own scroll box, the Help tables'
+     long paths and metric names (e.g. /moonraker/server/temperature_store) widened
+     the page to 426px. Let those tokens break so each table fits its own width. */
+  #app .help-api td,
+  #app .help-ports td {
+    overflow-wrap: anywhere;
+  }
+  /* Same cause on Debug: a grid item defaults to min-width: auto, so one long unbroken
+     change-log payload widened the 1fr column and the page with it (measured 1841px at
+     375px). min-width: 0 hands the overflow to .debug-change-log's own scroll box. */
+  #app .debug-state-section,
+  #app .debug-log-section {
+    min-width: 0;
   }
 
   /* Larger touch targets */
@@ -2079,6 +2167,16 @@ body {
   }
   .card {
     padding: 12px;
+  }
+  /* Too little room beside the badges for both lines; the app name stays (ELEG-90). */
+  .subtitle {
+    display: none;
+  }
+  /* `body` because `.toast-container` is declared later in this file (see ≤800px). */
+  body .toast-container {
+    left: 8px;
+    right: 8px;
+    max-width: none;
   }
 }
 
