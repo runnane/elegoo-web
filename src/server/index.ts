@@ -55,7 +55,7 @@ log.info(
 log.info(
   `Printer: ${config.printerIp}${knownSn ? ` (SN ${knownSn}${config.printerSn ? ', from PRINTER_SN' : ', cached'})` : ' (SN not yet known)'}`,
 );
-log.info(`Service: http://0.0.0.0:${config.servicePort}`);
+log.info(`Service: http://${config.bindAddress}:${config.servicePort}`);
 log.info(`Camera:  ${config.cameraEnabled ? config.cameraUrl : 'disabled'}`);
 log.info(`Data:    ${config.dataDir}`);
 if (config.telegramEnabled) {
@@ -66,7 +66,7 @@ if (config.aiEnabled) {
     `AI:       enabled (VLM: ${config.aiVlmEnabled ? config.aiVlmModel : 'off'}, Local: ${config.aiLocalEnabled ? 'on' : 'off'})`,
   );
 }
-log.info(`Moonraker: http://0.0.0.0:${config.moonrakerPort}`);
+log.info(`Moonraker: http://${config.bindAddress}:${config.moonrakerPort}`);
 
 // --- State Store (shared state for all consumers) ---
 const store = new StateStore(bridge, config.progressInterval);
@@ -213,7 +213,7 @@ async function start(): Promise<void> {
   bridge.connect();
 
   // Start HTTP + WebSocket server
-  httpServer.listen(config.servicePort, '0.0.0.0', () => {
+  httpServer.listen(config.servicePort, config.bindAddress, () => {
     log.info(`Listening on :${config.servicePort}`);
   });
 

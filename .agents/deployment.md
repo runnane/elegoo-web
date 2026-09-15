@@ -97,12 +97,17 @@ Three consequences that have already produced a real artefact:
 
 ## Exposure is decided outside this repo
 
-The service binds `0.0.0.0` and has **no authentication of any kind** (see
+The service binds `0.0.0.0` by default and has **no authentication of any kind** (see
 [security.md](security.md)), so what limits who can reach it is entirely the network
 around it: a reverse-proxy vhost and DNS, both configured in the **`~/ansible` (ANS)**
 repo rather than here. A change to *who can reach it* is therefore an ANS issue, and the
 specifics for a given deployment belong in the **ELEG tracker**, deliberately not in this
 public repository.
+
+`BIND_ADDRESS` (ELEG-93) makes the bind configurable — both `SERVICE_PORT` and
+`MOONRAKER_PORT` listen on it — but the default is still `0.0.0.0`, so **this alone
+changes nothing for this deployment**. Whether production should actually narrow it
+(loopback-only, one interface) is ELEG-94's decision, not this repo's default.
 
 Two consequences for anyone testing this:
 
@@ -111,9 +116,9 @@ Two consequences for anyone testing this:
   the service is up — not that anyone else can get to it. Answering "is this exposed?"
   needs a resolver check (what does public DNS return — a routable address or an RFC1918
   one?) and, for reachability, a client genuinely off the network.
-- **The proxy is not the only door.** Because the bind is `0.0.0.0`, ports 8088 and 7125
-  are directly reachable from anything routed to the host, bypassing whatever vhost or
-  auth the proxy might add.
+- **The proxy is not the only door.** Because the bind defaults to `0.0.0.0`, ports 8088
+  and 7125 are directly reachable from anything routed to the host, bypassing whatever
+  vhost or auth the proxy might add — unless `BIND_ADDRESS` has been narrowed (ELEG-94).
 
 Read [security.md](security.md) before adding an endpoint: what protects this service is
 network position, not code.
