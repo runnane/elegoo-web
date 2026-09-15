@@ -46,7 +46,17 @@ pnpm dev:web               # frontend only
 pnpm dev:service           # service only (tsx watch)
 ```
 
-Node ≥ 22, pnpm 10.x. There is no database and no container needed for development.
+Node ≥ 22.13, pnpm 11 — pinned by `packageManager` in `package.json`, and an older global
+`pnpm` switches to it by itself. There is no database and no container needed for
+development.
+
+**Coming from a pnpm-10 `node_modules`** (any checkout from before ELEG-9): the first
+pnpm 11 install has to purge it, and **refuses to without a TTY** —
+`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`, which in an agent session or a script
+looks like `pnpm gates` breaking for no reason. Run `pnpm install` once in a real
+terminal and answer the prompt, or non-interactively:
+`pnpm install --config.confirmModulesPurge=false`. Details in
+[`.agents/gates.md`](.agents/gates.md).
 
 ## Build / test / lint (run before finishing any change)
 

@@ -19,6 +19,18 @@ updates:
     ignore:
       - dependency-name: three
       - dependency-name: '@types/three'
+    # pnpm 11 refuses lockfile entries published less than 24h ago (`minimumReleaseAge`
+    # in pnpm-workspace.yaml). Dependabot bumps to just-published versions by
+    # construction, so without this every one of its PRs would open red and heal itself
+    # a day later, which teaches people that red is normal (ELEG-9). 2 days, not 1:
+    # pnpm's window is 24h from publish, and Dependabot counts whole days.
+    #
+    # Cooldown does NOT apply to security updates. A security PR can still land inside
+    # the window and fail `pnpm install` with ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION until
+    # the fixed version is 24h old. Re-run it then; do not lower the policy.
+    cooldown:
+      default-days: 2
+      semver-major-days: 3
 
   - package-ecosystem: docker
     directory: /

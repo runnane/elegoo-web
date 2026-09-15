@@ -12,9 +12,10 @@ FROM node:26-slim AS build
 WORKDIR /app
 
 # pnpm-workspace.yaml is REQUIRED, not optional. Since ELEG-4 it holds `overrides`
-# (including the ELEG-63 security floors) and `onlyBuiltDependencies`; pnpm 11 stopped
-# reading the `pnpm` field in package.json. Omit it and --frozen-lockfile correctly
-# refuses the mismatch against pnpm-lock.yaml.
+# (including the ELEG-63 security floors), `allowBuilds` and `minimumReleaseAge`
+# (ELEG-9); pnpm 11 stopped reading the `pnpm` field in package.json. Omit it and
+# --frozen-lockfile correctly refuses the mismatch against pnpm-lock.yaml. It also fails
+# the install outright, because pnpm 11 treats an unapproved build script as fatal.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # pnpm comes from `packageManager` in package.json, so the image builds with the exact
