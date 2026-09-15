@@ -7,6 +7,7 @@ import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
 import { getThemeChoice, setThemeChoice, isThemeChoice } from './theme';
 import { playAlert } from './alert-sound';
+import { notifySupport, requestNotifyPermission } from './notify-desktop';
 import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 
@@ -225,6 +226,16 @@ function buildSettingsHTML(content: HTMLElement): void {
         <button id="settings-alert-test" class="btn btn-sm btn-ghost">Test sound</button>
       </div>
       <div id="settings-alert-status" class="settings-hint"></div>
+
+      <p class="settings-hint">A desktop notification for the same events — it survives a backgrounded tab better than sound, but needs an explicit permission grant and a secure connection (HTTPS or <code>localhost</code>).</p>
+      <div class="settings-row">
+        <label for="settings-notify-desktop">Desktop notifications</label>
+        <input type="checkbox" id="settings-notify-desktop">
+      </div>
+      <div class="settings-actions">
+        <button id="settings-notify-permission" class="btn btn-sm btn-ghost">Enable notifications</button>
+      </div>
+      <div id="settings-notify-status" class="settings-hint"></div>
     </section>
 
     <section class="settings-section">
@@ -389,6 +400,55 @@ function buildSettingsHTML(content: HTMLElement): void {
       }
     });
   }
+
+  // ---- Desktop notifications (ELEG-84) ----
+  const notifyToggle = content.querySelector('#settings-notify-desktop') as HTMLInputElement | null;
+  const notifyPermBtn = content.querySelector(
+    '#settings-notify-permission',
+  ) as HTMLButtonElement | null;
+  const notifyStatus = content.querySelector('#settings-notify-status') as HTMLElement | null;
+
+  function renderNotifyStatus(): void {
+    if (!notifyStatus) return;
+    const state = notifySupport();
+    switch (state) {
+      case 'insecure':
+        notifyStatus.textContent =
+          'Desktop notifications need a secure connection (HTTPS or localhost) — this page is loaded over plain HTTP, so they are unavailable here.';
+        break;
+      case 'unsupported':
+        notifyStatus.textContent = 'This browser has no Notifications API support.';
+        break;
+      case 'denied':
+        notifyStatus.textContent =
+          'Notifications are blocked for this site. Allow them in the browser’s site settings, then reload the page.';
+        break;
+      case 'granted':
+        notifyStatus.textContent = 'Notifications are enabled.';
+        break;
+      default:
+        notifyStatus.textContent = 'Click “Enable notifications” to grant permission.';
+    }
+    if (notifyPermBtn) {
+      notifyPermBtn.disabled =
+        state === 'insecure' || state === 'unsupported' || state === 'granted';
+    }
+  }
+
+  if (notifyToggle) {
+    notifyToggle.checked = loadUISettings().notifyDesktop;
+    notifyToggle.addEventListener('change', () => {
+      saveUISettings({ notifyDesktop: notifyToggle.checked });
+    });
+  }
+  if (notifyPermBtn) {
+    // Permission is requested only from this click — never on page load (ELEG-84).
+    notifyPermBtn.addEventListener('click', async () => {
+      await requestNotifyPermission();
+      renderNotifyStatus();
+    });
+  }
+  renderNotifyStatus();
 
   content.querySelector('#settings-reset-layout')?.addEventListener('click', () => {
     // Confirmed because it discards arranging work and cannot be undone. Scoped to the
