@@ -25,6 +25,12 @@ export interface UISettings {
   alertSound: boolean;
   /** Alert volume, 0..1 (ELEG-46) */
   alertVolume: number;
+  /**
+   * Show a desktop notification alongside the audible alert (ELEG-84). Off by default,
+   * same reasoning as `alertSound` — and it also needs an explicit browser permission
+   * grant before it can do anything regardless of this setting.
+   */
+  notifyDesktop: boolean;
   /** Show log timestamps as "2m ago" rather than a clock (ELEG-45). Off by default. */
   relativeTimestamps: boolean;
 }
@@ -43,6 +49,8 @@ const defaults: UISettings = {
   // and the autoplay policy means it would often be refused anyway (ELEG-46).
   alertSound: false,
   alertVolume: 0.5,
+  // Off by default, same reasoning as alertSound (ELEG-84).
+  notifyDesktop: false,
   // Absolute by default: it is what you need when correlating with journalctl, the
   // printer's display or someone else's screenshot (ELEG-45).
   relativeTimestamps: false,
