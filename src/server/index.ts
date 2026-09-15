@@ -26,7 +26,8 @@ import { PrintReportCollector } from './print-report-collector.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
-import { initDataPaths } from './data-paths.js';
+import { initDataPaths, printQueueFile } from './data-paths.js';
+import { PrintQueue } from './print-queue.js';
 import { readCachedSn, writeCachedSn } from './sn-cache.js';
 
 const config = loadConfig();
@@ -71,6 +72,9 @@ log.info(`Moonraker: http://0.0.0.0:${config.moonrakerPort}`);
 // --- State Store (shared state for all consumers) ---
 const store = new StateStore(bridge, config.progressInterval);
 
+// --- Print Queue (ELEG-35) — holds the list; every start is a human's explicit request ---
+const printQueue = new PrintQueue(store, bridge, printQueueFile());
+
 // Pre-download gcode to cache when a print starts so the preview
 // can be served from cache instead of hitting the busy printer
 store.on('print_event', (event: { type: string; filename?: string }) => {
@@ -98,7 +102,7 @@ if (config.aiEnabled) {
 const reportCollector = new PrintReportCollector(store, config);
 
 // --- HTTP Server ---
-const restHandler = createRestRouter(store, config, aiMonitor, reportCollector, bridge);
+const restHandler = createRestRouter(store, config, aiMonitor, reportCollector, bridge, printQueue);
 const octoPrintHandler = createOctoPrintRouter(store, bridge, config);
 const moonrakerHandler = createMoonrakerRouter(store, bridge, config);
 const moonrakerServer = new MoonrakerServer(store, bridge, config);
@@ -178,6 +182,11 @@ const wsTransport = new WebSocketTransport(httpServer, store, bridge);
 // Provide service references for status panel
 wsTransport.setServices({ telegram, aiMonitor });
 
+// Push print queue changes to browsers rather than having the card poll.
+printQueue.on('change', (queue: unknown) => {
+  wsTransport.broadcast({ type: 'print_queue', queue });
+});
+
 // Forward AI events to WS clients
 if (aiMonitor) {
   aiMonitor.on('analysis', (analysis: Record<string, unknown>) => {
@@ -205,6 +214,9 @@ async function start(): Promise<void> {
   // Restore persisted state before connecting
   await persistence.load();
   persistence.start();
+
+  // Restore the print queue. Loading never starts a job.
+  printQueue.load();
 
   // Initialize report collector
   await reportCollector.init();
