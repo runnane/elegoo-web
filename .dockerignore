@@ -12,3 +12,8 @@ data/logs
 data/reports
 data/state.json
 data/moonraker-db.json
+
+# Agent worktrees live under .claude/worktrees/ as full checkouts, each with its own
+# node_modules. The docker context does not honour VCS ignore rules, so without this every
+# one of them is sent as build context and COPY . . carries it into the build stage (ELEG-88).
+.claude
