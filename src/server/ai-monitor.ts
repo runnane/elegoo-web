@@ -547,6 +547,12 @@ export class AIMonitor extends EventEmitter {
         this.onPrintEnded();
       }
     });
+
+    // A different printer (ELEG-95): stop analysing the old job. The new printer's first
+    // full status starts monitoring again if it is printing.
+    store.on('printer_switched', () => {
+      if (this.isPrinting) this.onPrintEnded();
+    });
   }
 
   private onPrintStarted(): void {

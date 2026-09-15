@@ -58,6 +58,14 @@ export function captureLogDir(): string {
   return join(dataDir, 'logs');
 }
 
+/**
+ * Saved printer connection presets and which one is active (ELEG-95). The environment's
+ * `PRINTER_IP` is never written here — it is always the built-in default entry.
+ */
+export function connectionPresetsPath(): string {
+  return join(dataDir, 'connection-presets.json');
+}
+
 /** Reset to the default. For tests only. */
 export function resetDataPathsForTest(): void {
   dataDir = DEFAULT_DATA_DIR;
