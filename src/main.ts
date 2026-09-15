@@ -54,6 +54,12 @@ import {
   bindKeyboardShortcuts,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
+import {
+  bindPrintQueue,
+  handlePrintQueueUpdate,
+  refreshPrintQueue,
+  renderPrintQueue,
+} from './ui/print-queue';
 import { installThumbnailFallback } from './ui/helpers';
 import { initTheme } from './ui/theme';
 import { maybeAlertForEvent } from './ui/alert-sound';
@@ -153,6 +159,7 @@ function scheduleRender(): void {
       renderPrintHistory(state);
       renderMaintenance(state);
       renderReports();
+      renderPrintQueue(state);
       renderLog(logStore);
       renderStructuredLog(logStore);
       renderDebugPanel(state);
@@ -200,6 +207,7 @@ function showDashboard(): void {
     bindHistoryControls();
     bindMaintenanceControls();
     bindReportControls();
+    bindPrintQueue(client!, state);
     bindGcodePreviewControls();
     bindDebugPanel();
     bindKeyboardShortcuts();
@@ -393,6 +401,8 @@ function connectToService(): void {
       onPrinterConnected(sn);
     },
     onInit(initData) {
+      // A reconnect may have missed print queue changes (ELEG-35).
+      void refreshPrintQueue();
       // Hydrate state from service snapshot
       if (initData.status) {
         state.setFullStatus(initData.status as PrinterStatus);
@@ -683,6 +693,9 @@ function connectToService(): void {
     onFilamentUsage(usage) {
       state.filamentUsage = usage;
       scheduleRender();
+    },
+    onPrintQueue(queue) {
+      handlePrintQueueUpdate(queue);
     },
     onZoneChange(data) {
       state.zones.previous = data.from as typeof state.zones.current;

@@ -26,6 +26,8 @@ import type { ServiceConfig } from './config.js';
 import type { AIMonitor, AILabelConfig } from './ai-monitor.js';
 import type { PrintReportCollector } from './print-report-collector.js';
 import type { MqttBridge } from './mqtt-bridge.js';
+import type { PrintQueue } from './print-queue.js';
+import { handlePrintQueueRequest } from './print-queue-routes.js';
 import { generateReportPDF } from './print-report-pdf.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
@@ -769,6 +771,7 @@ export function createRestRouter(
   bridge?: MqttBridge | null,
   /** `/api/printers` — connection presets (ELEG-95); see connection-presets.ts. */
   presetsHandler?: ((req: IncomingMessage, res: ServerResponse) => boolean) | null,
+  printQueue?: PrintQueue | null,
 ) {
   overlayStore = store;
   if (bridge) _bridge = bridge;
@@ -791,6 +794,9 @@ export function createRestRouter(
     }
 
     if (presetsHandler && url.startsWith('/api/printers') && presetsHandler(req, res)) return;
+
+    // Print queue (ELEG-35) — after the CORS block so it gets the same policy.
+    if (printQueue && handlePrintQueueRequest(req, res, printQueue)) return;
 
     if (url === '/api/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });

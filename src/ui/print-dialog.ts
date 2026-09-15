@@ -21,6 +21,7 @@ import {
 } from './helpers';
 import { toast } from './toast';
 import { currentFileSource } from './files';
+import { BED_CLEAR_CONFIRM_LABEL, BED_CLEAR_REMINDER } from '../print-queue-shared';
 
 /** Format bytes to human-readable size */
 function formatSize(bytes: number): string {
@@ -29,12 +30,27 @@ function formatSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+/**
+ * Starting the head of the print queue (ELEG-35) rather than a file from the Files card.
+ * The dialog is the same; only where the finished 1020 payload goes differs.
+ */
+export interface QueueStartOptions {
+  /** Storage the job was queued from. */
+  source: string;
+  /** The job that last finished on this bed, for the reminder. */
+  lastFinished: string | null;
+  /** Ask the service to start it. Resolves true when the start was dispatched. */
+  start: (config: Record<string, unknown>, bedCleared: boolean) => Promise<boolean>;
+}
+
 /** Pending dialog state while waiting for 1046 response */
 let pendingPrint: {
   filename: string;
   fullPath: string;
   client: CommandSender;
   state: PrinterState;
+  source: string;
+  queue: QueueStartOptions | null;
 } | null = null;
 
 /** Each color from the gcode mapped to a Canvas tray */
@@ -69,12 +85,15 @@ export function requestPrintDialog(
   fullPath: string,
   client: CommandSender,
   state: PrinterState,
+  queue: QueueStartOptions | null = null,
 ): void {
-  pendingPrint = { filename, fullPath, client, state };
+  // A queued job carries the storage it was queued from; the Files card uses its tab.
+  const source = queue?.source ?? currentFileSource();
+  pendingPrint = { filename, fullPath, client, state, source, queue };
   // Request file detail to get color_map + thumbnail + metadata
-  client.sendCommand(1046, { storage_media: currentFileSource(), filename: fullPath });
+  client.sendCommand(1046, { storage_media: source, filename: fullPath });
   // Also request thumbnail separately (1046 may not include it)
-  client.sendCommand(1045, { storage_media: currentFileSource(), file_name: fullPath });
+  client.sendCommand(1045, { storage_media: source, file_name: fullPath });
 }
 
 /**
@@ -83,9 +102,9 @@ export function requestPrintDialog(
  */
 export function handleFileDetailForPrint(state: PrinterState): void {
   if (!pendingPrint) return;
-  const { filename, fullPath, client } = pendingPrint;
+  const { filename, fullPath, client, source, queue } = pendingPrint;
   pendingPrint = null;
-  showDialog(filename, fullPath, state, client);
+  showDialog(filename, fullPath, state, client, source, queue);
 }
 
 /** Compute color distance (simple Euclidean in RGB space) */
@@ -197,6 +216,8 @@ function showDialog(
   fullPath: string,
   state: PrinterState,
   client: CommandSender,
+  source: string,
+  queue: QueueStartOptions | null,
 ): void {
   // Remove any existing dialog
   document.getElementById('print-dialog-overlay')?.remove();
@@ -233,10 +254,20 @@ function showDialog(
       </div>`;
   }
 
+  // Queue mode: the reminder, and a checkbox that must be ticked before ▶ Print (ELEG-35).
+  const queueHtml = queue
+    ? `
+      <div class="print-dialog-section print-dialog-queue">
+        <div class="print-dialog-section-title">Print Queue</div>
+        <p class="print-dialog-queue-note">${queue.lastFinished ? `"${escapeHtml(queue.lastFinished)}" finished on this bed. ` : ''}${escapeHtml(BED_CLEAR_REMINDER)}</p>
+        <label class="print-dialog-checkbox"><input type="checkbox" id="print-opt-bed-cleared"><span>${escapeHtml(BED_CLEAR_CONFIRM_LABEL)}</span></label>
+      </div>`
+    : '';
+
   overlay.innerHTML = `
     <div class="print-dialog">
       <div class="print-dialog-header">
-        <span>Start Print</span>
+        <span>${queue ? 'Start Next Queued Job' : 'Start Print'}</span>
         <button class="print-dialog-close" id="print-dialog-cancel-x">&times;</button>
       </div>
       <div class="print-dialog-body">
@@ -253,6 +284,7 @@ function showDialog(
             ${metaParts.length ? `<div class="print-dialog-meta-row">${metaParts.map((p) => `<span>${escapeHtml(p)}</span>`).join(' · ')}</div>` : ''}
           </div>
         </div>
+        ${queueHtml}
         ${mappingHtml}
         <div class="print-dialog-section">
           <div class="print-dialog-section-title">Print Settings</div>
@@ -320,6 +352,14 @@ function showDialog(
       }
     }
 
+    const bedCleared =
+      (document.getElementById('print-opt-bed-cleared') as HTMLInputElement | null)?.checked ===
+      true;
+    if (queue && !bedCleared) {
+      toast(BED_CLEAR_REMINDER, 'error');
+      return;
+    }
+
     const bedType =
       (overlay.querySelector('.print-bed-btn.active') as HTMLElement)?.dataset.bed || 'A';
     const leveling = (document.getElementById('print-opt-leveling') as HTMLInputElement).checked;
@@ -363,7 +403,7 @@ function showDialog(
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file: fullPath, source: currentFileSource() }),
+            body: JSON.stringify({ file: fullPath, source }),
           },
           120_000,
         );
@@ -408,17 +448,24 @@ function showDialog(
       }
     }
 
-    client.sendCommand(1020, {
-      storage_media: currentFileSource(),
-      filename: fullPath,
-      config: {
-        delay_video: timelapse,
-        printer_check: leveling,
-        print_layout: bedType,
-        bedlevel_force: false,
-        slot_map: slotMap,
-      },
-    });
+    const config = {
+      delay_video: timelapse,
+      printer_check: leveling,
+      print_layout: bedType,
+      bedlevel_force: false,
+      slot_map: slotMap,
+    };
+
+    if (queue) {
+      // The same payload, sent through the service so it can refuse (printing, paused,
+      // held) before anything reaches the printer. `start` toasts a refusal itself.
+      const started = await queue.start(config, bedCleared);
+      close();
+      if (started) toast(`Starting print: ${filename}`, 'success');
+      return;
+    }
+
+    client.sendCommand(1020, { storage_media: source, filename: fullPath, config });
 
     close();
     toast(`Starting print: ${filename}`, 'success');
