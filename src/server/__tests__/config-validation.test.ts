@@ -16,6 +16,10 @@ import { loadConfig } from '../config.js';
  *   - MOONRAKER_PORT out of range, and non-numeric
  *   - TELEGRAM_CHAT_ID non-numeric
  *   - TELEGRAM_ALLOWED_CHAT_IDS that parses to nothing
+ *   - PRINTER_IP well-formed but with an octet above 255 (ELEG-103) — the one PRINTER_IP
+ *     refusal config-defaults.test.ts does not pin. It matches on the variable name and
+ *     the word "octet", not the full message, so the shared-validator refactor (ELEG-106)
+ *     can reword it without touching this file.
  *
  * Same env save/restore pattern as config-defaults.test.ts: loadConfig() reads
  * process.env directly, so tests swap the whole object rather than mutating keys.
@@ -102,5 +106,26 @@ describe('TELEGRAM_ALLOWED_CHAT_IDS validation', () => {
   it('accepts a valid comma-separated list', () => {
     process.env.TELEGRAM_ALLOWED_CHAT_IDS = '900000001,900000002';
     expect(loadConfig().telegramAllowedChatIds).toEqual(['900000001', '900000002']);
+  });
+});
+
+describe('PRINTER_IP octet range (ELEG-103)', () => {
+  // These pass the dotted-quad regex, so only the per-octet check can refuse them. The
+  // /octet/ match is what pins *that* branch rather than the malformed-address one.
+  it('refuses an address whose first octet is above 255', () => {
+    process.env.PRINTER_IP = '999.1.1.1';
+    expect(() => loadConfig()).toThrow(/PRINTER_IP/);
+    expect(() => loadConfig()).toThrow(/octet/);
+  });
+
+  it('refuses an address whose last octet is above 255', () => {
+    process.env.PRINTER_IP = '192.168.1.999';
+    expect(() => loadConfig()).toThrow(/PRINTER_IP/);
+    expect(() => loadConfig()).toThrow(/octet/);
+  });
+
+  it('accepts 255 as an octet (the boundary, TEST-NET)', () => {
+    process.env.PRINTER_IP = '192.0.2.255';
+    expect(loadConfig().printerIp).toBe('192.0.2.255');
   });
 });
