@@ -17,6 +17,7 @@ import {
   SPEED_MODE_NAMES,
   EXCEPTION_NAMES,
   isFilamentChangeSubStatus,
+  isOtaSubStatus,
   detectZone,
   trailingLayerRun,
   ZONE_MAX_HISTORY,
@@ -804,6 +805,23 @@ export class StateStore extends EventEmitter {
         type: 'print_started',
         filename: ps?.filename || 'unknown',
         resumed: true,
+      } satisfies PrintEvent);
+    }
+
+    // Same idea for a firmware update (ELEG-104): a service (re)start whose first full
+    // status already sits in an OTA sub-status would otherwise never produce the
+    // `sub_status_change` that tells Telegram to say "do not power off" — the baseline
+    // seeds lastSubStatus with the OTA code, so the transition into it is never seen.
+    // A reconnect that lands inside a flash is exactly when a human should be told, so
+    // synthesise the transition from -1 (the pre-baseline value). Read-only: nothing
+    // here sends an OTA command.
+    if (isOtaSubStatus(this.lastSubStatus)) {
+      this.emit('print_event', {
+        type: 'sub_status_change',
+        fromCode: -1,
+        toCode: this.lastSubStatus,
+        from: 'Service started',
+        to: SUB_STATUS_NAMES[this.lastSubStatus] ?? `Unknown (${this.lastSubStatus})`,
       } satisfies PrintEvent);
     }
   }

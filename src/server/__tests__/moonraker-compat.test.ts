@@ -199,6 +199,67 @@ describe('queryObjects — Klipper-style printer object shapes', () => {
     });
   });
 
+  // OTA firmware-update progress (ELEG-104), read-only. `display_status.message` is
+  // Klipper's M117 channel, so Mainsail/Fluidd show it as a banner with no schema change.
+  // Both Moonraker surfaces (`/moonraker/*` and `:7125`) go through this one
+  // `queryObjects`, so asserting here covers both — see moonraker-server.ts's import.
+  it('display_status.message: names the phase and says "do not power off" while sub_status is an in-progress OTA code', () => {
+    const s = makeStore();
+    for (const [code, phase] of [
+      [2601, 'Info Updating'],
+      [2701, 'Downloading'],
+      [2702, 'Extracting'],
+      [2703, 'Updating'],
+    ] as const) {
+      s.status = baseStatus({
+        machine_status: { status: 1, sub_status: code, exception_status: [], progress: 0 },
+      });
+      const message = queryObjects(s, { display_status: null }).display_status.message as string;
+      expect(message, `code ${code}`).toContain('Firmware update in progress');
+      expect(message, `code ${code}`).toContain('do not power off the printer');
+      expect(message, `code ${code}`).toContain(phase);
+    }
+  });
+
+  it('display_status.message: the terminal OTA codes get their own text, and it is not "do not power off"', () => {
+    const s = makeStore();
+    s.status = baseStatus({
+      machine_status: { status: 1, sub_status: 2704, exception_status: [], progress: 0 },
+    });
+    const done = queryObjects(s, { display_status: null }).display_status.message as string;
+    expect(done).toContain('Firmware update complete');
+    expect(done).not.toContain('do not power off');
+
+    s.status = baseStatus({
+      machine_status: { status: 1, sub_status: 2705, exception_status: [], progress: 0 },
+    });
+    expect(queryObjects(s, { display_status: null }).display_status.message).toBe(
+      'Firmware update failed',
+    );
+  });
+
+  it('display_status.message: empty for a non-OTA sub_status, so the banner clears when the update is over', () => {
+    const s = makeStore();
+    for (const code of [0, 2502, 2603, 1061]) {
+      s.status = baseStatus({
+        machine_status: { status: 1, sub_status: code, exception_status: [], progress: 0 },
+      });
+      expect(queryObjects(s, { display_status: null }).display_status.message, `code ${code}`).toBe(
+        '',
+      );
+    }
+  });
+
+  it('print_stats.state is untouched by an OTA sub_status — front-ends key their whole UI off it', () => {
+    const s = makeStore();
+    s.status = baseStatus({
+      machine_status: { status: 1, sub_status: 2703, exception_status: [], progress: 0 },
+    });
+    const ps = queryObjects(s, { print_stats: null }).print_stats;
+    expect(ps.state).toBe('standby');
+    expect(ps.message).toBe('');
+  });
+
   it('toolhead: position mirrors gcode_move xyz + extruder/e fallback, plus the fixed kinematic limits', () => {
     const s = makeStore();
     s.status = baseStatus();
