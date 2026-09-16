@@ -66,7 +66,7 @@ loop; details, traps and the known gaps are in
 place and CI cannot fall behind it — adding a gate to `scripts/gates.sh` needs no
 workflow edit. It used to be four hand-listed steps, which is precisely how the backend
 came to be typechecked by nothing in CI. A green CI now means the same thing a green
-local run means; what that still does *not* prove is in `local/gates.md`.
+local run means; what that still does *not* prove is in [`.agents/gates.md`](.agents/gates.md).
 
 CI is [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `ubuntu-latest` —
 which works here because **this repo is public** and public repos get free hosted

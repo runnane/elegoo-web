@@ -302,8 +302,8 @@ twice:
 - If a mutation-testing script's pattern was copied out of a file *before* a commit
   reformatted it, the pattern silently no longer matches. Make any such script assert it
   applied (`if s.count(old) != 1: sys.exit("MUTATION DID NOT APPLY")`) — a `sed`/`perl`
-  one-liner exits 0 having changed nothing. This is the repo-specific half of §6 of the
-  [shared file](../shared/gate-failures.md).
+  one-liner exits 0 having changed nothing. This is the repo-specific half of the
+  userspace bundle's `gate-failures` skill.
 
 `SKIP_SIMPLE_GIT_HOOKS=1` bypasses it, which you should not need.
 
@@ -364,8 +364,8 @@ more here than in a repo with real coverage:
    message `type` on the WebSocket — exists on both sides. The `/ws` contract is
    unasserted, so a renamed message type is silent.
 
-Undo each mutation with an inverse patch, **never `git checkout <file>`** — see
-[`shared/gate-failures.md`](../shared/gate-failures.md) §6.
+Undo each mutation with an inverse patch, **never `git checkout <file>`** — the
+userspace bundle's `gate-failures` skill has the full rule.
 
 ## Unreachable code is now gated — knip, after it had bitten four times
 
@@ -465,7 +465,7 @@ advisory feed, so the same commit passes today and fails tomorrow because someon
 published. That would turn a PR red for a reason unrelated to the PR — and "a red check
 on your branch is yours" is a signal this repo spends real effort keeping true.
 
-Advisories live in [`.github/workflows/audit.yml`](../../../.github/workflows/audit.yml)
+Advisories live in [`.github/workflows/audit.yml`](../.github/workflows/audit.yml)
 instead: weekly, on changes to the lockfile/manifest, and on demand. **It never fails the
 job.** Do not make it a required check.
 
@@ -492,7 +492,7 @@ printer is **operator work**: name the exact command, ask for the output, interp
 record it on the issue.
 
 Two further collisions specific to running anything locally on this host, both in
-[`.agents/testing.md`](../../../.agents/testing.md): production already holds ports **8088
+[`.agents/testing.md`](testing.md): production already holds ports **8088
 and 7125**, and a second service process means **two MQTT registrations for one printer** —
 which degrades *production*, not your dev window.
 
