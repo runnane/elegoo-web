@@ -53,9 +53,14 @@ a path argument** to any biome script; change `includes` instead, and the writin
 (`--write`) and non-writing (`ci`) variants stay in agreement by construction rather than
 by two edits remembered together.
 
-`biome ci` also emits two `infos` about `biome.json` itself — a `$schema` version behind
-the CLI, and the deprecated `recommended` field. Both are **infos, not errors**: they do
-not affect the exit code. Do not read them as a red gate.
+`biome ci` used to open every run with two `infos` about `biome.json` itself — a
+`$schema` version behind the CLI, and the deprecated `recommended` field — because
+dependabot bumps `@biomejs/biome` and nothing re-runs the config migration. Infos do not
+affect the exit code, so the gate stayed green while announcing that the next major would
+turn one of them into an error. ELEG-111 ran `pnpm exec biome migrate --write` (a two-line
+diff). **After any biome version bump, run that command again and commit what it
+rewrites**; the receiver-side check is that `biome ci` prints no `deserialize` block at
+all, not that it exits 0.
 
 ## Both root config files are typechecked, via `tsconfig.json`
 
