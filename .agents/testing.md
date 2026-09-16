@@ -267,8 +267,8 @@ Production runs on this same machine (see [deployment.md](deployment.md)), and i
 **both** service ports:
 
 ```
-LISTEN 0.0.0.0:8088      elegooweb.service   (SERVICE_PORT)
-LISTEN 0.0.0.0:7125      elegooweb.service   (MOONRAKER_PORT)
+LISTEN 0.0.0.0:8088      docker-proxy        (SERVICE_PORT, published by the elegoo-web container)
+LISTEN 0.0.0.0:7125      docker-proxy        (MOONRAKER_PORT, published by the elegoo-web container)
 ```
 
 So `pnpm dev` / `pnpm dev:service` with default config **fails to bind**, and if you
@@ -330,8 +330,9 @@ because nothing answered is worse than no check.
   broken passes (see [mcp.md](mcp.md)).
 - **The compatibility layers against a real client.** Mainsail/Fluidd/KlipperScreen
   compatibility is only ever proven by pointing one of them at `:7125`.
-- **Anything about the deployed service.** The gates run in the checkout;
-  `/opt/elegooweb` is a different tree.
+- **Anything about the deployed service.** The gates run in the checkout; production
+  runs a pulled image (see [deployment.md](deployment.md)), built from whatever was on
+  `main` when CI last published — not necessarily what is in your working tree.
 
 When you close an issue, state what you actually ran and what it can and cannot prove.
 "`pnpm gates` green" is true and weak here; "gates green, and I read the state-merge

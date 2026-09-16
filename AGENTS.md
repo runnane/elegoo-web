@@ -204,9 +204,11 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   starts a `BACKLOG`/`TODO` ancestor; a parent whose every non-`CANCELLED` child is
   `DONE` becomes `DONE`), so don't hand-maintain an epic's status.
 - **`IN_PRODUCTION` is real here, and merging is not it.** ELEG has
-  `tracksProduction` on because production is a *separate step*: the service runs
-  from **`/opt/elegooweb`**, which is **not a git checkout**, under systemd as user
-  `elegooweb`. A merged PR changes nothing that is running. See
+  `tracksProduction` on because production is a *separate step*: since ELEG-108
+  (2026-09-16) the service runs as a Docker Compose stack rooted at
+  **`/opt/elegooweb`** (container `elegoo-web`, image `ghcr.io/runnane/elegoo-web:latest`)
+  — not the systemd unit, which is stopped and disabled and kept only for rollback. A
+  merged PR changes nothing that is running. See
   [`.agents/deployment.md`](.agents/deployment.md) — and note that performing the
   deploy is operator work.
 - **An issue is either repo work or operator work — never both.** Repo work is done
@@ -224,7 +226,7 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
 
   | Action | Who runs it |
   | --- | --- |
-  | shell on this host, `systemctl`, reading `/opt/elegooweb`, `journalctl` | **them** — give exact commands, ask for output |
+  | shell on this host, `docker compose`, reading `/opt/elegooweb`, `docker logs` | **them** — give exact commands, ask for output |
   | anything through an MCP tool or a tracker write | **you** — never "here are the MCP calls to make"; they have no client for it |
   | a printer command (temps, motion, print start/stop, emergency stop) | **them**, at or near the machine |
 
@@ -239,11 +241,13 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   in the 2026-08-08 pass turned out to be over-scoped:
 
   - **ELEG-68** ("confirm the deploy stamp") — `curl localhost:8088/api/health` is on
-    the *reads are fine and encouraged* list two rules above; only `sudo cat
-    /opt/elegooweb/build-info.json` needs privilege. Running the read answered all of
-    it but one line — and answered it *better*, because `/api/health` also reported
-    `mqttPhase: null`, which corroborated the stamp's claim from **behaviour** rather
-    than trusting the file's own say-so.
+    the *reads are fine and encouraged* list two rules above; only the equivalent of
+    `sudo cat /opt/elegooweb/build-info.json` (now `docker inspect elegoo-web
+    --format '{{.Image}}'`, since the stamp lives inside the image rather than a file
+    on disk) needs privilege. Running the read answered all of it but one line — and
+    answered it *better*, because `/api/health` also reported `mqttPhase: null`, which
+    corroborated the stamp's claim from **behaviour** rather than trusting the file's
+    own say-so.
   - **ELEG-67** ("does the compat layer still work") — "no test exercises the route
     table" and "does Mainsail still work" are two questions. The first is answerable
     with the isolated local service in [`.agents/testing.md`](.agents/testing.md)
@@ -355,8 +359,9 @@ checkout.
 
 - [.agents/architecture.md](.agents/architecture.md) — the fan-out, the two HTTP
   servers, state flow, and which layer a change belongs in.
-- [.agents/deployment.md](.agents/deployment.md) — `/opt/elegooweb`, the systemd unit,
-  the cloudflare tunnel, and what `IN_PRODUCTION` means here.
+- [.agents/deployment.md](.agents/deployment.md) — `/opt/elegooweb`, the Docker Compose
+  stack that replaced the systemd unit (ELEG-108), the cloudflare tunnel, and what
+  `IN_PRODUCTION` means here.
 - [.agents/testing.md](.agents/testing.md) — what the suite actually covers (very
   little), how to probe safely against a live printer, and what nothing checks.
 - [.agents/security.md](.agents/security.md) — the exposure posture, the
