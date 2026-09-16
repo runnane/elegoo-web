@@ -10,6 +10,7 @@ import { playAlert } from './alert-sound';
 import { notifySupport, requestNotifyPermission } from './notify-desktop';
 import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
+import { mountPrinterPresets } from './printer-presets';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
 
@@ -255,6 +256,12 @@ function buildSettingsHTML(content: HTMLElement): void {
     </section>
 
     <section class="settings-section">
+      <h3>Printer connections</h3>
+      <p class="settings-hint">Saved printer addresses. The service talks to one printer at a time: switching disconnects from the current one and clears its charts, layer times and event log. <code>PRINTER_IP</code> is always the default entry.</p>
+      <div id="settings-printer-presets"></div>
+    </section>
+
+    <section class="settings-section">
       <h3>Telegram</h3>
       <div id="settings-telegram" class="settings-telegram">
         <p class="settings-hint">Telegram settings are configured via environment variables in <code>.env</code> and require a service restart.</p>
@@ -270,6 +277,9 @@ function buildSettingsHTML(content: HTMLElement): void {
       </div>
     </section>
   `;
+
+  const presetsRoot = document.getElementById('settings-printer-presets');
+  if (presetsRoot) mountPrinterPresets(presetsRoot);
 
   // Bind card visibility toggles
   content.querySelectorAll('.settings-card-visible').forEach((cb) => {

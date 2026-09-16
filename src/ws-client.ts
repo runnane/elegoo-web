@@ -208,6 +208,14 @@ export class WsClient {
         break;
       }
 
+      case 'printer_switched': {
+        // The service switched to a different printer (ELEG-95). Every piece of client
+        // state was built from the old one, and most of it merges deltas rather than
+        // replacing, so a fresh page load is the only way to be sure none of it survives.
+        window.location.reload();
+        break;
+      }
+
       case 'layer_clear': {
         this.opts.onLayerClear?.();
         break;

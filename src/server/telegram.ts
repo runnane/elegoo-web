@@ -134,6 +134,12 @@ export class TelegramIntegration {
           log.error(`Unhandled error in event handler: ${(err as Error).message}`);
         });
     });
+
+    // A different printer (ELEG-95): the live progress message belongs to the old one,
+    // so the new printer's progress must start a message of its own, not edit that one.
+    store.on('printer_switched', () => {
+      this.liveMessageId = null;
+    });
   }
 
   private registerCommands(): void {

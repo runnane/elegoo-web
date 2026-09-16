@@ -89,6 +89,12 @@ export class WebSocketTransport {
       this.broadcast({ type: 'layer_clear' });
     });
 
+    // The service now talks to a different printer (ELEG-95). Browsers start over rather
+    // than try to un-merge the old printer's state from their own.
+    store.on('printer_switched', () => {
+      this.broadcast({ type: 'printer_switched', printerIp: this.bridge.ip });
+    });
+
     store.on('filament_usage', (usage: unknown[]) => {
       this.broadcast({ type: 'filament_usage', usage });
     });

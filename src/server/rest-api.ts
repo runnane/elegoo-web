@@ -13,7 +13,7 @@
  *   POST /api/files/upload  — Proxy file upload to printer (chunked PUT)
  */
 
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { ClientRequest, IncomingMessage, ServerResponse } from 'http';
 import { request as httpRequest } from 'http';
 import { createHash } from 'crypto';
 import { writeFile, readdir, readFile, mkdir, stat, unlink } from 'fs/promises';
@@ -50,6 +50,12 @@ const CACHE_TTL_MS = 5_000;
 let cachedSnapshot: Buffer | null = null;
 let cacheTime = 0;
 let fetchInFlight: Promise<Buffer | null> | null = null;
+/**
+ * Bumped when the service switches printer (ELEG-95). Camera work started for the
+ * previous printer checks it before touching shared state, so a late frame, retry or
+ * error from printer A cannot land in printer B's snapshot cache or stream.
+ */
+let cameraGeneration = 0;
 
 // Debug capture state
 let activeCapture: { file: string } | null = null;
@@ -310,9 +316,12 @@ async function fetchCameraFrame(cameraUrl: string): Promise<Buffer | null> {
   // Serialize concurrent requests
   if (fetchInFlight) return fetchInFlight;
 
+  const generation = cameraGeneration;
   fetchInFlight = doFetch(cameraUrl);
   try {
     const result = await fetchInFlight;
+    // The printer was switched while this was in flight: it is the old camera's frame.
+    if (generation !== cameraGeneration) return null;
     if (result) {
       cachedSnapshot = result;
       cacheTime = Date.now();
@@ -401,9 +410,23 @@ let overlayProcessing = false;
 const OVERLAY_MIN_INTERVAL_MS = 200; // max ~5 FPS for overlay
 let lastOverlayTime = 0;
 
+let upstreamReq: ClientRequest | null = null;
+
 function startMjpegUpstream(cameraUrl: string): void {
   if (upstreamActive) return;
   upstreamActive = true;
+  const generation = cameraGeneration;
+  /** False once the service has switched printer: this upstream must then go quiet. */
+  const current = () => generation === cameraGeneration;
+  const retryLater = (ms: number) => {
+    upstreamActive = false;
+    upstreamReq = null;
+    if (streamClients.size > 0 || overlayClients.size > 0) {
+      setTimeout(() => {
+        if (current()) startMjpegUpstream(cameraUrl);
+      }, ms);
+    }
+  };
 
   const url = new URL(cameraUrl);
   const reqOpts = {
@@ -420,6 +443,7 @@ function startMjpegUpstream(cameraUrl: string): void {
     let buf = Buffer.alloc(0);
 
     upstream.on('data', (chunk: Buffer) => {
+      if (!current()) return;
       buf = Buffer.concat([buf, chunk]);
 
       // Extract complete JPEG frames and broadcast
@@ -481,40 +505,52 @@ function startMjpegUpstream(cameraUrl: string): void {
     });
 
     upstream.on('end', () => {
+      if (!current()) return;
       log.info('Upstream stream ended');
-      upstreamActive = false;
-      if (streamClients.size > 0 || overlayClients.size > 0) {
-        setTimeout(() => startMjpegUpstream(cameraUrl), 2000);
-      }
+      retryLater(2000);
     });
 
     upstream.on('error', (err) => {
+      if (!current()) return;
       log.warn(`Upstream error: ${err.message}`);
-      upstreamActive = false;
-      if (streamClients.size > 0 || overlayClients.size > 0) {
-        setTimeout(() => startMjpegUpstream(cameraUrl), 5000);
-      }
+      retryLater(5000);
     });
   });
+  upstreamReq = req;
 
   req.on('error', (err) => {
+    if (!current()) return;
     log.warn(`Upstream connection failed: ${err.message}`);
-    upstreamActive = false;
-    if (streamClients.size > 0 || overlayClients.size > 0) {
-      setTimeout(() => startMjpegUpstream(cameraUrl), 5000);
-    }
+    retryLater(5000);
   });
 
   req.on('timeout', () => {
+    if (!current()) return;
     log.warn('Upstream connection timed out');
     req.destroy();
-    upstreamActive = false;
-    if (streamClients.size > 0 || overlayClients.size > 0) {
-      setTimeout(() => startMjpegUpstream(cameraUrl), 2000);
-    }
+    retryLater(2000);
   });
 
   req.end();
+}
+
+/**
+ * Point the camera proxy at the newly active printer (ELEG-95): drop the cached frame,
+ * close the upstream to the old camera, and reopen it for any viewer still watching.
+ * Still one upstream connection — the old one is destroyed before the new one opens.
+ */
+export function resetCameraForPrinterSwitch(config: ServiceConfig): void {
+  cameraGeneration++;
+  cachedSnapshot = null;
+  cacheTime = 0;
+  fetchInFlight = null;
+  const old = upstreamReq;
+  upstreamReq = null;
+  upstreamActive = false;
+  old?.destroy();
+  if (config.cameraEnabled && (streamClients.size > 0 || overlayClients.size > 0)) {
+    startMjpegUpstream(config.cameraUrl);
+  }
 }
 
 function addStreamClient(res: ServerResponse, config: ServiceConfig): void {
@@ -721,6 +757,8 @@ export function createRestRouter(
   aiMonitor?: AIMonitor | null,
   reportCollector?: PrintReportCollector | null,
   bridge?: MqttBridge | null,
+  /** `/api/printers` — connection presets (ELEG-95); see connection-presets.ts. */
+  presetsHandler?: ((req: IncomingMessage, res: ServerResponse) => boolean) | null,
 ) {
   overlayStore = store;
   if (bridge) _bridge = bridge;
@@ -742,6 +780,8 @@ export function createRestRouter(
       }
     }
 
+    if (presetsHandler && url.startsWith('/api/printers') && presetsHandler(req, res)) return;
+
     if (url === '/api/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
@@ -761,6 +801,9 @@ export function createRestRouter(
           mqttRegisterAttempts: _bridge?.registerAttempts ?? 0,
           mqttMessage: mqttPhaseMessage(_bridge?.phase ?? 'disconnected'),
           printerSn: _bridge?.serialNumber || null,
+          // Which address the one connection targets — changes when a connection preset is
+          // switched (ELEG-95). Already sent to every `/ws` client in `service_status`.
+          printerIp: _bridge?.ip ?? null,
           clients: 0, // filled in by ws-transport if needed
           // Which commit is serving this. All-null on an unstamped deploy or a dev
           // run; cached, because this endpoint is polled.

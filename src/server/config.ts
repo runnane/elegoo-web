@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { CONNECTION_PRESETS_API_ENV } from '../types.js';
 import { parseAllowedChatIds } from './allowlist.js';
 import { type CorsPolicy, parseCorsPolicy } from './cors.js';
 
@@ -44,6 +45,13 @@ export interface ServiceConfig {
 
   // Moonraker compat server (optional)
   moonrakerPort: number;
+
+  /**
+   * Allow adding, removing and switching printer connection presets over the REST API
+   * (ELEG-95). Off by default: the API has no authentication, and switching re-points
+   * every consumer and makes the service dial an address a request chose.
+   */
+  connectionPresetsApi: boolean;
 
   // AI monitoring (optional)
   aiEnabled: boolean;
@@ -164,6 +172,7 @@ export function loadConfig(): ServiceConfig {
     progressInterval: parseInt(env('PROGRESS_INTERVAL', '25'), 10) || 25,
     dataDir: env('DATA_DIR') || './data',
     moonrakerPort,
+    connectionPresetsApi: env(CONNECTION_PRESETS_API_ENV) === 'true',
 
     // AI monitoring
     aiEnabled: env('AI_ENABLED') === 'true',

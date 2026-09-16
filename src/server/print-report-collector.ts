@@ -107,6 +107,17 @@ export class PrintReportCollector extends EventEmitter {
     super();
     this.reportsDir = join(config.dataDir, 'reports');
     this.store.on('print_event', (event: PrintEvent) => this.handleEvent(event));
+    // A different printer (ELEG-95). The report in progress described the old one, and
+    // finalizing it now would read the new printer's (empty) state and camera into it, so
+    // it is abandoned — the same outcome a restart mid-print already has.
+    this.store.on('printer_switched', () => {
+      const active = this.activeReport;
+      if (!active) return;
+      if (active.snapshotTimer) clearInterval(active.snapshotTimer);
+      log.warn(`Printer switched mid-print — abandoning report ${active.id}`);
+      this.activeReport = null;
+      this.lastProgressMilestone = -1;
+    });
   }
 
   async init(): Promise<void> {

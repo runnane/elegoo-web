@@ -759,3 +759,10 @@ export function trailingLayerRun<T extends LayerTimeEntry>(entries: readonly T[]
   }
   return entries.slice(start);
 }
+
+/**
+ * The environment variable that opts in to changing printer connection presets over
+ * REST (ELEG-95). Shared by the server's 403 message and the settings page's hint, so
+ * the name a person is told to go and set cannot drift from the one the server reads.
+ */
+export const CONNECTION_PRESETS_API_ENV = 'CONNECTION_PRESETS_API';

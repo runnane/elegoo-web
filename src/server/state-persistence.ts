@@ -28,6 +28,11 @@ const SAVE_INTERVAL_MS = 30_000; // Save every 30 seconds
 interface PersistedState {
   version: 1 | 2 | 3 | 4;
   savedAt: number;
+  /**
+   * The address of the printer this snapshot describes (ELEG-95). Absent in a file
+   * written before connection presets, which can only have described `PRINTER_IP`.
+   */
+  printer?: string;
   chartData: ChartPoint[];
   layerTimes: Array<{ layer: number; duration: number; timestamp: number }>;
   lastLayer: number;
@@ -44,9 +49,17 @@ export class StatePersistence {
   private timer: ReturnType<typeof setInterval> | null = null;
   private filePath: string;
 
+  /**
+   * @param printer Which printer the store currently describes, and which printer an
+   *   untagged (pre-ELEG-95) snapshot belongs to. Without it every snapshot is accepted,
+   *   which is the old behaviour. With it, a snapshot of printer A is never restored while
+   *   the service is pointed at printer B — the case a crash between a switch and the next
+   *   periodic save would otherwise produce.
+   */
   constructor(
     private store: StateStore,
     dataDir: string,
+    private printer?: { current: () => string; legacy: string },
   ) {
     this.filePath = join(dataDir, 'state.json');
   }
@@ -67,6 +80,15 @@ export class StatePersistence {
       if (age > 24 * 60 * 60 * 1000) {
         log.info('Saved state too old (>24h), skipping restore');
         return false;
+      }
+
+      if (this.printer) {
+        const describes = data.printer ?? this.printer.legacy;
+        const current = this.printer.current();
+        if (describes !== current) {
+          log.info(`Saved state describes printer ${describes}, not ${current} — skipping restore`);
+          return false;
+        }
       }
 
       this.store.restoreChartData(data.chartData);
@@ -117,11 +139,17 @@ export class StatePersistence {
     this.save().catch(() => {});
   }
 
+  /** Save immediately — after a printer switch, so `state.json` stops describing A. */
+  saveNow(): Promise<void> {
+    return this.save();
+  }
+
   private async save(): Promise<void> {
     try {
       const data: PersistedState = {
         version: 4,
         savedAt: Date.now(),
+        ...(this.printer ? { printer: this.printer.current() } : {}),
         chartData: this.store.getChartHistory(),
         layerTimes: this.store.layerTimes,
         lastLayer: this.store.getLastLayer(),

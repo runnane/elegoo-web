@@ -147,7 +147,8 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 | `MOONRAKER_PORT` | `7125` | Moonraker compatibility API port |
 | `BIND_ADDRESS` | `0.0.0.0` | Interface both HTTP servers listen on. IPv4 only — see [`.agents/security.md`](.agents/security.md) before narrowing it in production |
 | `CAMERA_ENABLED` | `true` | Enable camera MJPEG proxy |
-| `CAMERA_URL` | `http://<PRINTER_IP>:8080` | Override camera URL |
+| `CAMERA_URL` | `http://<PRINTER_IP>:8080` | Override camera URL. Applies to the `PRINTER_IP` printer only; a saved connection preset uses `http://<its address>:8080` |
+| `CONNECTION_PRESETS_API` | `false` | Allow adding, removing and switching saved printer connection presets from Settings (`/api/printers`). Off by default because the API has **no authentication**: with it on, anyone who can reach the service can re-point it at another address. Listing presets always works. `PRINTER_IP` is always the built-in default preset, and `PRINTER_PASSWORD` is only ever sent to that printer |
 | `CORS_ALLOWED_ORIGINS` | — (same-origin) | Comma-separated origins allowed to make cross-origin requests to `/api/*`, `/mcp`, `/moonraker/*`, `/octoprint/*` and `:7125`. Unset means **no cross-origin access**. `*` restores the old allow-everything behaviour |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (enables notifications) |
 | `TELEGRAM_CHAT_ID` | — | Telegram chat ID — where notifications are **sent** |
@@ -173,6 +174,7 @@ All persistent data lives under `/app/data` inside the container:
 | Path | Contents |
 |------|----------|
 | `/app/data/state.json` | Persisted printer state (survives restarts) |
+| `/app/data/connection-presets.json` | Saved printer connection presets and which one is active, including any per-printer access codes (written `0600`) |
 | `/app/data/moonraker-db.json` | Moonraker compatibility database |
 | `/app/data/reports/` | Print reports with snapshots and PDFs |
 | `/app/data/gcode-cache/` | Downloaded gcode files for 3D preview |

@@ -29,6 +29,16 @@ Not just read. The control surface is complete:
 | `/octoprint/*` | yes | OctoPrint's job + control endpoints |
 | `/ws` | yes | live state, and command frames |
 
+**Connection presets (ELEG-95) are the one write that is off by default.** `POST
+/api/printers`, `DELETE /api/printers/:id` and `POST /api/printers/:id/activate` refuse
+with 403 unless `CONNECTION_PRESETS_API=true`. Switching is different in kind from the
+rows above: it re-points *every* consumer at once, and it makes the service dial — and
+proxy file downloads, uploads and the camera from — an address the request chose. So it
+is exposed on REST only (for the settings page), never on `/mcp`, the compat layers,
+Telegram or `/ws`; `PRINTER_PASSWORD` is never sent to a saved preset's address (a preset
+carries its own access code, or the vendor default); and a switch is refused while the
+connected printer is printing.
+
 Three things make this sharper than a typical "no auth" note:
 
 1. **The consequences are physical.** A request can heat a nozzle, drive the toolhead,

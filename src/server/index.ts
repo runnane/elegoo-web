@@ -14,7 +14,7 @@ import { loadConfig } from './config.js';
 import { MqttBridge } from './mqtt-bridge.js';
 import { StateStore } from './state-store.js';
 import { WebSocketTransport } from './ws-transport.js';
-import { createRestRouter, precacheGcode } from './rest-api.js';
+import { createRestRouter, precacheGcode, resetCameraForPrinterSwitch } from './rest-api.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { createOctoPrintRouter } from './octoprint-compat.js';
 import { createMoonrakerRouter } from './moonraker-compat.js';
@@ -26,8 +26,14 @@ import { PrintReportCollector } from './print-report-collector.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
-import { initDataPaths } from './data-paths.js';
+import { connectionPresetsPath, initDataPaths } from './data-paths.js';
 import { readCachedSn, writeCachedSn } from './sn-cache.js';
+import {
+  ConnectionPresets,
+  handlePresetsRequest,
+  type PresetsRouteDeps,
+  type ResolvedPreset,
+} from './connection-presets.js';
 
 const config = loadConfig();
 initLogger(config.dataDir);
@@ -43,9 +49,31 @@ const build = getBuildInfo();
 // --- MQTT Bridge (singleton connection to printer) ---
 // A remembered SN turns "wait for the printer to say something" into "register now".
 // Without it a restart can hang in broker_only indefinitely (ELEG-60).
-const knownSn = config.printerSn || readCachedSn(config.dataDir);
-const bridge = new MqttBridge(config.printerIp, config.printerPassword, knownSn, (sn) =>
-  writeCachedSn(config.dataDir, sn),
+//
+// Which printer that is comes from the connection presets (ELEG-95): PRINTER_IP unless a
+// saved preset was made active. Still one bridge — switching retargets it.
+const presets = new ConnectionPresets(
+  {
+    ip: config.printerIp,
+    password: config.printerPassword,
+    sn: config.printerSn || readCachedSn(config.dataDir),
+    cameraUrl: config.cameraUrl,
+    onSnLearned: (sn) => writeCachedSn(config.dataDir, sn),
+  },
+  connectionPresetsPath(),
+);
+const envPrinterIp = config.printerIp;
+/** Everything that reads the printer's address from `config` follows the active preset. */
+function applyActivePrinter(p: ResolvedPreset): void {
+  config.printerIp = p.ip;
+  config.printerPassword = p.password;
+  config.cameraUrl = presets.cameraUrlFor(p);
+}
+const activePrinter = presets.active();
+applyActivePrinter(activePrinter);
+const knownSn = activePrinter.sn;
+const bridge = new MqttBridge(activePrinter.ip, activePrinter.password, knownSn, (sn) =>
+  presets.rememberSn(activePrinter.id, sn),
 );
 
 log.info('🖨  Elegoo CC2 Service');
@@ -80,7 +108,10 @@ store.on('print_event', (event: { type: string; filename?: string }) => {
 });
 
 // --- State Persistence ---
-const persistence = new StatePersistence(store, config.dataDir);
+const persistence = new StatePersistence(store, config.dataDir, {
+  current: () => presets.active().ip,
+  legacy: envPrinterIp,
+});
 
 // --- Telegram Bot (optional) ---
 let telegram: TelegramIntegration | null = null;
@@ -97,8 +128,28 @@ if (config.aiEnabled) {
 // --- Print Report Collector ---
 const reportCollector = new PrintReportCollector(store, config);
 
+// --- Connection presets over REST (ELEG-95) — deliberately not /mcp or the compat layers ---
+const presetsDeps: PresetsRouteDeps = {
+  presets,
+  bridge,
+  store,
+  writable: config.connectionPresetsApi,
+  afterSwitch: (p) => {
+    applyActivePrinter(p);
+    resetCameraForPrinterSwitch(config);
+    void persistence.saveNow();
+  },
+};
+
 // --- HTTP Server ---
-const restHandler = createRestRouter(store, config, aiMonitor, reportCollector, bridge);
+const restHandler = createRestRouter(
+  store,
+  config,
+  aiMonitor,
+  reportCollector,
+  bridge,
+  (req, res) => handlePresetsRequest(req, res, presetsDeps),
+);
 const octoPrintHandler = createOctoPrintRouter(store, bridge, config);
 const moonrakerHandler = createMoonrakerRouter(store, bridge, config);
 const moonrakerServer = new MoonrakerServer(store, bridge, config);
