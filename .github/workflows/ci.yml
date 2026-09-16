@@ -18,9 +18,12 @@ jobs:
       # the frozen install two different ways (ELEG-4). Still optional-when-
       # packageManager-is-present in v6, so the bump did not reintroduce it.
       #
-      # Stay on `pnpm/action-setup`. Its successor `pnpm/setup` requires pnpm v11+,
-      # and moving there is ELEG-9's deliberate decision, not a side effect of a
-      # runtime bump.
+      # Still `pnpm/action-setup`. Its successor `pnpm/setup` requires pnpm v11+, which
+      # ELEG-9 made possible. action-setup@v6 reads the 11.x `packageManager` pin just
+      # as it read 10.x, so ELEG-9 kept the action and changed only the pin.
+      #
+      # `node-version: 22` resolves to the newest 22.x, which satisfies pnpm 11's
+      # `engines.node >=22.13`.
       - uses: pnpm/action-setup@v6
 
       # `cache: pnpm` is explicit and must stay. setup-node v5 added automatic

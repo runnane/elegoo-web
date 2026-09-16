@@ -45,11 +45,45 @@ overrides:
   # directly under `node --import tsx`, so this is not a build-only advisory.
   esbuild: '>=0.28.1'
 
-onlyBuiltDependencies:
-  - esbuild
-  - onnxruntime-node
-  - protobufjs
-  - sharp
+# Which dependencies may run install scripts (ELEG-9). pnpm 11 REMOVED
+# `onlyBuiltDependencies`, which this file used to carry. It is ignored now, not
+# misread. `strictDepBuilds` defaults to true in 11, so any build script not listed
+# here fails the install with ERR_PNPM_IGNORED_BUILDS. That is a review prompt, not an
+# obstacle: a dependency that gains an install script must be approved by name.
+#
+# Only packages that actually HAVE an install script at their locked version are
+# listed. sharp (0.35.x) and protobufjs (8.x) were on the old list and ship none, so an
+# entry for them would pre-approve a script nobody has read.
+#
+# Trap: a failing install WRITES placeholder entries ("set this to true or false")
+# into this file. Do not commit them.
+allowBuilds:
+  # postinstall verifies the platform binary. tsx needs it at runtime.
+  esbuild: true
+  # postinstall fetches its native provider libraries. Needed for the local CLIP
+  # path in src/server/ai-monitor.ts.
+  onnxruntime-node: true
+  # Its postinstall would install the git hooks. The `prepare` script already does
+  # that, and pnpm 10 never ran this script either, so false changes nothing.
+  simple-git-hooks: false
+
+# Supply-chain policy (ELEG-9). pnpm 11 refuses any package version published less than
+# this many minutes ago. That defends against a compromised release being pulled within
+# hours of going up. 1440 is already pnpm 11's default. It is set EXPLICITLY on purpose:
+#
+#   - An explicit value turns `minimumReleaseAgeStrict` on; pnpm's config loader does
+#     that only when this key is set. Measured: with strict off, `pnpm add pkg@<exact
+#     too-new version>` installs the too-new version anyway AND writes a
+#     `minimumReleaseAgeExclude` entry for it into this file, so the exemption rides
+#     into the next commit unnoticed. With strict on the add fails with
+#     ERR_PNPM_NO_MATURE_MATCHING_VERSION. A policy that gives way to whoever asks is
+#     not a policy.
+#   - The number lives here, not in whichever default the installed pnpm has.
+#
+# Do NOT lower it to get a PR green. ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION on a lockfile
+# entry heals by itself once that entry is 24h old. Dependabot's `cooldown` in
+# .github/dependabot.yml keeps its PRs outside the window.
+minimumReleaseAge: 1440
 
 updateConfig:
   ignoreDependencies:
