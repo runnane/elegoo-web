@@ -120,3 +120,23 @@ describe('audible alert settings (ELEG-46)', () => {
     expect(second.loadUISettings().alertVolume).toBe(0.2);
   });
 });
+
+describe('desktop notification setting (ELEG-84)', () => {
+  it('is OFF by default', async () => {
+    // Same reasoning as alertSound: a dashboard that starts requesting/firing
+    // notifications on first load is the failure this asserts against.
+    const { loadUISettings } = await import('../ui/ui-settings');
+    expect(loadUISettings().notifyDesktop).toBe(false);
+  });
+
+  it('persists the toggle across a reload', async () => {
+    const first = await import('../ui/ui-settings');
+    first.saveUISettings({ notifyDesktop: true });
+
+    vi.resetModules();
+    const second = await import('../ui/ui-settings');
+
+    // true differs from the default, so absent storage fails this rather than passing.
+    expect(second.loadUISettings().notifyDesktop).toBe(true);
+  });
+});
