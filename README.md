@@ -14,7 +14,7 @@ A web frontend + backend service for Elegoo Centauri Carbon 2 (CC2) FDM printers
 - **Print management**: File browser with thumbnails/popovers, start dialog, pause/resume/stop, USB support
 - **Zone detection**: Server-side toolhead zone tracking (print area, cutter, purge) for AI/event suppression
 - **AI print monitoring**: Motion-based stall detection, SigLIP zero-shot classification, VLM analysis, zone-aware suppression, customizable labels
-- **Telegram notifications**: Print events, progress updates, camera snapshots, AI alerts
+- **Telegram notifications**: Print events, progress updates, camera snapshots, AI alerts, firmware-update progress (one "do not power off" message when the printer starts an OTA flash, one when it completes or fails)
 - **MQTT Log**: Real-time structured log with diff view, method filtering, pinning
 - **Debug panel**: Live state tree with change tracking, watched paths, export
 - **Event log**: Print events, errors, milestones with timestamps and severity

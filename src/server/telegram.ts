@@ -11,6 +11,7 @@ import type { ServiceConfig } from './config.js';
 import { getSnapshot } from './rest-api.js';
 import { CRITICAL_EXCEPTIONS } from '../types.js';
 import { isAllowedSender } from './allowlist.js';
+import { classifyOtaTransition, otaPhaseName } from './ota-status.js';
 import type { AIAlert } from './ai-monitor.js';
 import { getLogger } from './logger.js';
 
@@ -41,7 +42,12 @@ function progressBar(pct: number, length = 20): string {
   return '█'.repeat(filled) + '░'.repeat(length - filled);
 }
 
-function formatEvent(event: PrintEvent): { text: string; urgent: boolean } {
+/**
+ * Map a print event to its Telegram message (MarkdownV2). Exported so the wording and
+ * the which-events-notify decision can be pinned without standing up a bot — an empty
+ * `text` means the event is not sent at all.
+ */
+export function formatEvent(event: PrintEvent): { text: string; urgent: boolean } {
   switch (event.type) {
     case 'connected':
       return { text: `🟢 *Connected to printer*\nSN: \`${event.sn}\``, urgent: false };
@@ -105,6 +111,45 @@ function formatEvent(event: PrintEvent): { text: string; urgent: boolean } {
     case 'first_layer_complete':
       return {
         text: `🥇 *First Layer Complete\\!*\n📄 ${esc(event.filename)}\n⏱ Layer took: ${esc(formatDuration(event.durationSec))}`,
+        urgent: false,
+      };
+    case 'sub_status_change':
+      return formatOtaTransition(event);
+    default:
+      return { text: '', urgent: false };
+  }
+}
+
+/**
+ * OTA firmware-update progress (ELEG-104), read-only — the same "do not power off"
+ * state the web banner shows (ELEG-98), sent once on the way in and once on the way out
+ * rather than on every 2701 → 2702 → 2703 hop. `classifyOtaTransition` is the whole of
+ * that rule; every other sub-status change stays silent, as it always was. Nothing here
+ * sends an OTA command (method 1039 is parked in ELEG-99).
+ */
+function formatOtaTransition(event: Extract<PrintEvent, { type: 'sub_status_change' }>): {
+  text: string;
+  urgent: boolean;
+} {
+  switch (classifyOtaTransition(event.fromCode, event.toCode)) {
+    case 'entered':
+      return {
+        text: `⚠️ *Firmware update in progress — do not power off the printer\\.*\n🔧 Phase: ${esc(otaPhaseName(event.toCode))}`,
+        urgent: true,
+      };
+    case 'completed':
+      return {
+        text: '✅ *Firmware update complete*\nThe printer will restart on its own\\.',
+        urgent: false,
+      };
+    case 'failed':
+      return {
+        text: `❌ *Firmware update failed*\n🔧 Last phase: ${esc(otaPhaseName(event.fromCode))}`,
+        urgent: true,
+      };
+    case 'ended':
+      return {
+        text: `ℹ️ *Firmware update ended*\nThe printer now reports: ${esc(event.to)}`,
         urgent: false,
       };
     default:

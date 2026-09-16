@@ -16,6 +16,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import type { FanInfo } from '../types.js';
 import { getLogger } from './logger.js';
+import { otaDisplayMessage } from './ota-status.js';
 import { loadavg, freemem } from 'os';
 
 const _log = getLogger('Moonraker');
@@ -187,9 +188,14 @@ export function queryObjects(
       }
 
       case 'display_status':
+        // `message` is Klipper's M117 channel, which Mainsail/Fluidd render as a banner.
+        // It carries the OTA "do not power off" text while the printer reports a
+        // firmware-update sub_status (ELEG-104) and is empty otherwise. `print_stats.state`
+        // is deliberately left alone: front-ends key their whole UI off it, and there is
+        // no Moonraker vocabulary for "flashing" that would not be a lie during one.
         result.display_status = pick({
           progress: (s?.machine_status?.progress ?? 0) / 100,
-          message: '',
+          message: otaDisplayMessage(s?.machine_status?.sub_status),
         });
         break;
 
