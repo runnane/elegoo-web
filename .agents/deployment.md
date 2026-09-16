@@ -61,12 +61,13 @@ CI publishes `ghcr.io/runnane/elegoo-web:latest` on every merge to `main` (multi
 `linux/amd64` and `linux/arm64`), so `up -d --pull always` — or the two-step form above
 — picks up whatever most recently merged.
 
-**One caveat on the stamp**: an image pushed by the `release-it` docker hooks
-(`.release-it.json`, run at a version-tag publish) comes out unstamped —
-`commit`/`describe`/`version`/`installedAt` all null in `/api/health`. ELEG-110 removes
-those hooks so every published image goes through the normal CI build instead; until
-that lands, a `:latest` pulled right after a release-it publish may read as unstamped
-even though the code is current. A `:latest` from an ordinary `main` push is stamped.
+**Every published image is stamped.** `.release-it.json` used to carry docker hooks that
+pushed an unstamped, amd64-only image over `:latest` and `:x.y.z` at release time, racing
+CI for the same tags — the v1.0.0 migration pulled one of those and ran it for an hour.
+ELEG-110 deleted the hooks; since then `publish.yml` is the only thing that writes the
+registry, on every `main` push and on every release tag (dispatched explicitly by
+`release.yml`, ELEG-112). An all-null stamp now means an image built locally with
+`docker build`, not a release.
 
 ### Three consequences carried over from the systemd era, re-stated for compose
 
@@ -83,9 +84,9 @@ even though the code is current. A `:latest` from an ordinary `main` push is sta
    curl -s localhost:8088/api/health | jq .build
    # {"commit":"6928f3e6…","shortCommit":"6928f3e","describe":"v1.0.0-16-g6928f3e","version":"1.0.0","installedAt":"2026-09-16T07:01:05Z"}
    ```
-   All-null still means unstamped — now specifically the release-it-hooks case above,
-   rather than "predates ELEG-10". When the stamp is null, fall back to the image
-   digest (see "Operator commands" below).
+   All-null still means unstamped — a locally built image (`pnpm docker:build`), or
+   one from before ELEG-110 that has not been re-pulled. When the stamp is null, fall
+   back to the image digest (see "Operator commands" below).
 3. **`.env` divergence is unchanged.** `/opt/elegooweb/.env` is still a different file
    from the one you test with, compose still only ever reads it (never writes it), and
    a new `config.ts` key still defaults silently in production until someone adds it
@@ -141,7 +142,7 @@ docker logs elegoo-web --tail 100
 curl -s localhost:8088/api/health | jq .build
 # compare .build.commit against: git rev-parse origin/main
 
-# if the stamp is null (release-it-hook image, or CI hasn't stamped it) — check the
+# if the stamp is null (locally built image, or a pre-ELEG-110 pull) — check the
 # image digest instead
 docker inspect elegoo-web --format '{{.Image}}'
 docker buildx imagetools inspect ghcr.io/runnane/elegoo-web:latest
@@ -168,8 +169,9 @@ Two fields in there carry the whole check:
 
 - **`build.commit`** answers "is my change live?" for a CI-built image — compare it
   against the commit you expect (`git rev-parse origin/main`). Equal means the pull
-  landed; null means an unstamped release-it-hook image (fall back to the digest
-  compare above); anything else means the pull has not happened yet.
+  landed; null means an unstamped image — locally built, or a pre-ELEG-110 pull
+  (fall back to the digest compare above); anything else means the pull has not
+  happened yet.
 - **`mqtt":"connected"`** is the one that matters for whether it *works*: the process can
   start happily and fail to reach the printer, and the web UI then looks fine and shows
   nothing.

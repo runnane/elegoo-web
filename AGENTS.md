@@ -171,6 +171,22 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   is `release-it` with `@release-it/conventional-changelog`, so the commit subject
   *is* the release note. `feat:` → minor, `fix:` → patch, and anything user-visible
   needs one of those rather than `chore:`.
+
+  **The subject that lands is checked, not the title (ELEG-112).** The repo squashes
+  with `COMMIT_OR_PR_TITLE`: a one-commit PR lands its commit subject, a multi-commit
+  PR lands the PR title. `.github/workflows/changelog.yml` computes that string and
+  fails the PR when it does not parse as `type(scope)!: description` with a type
+  `.release-it.json` lists — the same list the changelog generator reads, so an
+  unparseable subject fails a check instead of silently missing from the release
+  notes. The logic is `scripts/landing-subject.ts`, tested from `src/__tests__/`.
+
+  **Releases are cut from CI**: Actions → Release → Run workflow (`increment: auto`
+  lets conventional-changelog pick the bump; `dry_run` shows everything and writes
+  nothing). It runs `pnpm gates`, then `release-it` — bump, `CHANGELOG.md`,
+  `chore: release vX`, tag, GitHub release — and then dispatches `publish.yml` on the
+  tag explicitly, because a tag pushed with `GITHUB_TOKEN` triggers nothing on its own.
+  `pnpm release` from a workstation still does the same thing; the workflow is so it
+  does not have to. Neither deploys: production is a separate step (`IN_PRODUCTION`).
 - **Branch → commit → PR, always from fresh `main`.** Finished work never sits as
   uncommitted working-tree changes. Branch `<type>/<eleg-lower>-<kebab-title>`
   (e.g. `feat/eleg-12-layer-chart-zoom`), a conventional commit, one PR, and

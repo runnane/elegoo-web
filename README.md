@@ -220,6 +220,17 @@ pnpm build
 
 Production output goes to `dist/`. The service serves it automatically on port 8088.
 
+## Releasing
+
+Releases are cut by the **Release** workflow (Actions → Release → Run workflow, or
+`gh workflow run release.yml -f increment=auto`). It runs the gates, bumps the version,
+writes `CHANGELOG.md` from the conventional commit subjects since the last tag, tags,
+publishes the GitHub release, and then builds the `ghcr.io` image for that tag. Tick
+`dry_run` to preview the version and changelog without writing anything.
+
+Every pull request is checked for a conventional subject (`feat(ui): …`, `fix: …`,
+`chore(deps): …`) so that nothing merges that the changelog would then leave out.
+
 ## Production Deployment
 
 Install as a systemd service:
