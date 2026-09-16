@@ -49,7 +49,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /** Map CC2 machine status to OctoPrint state flags */
-function getOctoPrintState(store: StateStore) {
+export function getOctoPrintState(store: StateStore) {
   const ms = store.status?.machine_status;
   const machineStatus = ms?.status ?? 0;
   const isPrinting = machineStatus === 2;
@@ -83,7 +83,7 @@ function getOctoPrintState(store: StateStore) {
 }
 
 /** Build OctoPrint temperature response */
-function getTemperatureData(store: StateStore) {
+export function getTemperatureData(store: StateStore) {
   const s = store.status;
   return {
     tool0: {
