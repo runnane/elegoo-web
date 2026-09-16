@@ -4413,3 +4413,37 @@ body {
   margin-left: auto;
   white-space: nowrap;
 }
+
+/* Print queue (ELEG-35). The controls are a static sibling of #print-queue-list, the same
+   shape as .list-controls, because the list is replaced wholesale on every change. */
+.print-queue-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 8px;
+}
+.print-queue-hint {
+  flex: 1 1 100%;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.print-queue-hint.is-warning {
+  color: var(--warning);
+}
+.print-queue-active {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+}
+.print-queue-pos {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 1.5em;
+  text-align: right;
+}
+.print-dialog-queue-note {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--warning);
+}

@@ -50,6 +50,8 @@ export interface WsClientOptions {
       meters: number;
     }>,
   ) => void;
+  /** Called when the service's print queue changes (ELEG-35) */
+  onPrintQueue?: (queue: unknown) => void;
   /** Called when toolhead enters a different zone */
   onZoneChange?: (data: {
     from: string;
@@ -233,6 +235,11 @@ export class WsClient {
         if (Array.isArray(usage)) {
           this.opts.onFilamentUsage?.(usage);
         }
+        break;
+      }
+
+      case 'print_queue': {
+        this.opts.onPrintQueue?.(msg.queue);
         break;
       }
 

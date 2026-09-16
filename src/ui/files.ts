@@ -12,6 +12,7 @@ import {
   THUMBNAIL_PLACEHOLDER_SRC,
 } from './helpers';
 import { requestPrintDialog } from './print-dialog';
+import { addToPrintQueue } from './print-queue';
 import { type ListControls, createListControls } from './list-controls';
 
 let currentSource: 'local' | 'u-disk' = 'local';
@@ -317,7 +318,7 @@ function ensureFileDelegation(container: HTMLElement): void {
       const target = e.target as HTMLElement;
       const item = target.closest('.file-item[data-type="file"]') as HTMLElement | null;
       if (!item) return;
-      if (target.closest('.file-print-btn')) return;
+      if (target.closest('.file-print-btn, .file-queue-btn')) return;
       const fn = item.dataset.filename;
       if (!fn) return;
       const file = _fileMap.get(fn);
@@ -371,6 +372,20 @@ function ensureFileDelegation(container: HTMLElement): void {
         const fullPath =
           currentDir === '/' ? filename : currentDir.replace(/^\//, '') + '/' + filename;
         requestPrintDialog(filename, fullPath, _popoverClient, _lastState);
+      }
+      return;
+    }
+
+    // Add to print queue (ELEG-35) — queues the file, never starts it
+    const queueBtn = target.closest('.file-queue-btn') as HTMLElement | null;
+    if (queueBtn) {
+      e.stopPropagation();
+      const item = queueBtn.closest('.file-item') as HTMLElement;
+      const filename = item?.dataset.filename;
+      if (filename) {
+        const fullPath =
+          currentDir === '/' ? filename : currentDir.replace(/^\//, '') + '/' + filename;
+        void addToPrintQueue(fullPath, currentSource);
       }
       return;
     }
@@ -606,6 +621,7 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
             <div class="file-size">${meta}</div>
           </div>
           <div class="file-actions">
+            ${isFolder ? '' : `<button class="btn btn-sm btn-ghost file-queue-btn" title="Add to print queue" aria-label="Add to print queue">＋</button>`}
             ${isFolder ? '' : `<button class="btn btn-sm btn-primary file-print-btn" title="Print">▶</button>`}
           </div>
         </div>

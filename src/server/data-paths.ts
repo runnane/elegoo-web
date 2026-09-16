@@ -70,6 +70,14 @@ export function connectionPresetsPath(): string {
   return join(dataDir, 'connection-presets.json');
 }
 
+/**
+ * The print queue (ELEG-35). It survives a restart; loading it never starts anything —
+ * see `PrintQueue.load`.
+ */
+export function printQueueFile(): string {
+  return join(dataDir, 'print-queue.json');
+}
+
 /** Reset to the default. For tests only. */
 export function resetDataPathsForTest(): void {
   dataDir = DEFAULT_DATA_DIR;

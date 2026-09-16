@@ -517,6 +517,19 @@
           </div>
         </div>
 
+        <!-- Print Queue (ELEG-35) -->
+        <div class="card" id="print-queue-card">
+          <div class="card-header">
+            <h3>🗂️ Print Queue</h3>
+          </div>
+          <!-- Static sibling of the list: the list is replaced wholesale whenever the
+               queue changes, so the buttons and hint must not live inside it. -->
+          <div id="print-queue-controls" class="print-queue-controls"></div>
+          <div id="print-queue-list" class="file-list">
+            <div class="file-empty">No jobs queued</div>
+          </div>
+        </div>
+
         <!-- Timelapse -->
         <div class="card" id="timelapse-card">
           <div class="files-header">

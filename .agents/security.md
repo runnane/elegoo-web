@@ -24,7 +24,7 @@ Not just read. The control surface is complete:
 | Surface | Reachable without credentials | Includes |
 | --- | --- | --- |
 | `POST /mcp` | yes | `set_temperature`, `fan`, `led`, `home`, `move`, `start_print`, `pause_print`, `resume_print`, `stop_print`, **`emergency_stop`** |
-| `/api/*` | yes | printer commands, file upload, camera snapshot/stream, print reports |
+| `/api/*` | yes | printer commands, file upload, camera snapshot/stream, print reports, the print queue's `start-next` (ELEG-35) |
 | `/moonraker/*` and the dedicated `:7125` server | yes | the same class of control, in Moonraker's vocabulary |
 | `/octoprint/*` | yes | OctoPrint's job + control endpoints |
 | `/ws` | yes | live state, and command frames |
