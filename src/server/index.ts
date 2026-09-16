@@ -141,6 +141,9 @@ const presetsDeps: PresetsRouteDeps = {
   afterSwitch: (p) => {
     applyActivePrinter(p);
     resetCameraForPrinterSwitch(config);
+    // The queue's items, active job and hold all describe the printer that was active
+    // when they were made — none of that carries over to the new one (ELEG-107).
+    printQueue.resetForPrinterSwitch();
     void persistence.saveNow();
   },
 };

@@ -24,6 +24,11 @@
  * through `MqttBridge.sendCommand` — the same call `ws-transport.ts` makes for a command
  * frame. The only thing added is the refusal checks in front of it.
  *
+ * **A printer switch clears the whole queue (ELEG-107).** Every item, the active job, the
+ * hold and `lastFinished` all describe the printer that was active when they were made;
+ * `resetForPrinterSwitch()` drops all four rather than trying to keep a per-printer list.
+ * Wired through the `afterSwitch` hook `connection-presets.ts` calls, not by polling.
+ *
  * One MQTT connection: this reads the store's events and sends through the bridge it is
  * handed. It never opens a client.
  */
@@ -308,6 +313,27 @@ export class PrintQueue extends EventEmitter {
   /** Empty the waiting list. A dispatched job and a hold are left as they are. */
   clear(): void {
     this.items = [];
+    this.changed();
+  }
+
+  /**
+   * A printer switch invalidates the whole queue, not just the waiting list (ELEG-107).
+   * Every item is a file path on **the printer that was active when it was queued** —
+   * "start next" would send 1020 for one of those paths to a different machine. An
+   * `active` job belongs to the printer that is no longer connected, so nothing will ever
+   * report it finished; a `hold` and `lastFinished` describe that printer too. Clearing
+   * (rather than keying the queue per printer) is the deliberate, smaller choice — a
+   * printer-specific queue is out of scope here.
+   *
+   * Persists the empty state and emits `change` so every WebSocket client re-renders.
+   */
+  resetForPrinterSwitch(): void {
+    const hadState = this.items.length > 0 || this.active !== null || this.hold !== null;
+    this.items = [];
+    this.active = null;
+    this.hold = null;
+    this.lastFinished = null;
+    if (hadState) log.info('Print queue cleared: the active printer changed');
     this.changed();
   }
 
