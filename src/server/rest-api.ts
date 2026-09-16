@@ -59,8 +59,14 @@ let activeCapture: { file: string } | null = null;
 // join(process.cwd(), 'data', 'gcode-cache'), which ignored it (ELEG-70).
 const GCODE_CACHE_MAX = 10; // keep at most N cached files
 
-function gcodeCacheKey(fileName: string): string {
-  return createHash('sha256').update(fileName).digest('hex').slice(0, 16) + '.gcode';
+// Keyed by printer identity as well as file name (ELEG-105) — two presets
+// routinely hold a same-named file (a slicer's default export name) with
+// different contents, and the cache dir is shared process-wide. `printerKey`
+// is `config.printerIp`, which already follows the active preset (ELEG-95).
+export function gcodeCacheKey(printerKey: string, fileName: string): string {
+  return (
+    createHash('sha256').update(`${printerKey}\0${fileName}`).digest('hex').slice(0, 16) + '.gcode'
+  );
 }
 
 async function ensureCacheDir(): Promise<void> {
@@ -68,10 +74,14 @@ async function ensureCacheDir(): Promise<void> {
 }
 
 /** Cache a gcode file from a Buffer (e.g. after upload) */
-export async function cacheGcodeBuffer(fileName: string, data: Buffer): Promise<void> {
+export async function cacheGcodeBuffer(
+  fileName: string,
+  data: Buffer,
+  config: ServiceConfig,
+): Promise<void> {
   try {
     await ensureCacheDir();
-    const cachePath = join(gcodeCacheDir(), gcodeCacheKey(fileName));
+    const cachePath = join(gcodeCacheDir(), gcodeCacheKey(config.printerIp, fileName));
     await writeFile(cachePath, data);
     await evictOldCache();
     log.info(`Cached uploaded gcode: ${fileName} (${data.length} bytes)`);
@@ -80,9 +90,9 @@ export async function cacheGcodeBuffer(fileName: string, data: Buffer): Promise<
   }
 }
 
-async function getCachedGcode(fileName: string): Promise<string | null> {
+async function getCachedGcode(fileName: string, config: ServiceConfig): Promise<string | null> {
   try {
-    const cached = join(gcodeCacheDir(), gcodeCacheKey(fileName));
+    const cached = join(gcodeCacheDir(), gcodeCacheKey(config.printerIp, fileName));
     const s = await stat(cached);
     if (s.size > 0) return cached;
   } catch {
@@ -122,7 +132,7 @@ async function handleFileDownload(
   if (isGcode) {
     try {
       await ensureCacheDir();
-      const cached = await getCachedGcode(fileName);
+      const cached = await getCachedGcode(fileName, config);
       if (cached) {
         log.info(`Download proxy: serving ${fileName} from cache`);
         const s = await stat(cached);
@@ -177,7 +187,7 @@ async function handleFileDownload(
 
       // For gcode files, tee the stream to a cache file
       if (isGcode) {
-        const cachePath = join(gcodeCacheDir(), gcodeCacheKey(fileName));
+        const cachePath = join(gcodeCacheDir(), gcodeCacheKey(config.printerIp, fileName));
         const cacheStream = createWriteStream(cachePath);
         const tee = new PassThrough();
         tee.pipe(res);
@@ -234,7 +244,7 @@ export async function precacheGcodeAsync(
 ): Promise<{ ok: boolean; cached: boolean; size: number; error?: string }> {
   try {
     await ensureCacheDir();
-    const existing = await getCachedGcode(fileName);
+    const existing = await getCachedGcode(fileName, config);
     if (existing) {
       const s = await stat(existing);
       log.info(`Precache: ${fileName} already cached (${s.size} bytes)`);
@@ -249,7 +259,7 @@ export async function precacheGcodeAsync(
     const dlPath = pathMap[source] ?? '/download';
     log.info(`Precache: downloading ${fileName} from ${dlPath}`);
 
-    const cachePath = join(gcodeCacheDir(), gcodeCacheKey(fileName));
+    const cachePath = join(gcodeCacheDir(), gcodeCacheKey(config.printerIp, fileName));
 
     const size = await new Promise<number>((resolve, reject) => {
       const proxyReq = httpRequest(
@@ -1349,7 +1359,7 @@ export function createRestRouter(
 
           // Cache the uploaded gcode on the service for preview
           if (fileName.toLowerCase().endsWith('.gcode')) {
-            void cacheGcodeBuffer(fileName, fileData);
+            void cacheGcodeBuffer(fileName, fileData, config);
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
