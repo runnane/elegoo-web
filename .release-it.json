@@ -34,8 +34,6 @@
     }
   },
   "hooks": {
-    "before:init": "pnpm lint && pnpm format:check && pnpm test",
-    "after:bump": "pnpm build && docker build -t ghcr.io/runnane/elegoo-web:${version} -t ghcr.io/runnane/elegoo-web:latest .",
-    "after:release": "echo \"$GITHUB_TOKEN\" | docker login ghcr.io -u runnane --password-stdin && docker push ghcr.io/runnane/elegoo-web:${version} && docker push ghcr.io/runnane/elegoo-web:latest"
+    "before:init": "pnpm lint && pnpm format:check && pnpm test"
   }
 }
