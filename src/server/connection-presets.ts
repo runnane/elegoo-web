@@ -35,6 +35,7 @@ import { randomBytes } from 'crypto';
 import { readFileSync, renameSync, writeFileSync } from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { CONNECTION_PRESETS_API_ENV } from '../types.js';
+import { isValidIPv4 } from './config.js';
 import { getLogger } from './logger.js';
 import { isValidSn } from './sn-cache.js';
 
@@ -53,12 +54,6 @@ const MAX_NAME_LENGTH = 64;
 const MAX_PASSWORD_LENGTH = 128;
 const MAX_PRESETS = 32;
 const MAX_BODY_BYTES = 4096;
-
-/** The dotted-quad IPv4 rule `PRINTER_IP` is held to in `config.ts`. */
-export function isValidIPv4(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^(\d{1,3}\.){3}\d{1,3}$/.test(value)) return false;
-  return value.split('.').every((o) => Number(o) <= 255);
-}
 
 /** A saved preset as it is stored on disk. */
 interface StoredPreset {
