@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.1.0](https://github.com/runnane/elegoo-web/compare/v1.0.0...v1.1.0) (2026-09-16)
+
+* **compat:** pin the Moonraker and OctoPrint state translations (ELEG-97) ([#109](https://github.com/runnane/elegoo-web/issues/109)) ([da709f2](https://github.com/runnane/elegoo-web/commit/da709f2bc29e9a93de196a259046dfafbc4f526a)), references [#107](https://github.com/runnane/elegoo-web/issues/107)
+* **config:** pin loadConfig's port and Telegram refusals (ELEG-92) ([#108](https://github.com/runnane/elegoo-web/issues/108)) ([b425ed8](https://github.com/runnane/elegoo-web/commit/b425ed8efc54ccccd47dce97b6f93f12df0418d0)), references [#107](https://github.com/runnane/elegoo-web/issues/107)
+* **config:** pin PRINTER_IP's octet-out-of-range refusal (ELEG-103) ([#123](https://github.com/runnane/elegoo-web/issues/123)) ([2a6115b](https://github.com/runnane/elegoo-web/commit/2a6115b70d40ffbcf20aa501737ea78892e87d8c))
+* **deps-dev:** bump @release-it/conventional-changelog ([#118](https://github.com/runnane/elegoo-web/issues/118)) ([9ecede7](https://github.com/runnane/elegoo-web/commit/9ecede7e7c8bb60741b755256d3f30ddda092d9e))
+* **deps-dev:** bump release-it from 21.0.2 to 21.0.3 ([#119](https://github.com/runnane/elegoo-web/issues/119)) ([348347b](https://github.com/runnane/elegoo-web/commit/348347b4c874229af8cbf04f196469abf323fe4d))
+* **deps-dev:** bump simple-git-hooks from 2.13.1 to 2.14.0 ([#120](https://github.com/runnane/elegoo-web/issues/120)) ([6135f6d](https://github.com/runnane/elegoo-web/commit/6135f6d7dc3349acd00c4deb000a24263e608aeb))
+* **deps-dev:** bump vite from 8.2.2 to 8.3.0 ([#117](https://github.com/runnane/elegoo-web/issues/117)) ([2d2db9a](https://github.com/runnane/elegoo-web/commit/2d2db9ad3d51596a484422bd78ee860b22991b5c))
+* **deps:** move to pnpm 11 with allowBuilds and a dependabot cooldown (ELEG-9) ([#104](https://github.com/runnane/elegoo-web/issues/104)) ([4915377](https://github.com/runnane/elegoo-web/commit/4915377aad95252bb33afbac95a7b09bb8906e89))
+* **docker:** keep .claude/ agent worktrees out of the build context (ELEG-88) ([#103](https://github.com/runnane/elegoo-web/issues/103)) ([dca882b](https://github.com/runnane/elegoo-web/commit/dca882bce51c5d0b9ecdace27c1ed1317b63791c))
+* **lint:** migrate biome.json to the 2.5.12 schema (ELEG-111) ([#128](https://github.com/runnane/elegoo-web/issues/128)) ([14053b2](https://github.com/runnane/elegoo-web/commit/14053b26f66825b3a8c74881ef3d1be49ef2bb22))
+* **state:** pin that an absent delta field leaves state unchanged, in both deepMerge copies (ELEG-91) ([#106](https://github.com/runnane/elegoo-web/issues/106)) ([0632aef](https://github.com/runnane/elegoo-web/commit/0632aef8fec4304e15e733c105c43de0a55e71a9))
+
+### Features
+
+* **ci:** cut releases from a workflow and gate every PR on a conventional landing subject (ELEG-112) ([#129](https://github.com/runnane/elegoo-web/issues/129)) ([be1b8bd](https://github.com/runnane/elegoo-web/commit/be1b8bdd5f7646d0ed94f5a13c6d0225f5bbd1cd))
+* print queue with a confirmation before every job (ELEG-35) ([#114](https://github.com/runnane/elegoo-web/issues/114)) ([6928f3e](https://github.com/runnane/elegoo-web/commit/6928f3e67877d62edcd3f91d63e4ea0620e7bc3e))
+* **server:** connection presets — switch the active printer without a restart (ELEG-95) ([#113](https://github.com/runnane/elegoo-web/issues/113)) ([bfd688c](https://github.com/runnane/elegoo-web/commit/bfd688cb6b27880a91c6bd1668e11b71958d11c3))
+* **server:** make the bind address configurable with BIND_ADDRESS (ELEG-93) ([#107](https://github.com/runnane/elegoo-web/issues/107)) ([8abdff7](https://github.com/runnane/elegoo-web/commit/8abdff7ea6ac313944ee2808c86e81647a82f966))
+* **server:** tell Telegram and Moonraker clients about a firmware update in progress (ELEG-104) ([#126](https://github.com/runnane/elegoo-web/issues/126)) ([03717ce](https://github.com/runnane/elegoo-web/commit/03717cea5e0e06f9c88f786d26019642393a3d8d))
+* **ui:** keyboard shortcuts, with a modifier and confirmation on destructive actions (ELEG-33) ([#111](https://github.com/runnane/elegoo-web/issues/111)) ([d50dbc7](https://github.com/runnane/elegoo-web/commit/d50dbc74dedaf0868a6413f79e485ab029f6fd66))
+* **ui:** optional desktop notification alongside the audible alert (ELEG-84) ([#112](https://github.com/runnane/elegoo-web/issues/112)) ([4b3aea3](https://github.com/runnane/elegoo-web/commit/4b3aea374d2421306abe82cfb3e9a95caf65ddf8))
+* **ui:** show firmware-update progress read-only, with a do-not-power-off banner (ELEG-98) ([#110](https://github.com/runnane/elegoo-web/issues/110)) ([a9c77fe](https://github.com/runnane/elegoo-web/commit/a9c77fec34fb01422d41716707cc80c5c1dc535b)), references [#ota-banner](https://github.com/runnane/elegoo-web/issues/ota-banner) [#exception-banner](https://github.com/runnane/elegoo-web/issues/exception-banner)
+
+### Bug Fixes
+
+* **release:** stop release-it building and pushing an unstamped image over CI's tags (ELEG-110) ([#121](https://github.com/runnane/elegoo-web/issues/121)) ([01dcc72](https://github.com/runnane/elegoo-web/commit/01dcc724293b3d88cd4f0a7fa31979d3b3bc140d))
+* **server:** clear the print queue when the active printer changes (ELEG-107) ([#125](https://github.com/runnane/elegoo-web/issues/125)) ([4c60b86](https://github.com/runnane/elegoo-web/commit/4c60b86a03ba381b59c95208f38c723539e8bc43))
+* **server:** key the gcode cache by printer as well as file name (ELEG-105) ([#116](https://github.com/runnane/elegoo-web/issues/116)) ([405d3f7](https://github.com/runnane/elegoo-web/commit/405d3f7a32f5cb930ca788ea69a748b268b28731))
+* **ui:** fit the header and views at phone widths (ELEG-90) ([#105](https://github.com/runnane/elegoo-web/issues/105)) ([36324ca](https://github.com/runnane/elegoo-web/commit/36324cabc206fa92408e936fc62e81c87f2836a3)), references [#88](https://github.com/runnane/elegoo-web/issues/88) [#88](https://github.com/runnane/elegoo-web/issues/88)
+* **ui:** label SetDeviceName at 1043 and capacity once, at 1048 (ELEG-85) ([#102](https://github.com/runnane/elegoo-web/issues/102)) ([d42d3eb](https://github.com/runnane/elegoo-web/commit/d42d3eb7bd8b5288a8e0cc76c420007fdfb38fa6))
+* **ui:** move OTA, home-status and fan labels to 1039/1006/1004 and drop the sub-status rows from METHOD_NAMES (ELEG-100) ([#127](https://github.com/runnane/elegoo-web/issues/127)) ([7013914](https://github.com/runnane/elegoo-web/commit/701391481632aa1be265f13a8018977e934a3e14))
+
+### Refactors
+
+* **server:** one IPv4 validator for PRINTER_IP, BIND_ADDRESS and presets (ELEG-106) ([#124](https://github.com/runnane/elegoo-web/issues/124)) ([6fcf185](https://github.com/runnane/elegoo-web/commit/6fcf185d1d8de2d6067a5e7429b66e8130da6135))
+
+### Documentation
+
+* **agents:** fix the dead relative links left behind by the ELEG-81 move (ELEG-102) ([#115](https://github.com/runnane/elegoo-web/issues/115)) ([5a001a1](https://github.com/runnane/elegoo-web/commit/5a001a13aadd19a3e8510dcef2478a5f6ae7c9c2))
+* **agents:** production is the compose stack in /opt/elegooweb, not the systemd unit (ELEG-109) ([#122](https://github.com/runnane/elegoo-web/issues/122)) ([6f48d98](https://github.com/runnane/elegoo-web/commit/6f48d98f574713956204233700b5d3d87eec7ac6))
+
 ## [1.0.0](https://github.com/runnane/elegoo-web/compare/v0.2.1...v1.0.0) (2026-09-16)
 
 ### ⚠ BREAKING CHANGES
