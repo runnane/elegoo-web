@@ -80,25 +80,38 @@ function validatePort(value: number, name: string): void {
 }
 
 /**
- * Validates a dotted-quad IPv4 address, the same shape `PRINTER_IP` requires. Throws
- * with an actionable message rather than letting a bad value reach `listen()`, where a
- * malformed bind address surfaces as an opaque `EADDRNOTAVAIL` (or, worse, a value that
- * happens to resolve to something else entirely).
+ * The one dotted-quad IPv4 predicate for the whole service — `PRINTER_IP`,
+ * `BIND_ADDRESS` and saved connection presets (`connection-presets.ts`) all hold
+ * addresses to this shape (ELEG-106; previously three separate copies). Exported so
+ * `connection-presets.ts` can reuse it rather than keep its own.
  *
  * IPv6 (`::`, `::1`) is deliberately out of scope: every example, test fixture and the
  * TEST-NET convention this repo uses (`.agents/testing.md`) is IPv4-only, and `0.0.0.0`
  * / `127.0.0.1` already cover both binds this issue asks for. Extending validation to
  * IPv6 is future work if a real need for it shows up — not a silent accept-anything.
  */
-function validateIPv4(value: string, name: string): void {
+export function isValidIPv4(value: unknown): value is string {
+  if (typeof value !== 'string' || !IP_RE.test(value)) return false;
+  return value.split('.').every((o) => Number(o) <= 255);
+}
+
+/**
+ * Validates a dotted-quad IPv4 address, the same shape `PRINTER_IP` requires. Throws
+ * with an actionable message rather than letting a bad value reach `listen()`, where a
+ * malformed bind address surfaces as an opaque `EADDRNOTAVAIL` (or, worse, a value that
+ * happens to resolve to something else entirely). Built on `isValidIPv4` above so the
+ * refusal and the predicate can never drift apart.
+ */
+export function validateIPv4(value: string, name: string): void {
   if (!IP_RE.test(value)) {
     throw new Error(
       `Invalid ${name}: "${value}" (must be a valid IPv4 address, e.g. 0.0.0.0 or ` +
         '127.0.0.1 — IPv6 is not supported)',
     );
   }
-  const octets = value.split('.').map(Number);
-  if (octets.some((o) => o > 255)) {
+  // The octet-range rule lives only in isValidIPv4 — this is the shape check above
+  // plus that one predicate, not a second copy of the range test.
+  if (!isValidIPv4(value)) {
     throw new Error(`Invalid ${name}: "${value}" (octet out of range)`);
   }
 }
@@ -119,13 +132,7 @@ export function loadConfig(): ServiceConfig {
         'PRINTER_IP=192.168.1.150 (see .env.example).',
     );
   }
-  if (!IP_RE.test(printerIp)) {
-    throw new Error(`Invalid PRINTER_IP: "${printerIp}" (must be a valid IPv4 address)`);
-  }
-  const octets = printerIp.split('.').map(Number);
-  if (octets.some((o) => o > 255)) {
-    throw new Error(`Invalid PRINTER_IP: "${printerIp}" (octet out of range)`);
-  }
+  validateIPv4(printerIp, 'PRINTER_IP');
 
   const servicePort = parseInt(env('SERVICE_PORT', '8088'), 10);
   validatePort(servicePort, 'SERVICE_PORT');
