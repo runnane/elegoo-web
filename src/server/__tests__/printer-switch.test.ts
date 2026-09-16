@@ -285,6 +285,25 @@ describe('switchActivePrinter', () => {
     );
     expect(reloaded.active().ip).toBe(B);
   });
+
+  it('calls afterSwitch with the new active preset — the seam the print queue resets through (ELEG-107)', () => {
+    const { b, deps } = setup();
+    const afterSwitch = vi.fn();
+
+    switchActivePrinter({ ...deps, afterSwitch }, b.id);
+
+    expect(afterSwitch).toHaveBeenCalledTimes(1);
+    expect(afterSwitch).toHaveBeenCalledWith(expect.objectContaining({ id: b.id, ip: B }));
+  });
+
+  it('never calls afterSwitch for the no-op of switching to the already-active printer', () => {
+    const { deps } = setup();
+    const afterSwitch = vi.fn();
+
+    switchActivePrinter({ ...deps, afterSwitch }, ENV_PRESET_ID);
+
+    expect(afterSwitch).not.toHaveBeenCalled();
+  });
 });
 
 // ── 3. state.json ───────────────────────────────────────────────────────────

@@ -423,6 +423,86 @@ describe('between jobs', () => {
   });
 });
 
+describe('printer switch (ELEG-107)', () => {
+  it('clears items, a hold and lastFinished, and persists the empty state', () => {
+    const q = makeQueue();
+    const a = addOrThrow(q, 'fixture-a.gcode');
+    addOrThrow(q, 'fixture-b.gcode');
+    q.startNext({ id: a.id, bedCleared: true });
+    printer.event({ type: 'print_completed', filename: 'fixture-a.gcode', duration: 60 });
+    // b is still queued: firing a failure now holds the queue without a second dispatch.
+    printer.event({ type: 'print_failed', filename: 'fixture-b.gcode', reason: 'Stopped' });
+    // Arrange sanity: there really is state to clear.
+    const before = q.snapshot();
+    expect(before.items).toHaveLength(1);
+    expect(before.hold).not.toBeNull();
+    expect(before.lastFinished?.filename).toBe('fixture-a.gcode');
+
+    q.resetForPrinterSwitch();
+
+    expect(q.snapshot()).toEqual({ items: [], active: null, hold: null, lastFinished: null });
+
+    // Persisted too: a fresh queue reading the same file has nothing to restore.
+    const reloaded = makeQueue();
+    reloaded.load();
+    expect(reloaded.snapshot()).toEqual({
+      items: [],
+      active: null,
+      hold: null,
+      lastFinished: null,
+    });
+  });
+
+  it('clears an in-flight active job too, so it can never be reported finished by the new printer', () => {
+    const q = makeQueue();
+    const a = addOrThrow(q, 'fixture-a.gcode');
+    q.startNext({ id: a.id, bedCleared: true });
+    expect(q.snapshot().active).not.toBeNull();
+
+    q.resetForPrinterSwitch();
+
+    expect(q.snapshot().active).toBeNull();
+    const reloaded = makeQueue();
+    reloaded.load();
+    expect(reloaded.snapshot().active).toBeNull();
+  });
+
+  it('leaves "start next" with nothing to start for the old printer\'s paths', () => {
+    const q = makeQueue();
+    const a = addOrThrow(q, 'fixture-a.gcode');
+    addOrThrow(q, 'fixture-b.gcode');
+
+    q.resetForPrinterSwitch();
+
+    const result = q.startNext({ id: a.id, bedCleared: true });
+    expect(result).toMatchObject({ ok: false, code: 'empty' });
+    expect(bridge.starts()).toHaveLength(0);
+  });
+
+  it('ignores a print event that arrives afterwards for a job it no longer holds', () => {
+    const q = makeQueue();
+    const a = addOrThrow(q, 'fixture-a.gcode');
+    q.startNext({ id: a.id, bedCleared: true });
+    q.resetForPrinterSwitch();
+
+    printer.event({ type: 'print_completed', filename: 'fixture-a.gcode', duration: 60 });
+    expect(q.snapshot().lastFinished).toBeNull();
+
+    printer.event({ type: 'print_failed', filename: 'fixture-a.gcode', reason: 'Stopped' });
+    expect(q.snapshot().hold).toBeNull();
+  });
+
+  it('ignores a stale 1020 response for the job it dispatched before the switch', () => {
+    const q = makeQueue();
+    const a = addOrThrow(q, 'fixture-a.gcode');
+    q.startNext({ id: a.id, bedCleared: true });
+    q.resetForPrinterSwitch();
+
+    printer.emit('response', 1020, { method: 1020, result: { error_code: 1003 } });
+    expect(q.snapshot()).toEqual({ items: [], active: null, hold: null, lastFinished: null });
+  });
+});
+
 describe('printerActivity', () => {
   it('classifies the statuses start next depends on', () => {
     expect(printerActivity(1, 0)).toBe('idle');
