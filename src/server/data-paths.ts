@@ -15,11 +15,15 @@
  * container, into an unmounted layer that is discarded on every recreate.
  *
  * This module exists rather than threading `config` through the call sites because the
- * consumers are functions like `ensureCacheDir()`, `getCachedGcode(fileName)` and the
- * exported `cacheGcodeBuffer(fileName, data)` — adding a parameter to each would change
- * an exported signature to move a value that never varies within a process. `logger.ts`
- * already solves the identical problem the identical way, and `initDataPaths` is called
- * on the line below `initLogger` so the two stay together.
+ * consumers are functions like `ensureCacheDir()` and `gcodeCacheDir()` itself — adding a
+ * parameter to each would change an exported signature to move a value that never varies
+ * within a process. `logger.ts` already solves the identical problem the identical way,
+ * and `initDataPaths` is called on the line below `initLogger` so the two stay together.
+ *
+ * `config` *does* still reach `gcodeCacheKey`, `getCachedGcode` and `cacheGcodeBuffer` in
+ * `rest-api.ts` (ELEG-105) — but only for `config.printerIp`, which is not process-wide:
+ * it follows the active connection preset (ELEG-95), so two printers with a same-named
+ * gcode file must not collide in the shared cache dir this module hands out.
  */
 
 import { join } from 'path';

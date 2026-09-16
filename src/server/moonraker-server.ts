@@ -2320,7 +2320,7 @@ export class MoonrakerServer {
 
         // Cache the uploaded gcode on the service for preview
         if (fileName.toLowerCase().endsWith('.gcode')) {
-          void cacheGcodeBuffer(fileName, fileData);
+          void cacheGcodeBuffer(fileName, fileData, this.config);
         }
 
         // Refresh file list from printer
