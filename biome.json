@@ -9,6 +9,7 @@
     "ignoreUnknown": true,
     "includes": [
       "src/**",
+      "scripts/**",
       "*.config.ts",
       "!**/dist",
       "!**/data",

@@ -1,0 +1,128 @@
+name: Release
+
+# Cuts a release from CI (ELEG-112): version bump, CHANGELOG.md, the `chore: release vX`
+# commit, the annotated `vX` tag, the GitHub release — and then the image for it.
+#
+# Both releases before this (v0.2.1, v1.0.0) were cut from a workstation with
+# `pnpm release`. That still works and does exactly the same thing; this exists so a
+# release does not depend on whose laptop has a clean checkout and a GITHUB_TOKEN, and so
+# the gates that guard it are the ones CI runs rather than the ones a shell remembers.
+#
+# HOW TO CUT ONE
+#
+#   Actions → Release → Run workflow. `increment: auto` lets conventional-changelog pick
+#   the bump from the commits since the last tag (feat → minor, fix → patch, `!` or a
+#   BREAKING CHANGE footer → major). Tick `dry_run` to see what would happen — the version,
+#   the changelog, every command — without writing anything.
+#
+#   Or from a shell: gh workflow run release.yml -f increment=auto -f dry_run=true
+#
+# WHY THE LAST STEP EXISTS
+#
+# publish.yml builds and pushes the image on `push: tags: v*`. But a tag pushed with the
+# workflow's own GITHUB_TOKEN does not trigger other workflows — GitHub's rule against
+# recursive runs — so without the explicit dispatch below, the release would exist on
+# GitHub with no `:x.y.z` image behind it, and `:latest` would sit on the commit before the
+# release commit. The dispatch runs publish.yml on the tag ref, which is exactly what a
+# human's tag push would have done. (A PAT in place of GITHUB_TOKEN would also do it, and
+# was rejected: it is a long-lived credential to rotate for a problem one line solves.)
+#
+# The same rule means the release commit on `main` does not run ci.yml. Nothing in that
+# commit is code — package.json's version and CHANGELOG.md — and the gates ran against the
+# tree it was made from, one step earlier.
+#
+# Conventional commits are the input, and .github/workflows/changelog.yml is what keeps
+# them honest on the way in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: 'Version bump — auto lets conventional-changelog decide from the commits'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      dry_run:
+        description: 'Show the version, changelog and every command; write nothing'
+        type: boolean
+        default: false
+
+# Two releases at once would race on the tag and the version. Queue, never cancel: a
+# cancelled release-it can leave a commit without its tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # Push the release commit and tag, create the GitHub release.
+      contents: write
+      # Dispatch publish.yml for the tag — see the header.
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # conventional-changelog walks the tags to find the last release and every
+          # commit since; release-it's `requireUpstream` needs a tracking branch. Neither
+          # survives a shallow clone.
+          fetch-depth: 0
+
+      # Same three setup steps as ci.yml, for the same reasons — see the comments there.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The whole gate set, as its own step. .release-it.json's `before:init` hook runs the
+      # same command locally, but release-it skips hooks under --dry-run, and a dry run that
+      # proved nothing about the tree would be the wrong kind of reassuring. So the gates
+      # are explicit here and the hook is neutralised in the release-it call below, rather
+      # than running twice.
+      - run: pnpm gates
+
+      - name: Git identity for the release commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # actions/checkout leaves `main` tracking origin/main already; this makes the
+          # requirement explicit rather than inherited, since release-it refuses without it.
+          git branch --set-upstream-to=origin/main main
+
+      - name: release-it
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          args=(--ci --verbose '--hooks.before:init=true')
+          if [ "${{ inputs.increment }}" != auto ]; then
+            args+=(--increment "${{ inputs.increment }}")
+          fi
+          if [ "${{ inputs.dry_run }}" = true ]; then
+            args+=(--dry-run)
+          fi
+          pnpm exec release-it "${args[@]}"
+
+      - name: Publish the image for the tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          # The tag is on origin now — release-it pushed it one step ago. Check rather
+          # than assume: a dispatch for a ref that does not exist fails with a message
+          # that reads like a permissions problem.
+          git fetch origin "refs/tags/$tag:refs/tags/$tag"
+          gh workflow run publish.yml --ref "$tag"
+          {
+            echo "### Released $tag"
+            echo
+            echo "- https://github.com/${{ github.repository }}/releases/tag/$tag"
+            echo "- publish.yml dispatched on \`$tag\` — it pushes \`ghcr.io/${{ github.repository }}:${tag#v}\`, the \`major.minor\` tag and \`:latest\`."
+            echo "- Production is a separate step: see \`.agents/deployment.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"

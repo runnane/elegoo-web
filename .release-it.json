@@ -24,9 +24,12 @@
           { "type": "perf", "section": "Performance" },
           { "type": "refactor", "section": "Refactors" },
           { "type": "docs", "section": "Documentation" },
+          { "type": "revert", "section": "Reverts" },
           { "type": "chore", "hidden": true },
           { "type": "style", "hidden": true },
-          { "type": "test", "hidden": true }
+          { "type": "test", "hidden": true },
+          { "type": "build", "hidden": true },
+          { "type": "ci", "hidden": true }
         ]
       },
       "infile": "CHANGELOG.md",
@@ -34,6 +37,6 @@
     }
   },
   "hooks": {
-    "before:init": "pnpm lint && pnpm format:check && pnpm test"
+    "before:init": "pnpm gates"
   }
 }
