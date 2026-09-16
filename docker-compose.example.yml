@@ -15,6 +15,7 @@ services:
       # PRINTER_PASSWORD: "123456"       # Access code (default: 123456)
       # SERVICE_PORT: "8088"             # Web UI port (default: 8088)
       # MOONRAKER_PORT: "7125"           # Moonraker compat port (default: 7125)
+      # BIND_ADDRESS: "0.0.0.0"          # Interface both servers bind to (default: 0.0.0.0)
       # CAMERA_ENABLED: "true"           # Camera proxy (default: true)
       # CAMERA_URL: ""                   # Override camera URL (default: http://<PRINTER_IP>:8080)
 

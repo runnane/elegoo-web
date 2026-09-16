@@ -12,6 +12,11 @@ somewhere else, and **whether it is, is decided outside this repo** (a proxy or 
 configured in the `~/ansible` repo; the specifics for a given deployment belong in the
 tracker, not in this public repository).
 
+`BIND_ADDRESS` (default `0.0.0.0`, ELEG-93) makes the interface both HTTP servers listen
+on configurable, but does not by itself narrow anything — it is the knob, not the
+decision. Which value production should actually use is ELEG-94, tracked separately
+because it changes who can reach a service that drives a physical machine.
+
 ## What an unauthenticated request can do
 
 Not just read. The control surface is complete:

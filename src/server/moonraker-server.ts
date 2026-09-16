@@ -359,7 +359,7 @@ export class MoonrakerServer {
 
   start(): void {
     void this.db.load().then(() => this.seedDefaultWebcam());
-    this.httpServer.listen(this.config.moonrakerPort, '0.0.0.0', () => {
+    this.httpServer.listen(this.config.moonrakerPort, this.config.bindAddress, () => {
       log.info(`Moonraker compat server on :${this.config.moonrakerPort}`);
     });
   }
@@ -556,7 +556,7 @@ export class MoonrakerServer {
       case 'server.config':
         client.ws.send(
           rpcResult(msg.id, {
-            config: { server: { host: '0.0.0.0', port: this.config.moonrakerPort } },
+            config: { server: { host: this.config.bindAddress, port: this.config.moonrakerPort } },
             orig: {},
             files: [],
           }),
@@ -1279,7 +1279,7 @@ export class MoonrakerServer {
     // --- GET /server/config ---
     if (urlPath === '/server/config' && method === 'GET') {
       jsonResult(res, {
-        config: { server: { host: '0.0.0.0', port: this.config.moonrakerPort } },
+        config: { server: { host: this.config.bindAddress, port: this.config.moonrakerPort } },
         orig: {},
         files: [],
       });

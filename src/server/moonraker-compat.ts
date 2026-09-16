@@ -288,7 +288,7 @@ export function createMoonrakerRouter(
     if (path === '/server/config' && method === 'GET') {
       json(res, {
         config: {
-          server: { host: '0.0.0.0', port: config.servicePort },
+          server: { host: config.bindAddress, port: config.servicePort },
         },
         orig: {},
         files: [],
