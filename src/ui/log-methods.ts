@@ -7,6 +7,12 @@
  * detection on 2010/2011, and ELEG-32 for OTA on 1064, all of which trace back to this
  * table. `data/CC2_PROTOCOL_REFERENCE.md` is the citable source; ELEG-57 audits the
  * rest of this table against it.
+ *
+ * **But the reference is not the firmware either.** Where the two disagree, the running
+ * code is the stronger evidence: this service sends 2006 for mono filament info and reads
+ * a video URL out of 1050's reply, both of which the reference names differently. So a
+ * row here only moves when the reference contradicts it *and* nothing in the code relies
+ * on the old meaning (ELEG-85).
  */
 
 export const METHOD_NAMES: Record<number, string> = {
@@ -33,16 +39,26 @@ export const METHOD_NAMES: Record<number, string> = {
   1044: 'GetFileList',
   1045: 'GetThumbnail',
   1046: 'GetFileDetail',
+  1043: 'SetDeviceName',
   1047: 'DeleteFile',
-  1048: 'GetDiskInfo',
+  // The reference names 1048 GetCapacity, and the service sends it for storage capacity,
+  // so the code agrees. It used to be labelled 'GetDiskInfo' while 1061 below claimed
+  // 'GetCapacity' — the same operation under two numbers (ELEG-85).
+  1048: 'GetCapacity',
   // Was 'DeleteHistory', which collided with 1038 above — one operation, two entries,
   // so one had to be wrong. Both protocol docs in `data/` say 1049 is UpdateToken, and
   // ELEG-38 nearly sent a history-delete payload to it (ELEG-38).
   1049: 'UpdateToken',
   1050: 'GetVideoUrl',
   1051: 'GetTimeLapse',
-  1060: 'SetDeviceName',
-  1061: 'GetCapacity',
+  // There is no 1060 in the reference. It was labelled 'SetDeviceName', which is 1043
+  // above, and ELEG-39 was written against 1060 because of it (ELEG-85).
+  //
+  // 1061 was labelled 'GetCapacity', which is 1048. The reference names 1061
+  // GetMonoFilamentInfo, but nothing here has seen it answer — and this firmware already
+  // disagrees with the reference about mono filament (the service uses 2006) — so the
+  // name carries a '?' like 1062's.
+  1061: 'GetMonoFilamentInfo?',
   // NOT "GetSystemInfo" — that label was never verified against a real response, and
   // both protocol docs in data/ name 1062 GetAIDetectionSettings. A read-only probe of
   // the live printer answers:
