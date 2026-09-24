@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1](https://github.com/runnane/elegoo-web/compare/v1.1.0...v1.1.1) (2026-09-24)
+
+* **deps-dev:** bump @biomejs/biome from 2.5.12 to 2.5.14 ([#133](https://github.com/runnane/elegoo-web/issues/133)) ([15d9d45](https://github.com/runnane/elegoo-web/commit/15d9d459c8a6a548bb5732c3d3f50a0806186eaa))
+* **deps-dev:** bump vitest from 5.0.0 to 5.0.1 ([#130](https://github.com/runnane/elegoo-web/issues/130)) ([2fce0b7](https://github.com/runnane/elegoo-web/commit/2fce0b74425ef00353fa751dee63b4970d544e02))
+* **deps:** bump @huggingface/transformers from 4.2.0 to 4.3.0 ([#131](https://github.com/runnane/elegoo-web/issues/131)) ([7f5f93d](https://github.com/runnane/elegoo-web/commit/7f5f93dfb8ef58022b571c9c81c21c6cbec5feb0))
+* **deps:** bump mqtt from 5.15.2 to 5.16.0 ([#132](https://github.com/runnane/elegoo-web/issues/132)) ([5f52eb7](https://github.com/runnane/elegoo-web/commit/5f52eb7f168fb0169a886cc9bc4191d158a30638))
+* **deps:** bump the npm_and_yarn group across 1 directory with 3 updates ([#134](https://github.com/runnane/elegoo-web/issues/134)) ([048362a](https://github.com/runnane/elegoo-web/commit/048362ae9cc5095799f0509abe55feb7afad3c8b))
+
+### Bug Fixes
+
+* **ui:** let a printer without a usable Canvas tray start a print (ELEG-113) ([#136](https://github.com/runnane/elegoo-web/issues/136)) ([bd6e7c8](https://github.com/runnane/elegoo-web/commit/bd6e7c8ed8ae94539daa560539ba6d4f751a1d6f)), references [#135](https://github.com/runnane/elegoo-web/issues/135)
+
 ## [1.1.0](https://github.com/runnane/elegoo-web/compare/v1.0.0...v1.1.0) (2026-09-16)
 
 * **compat:** pin the Moonraker and OctoPrint state translations (ELEG-97) ([#109](https://github.com/runnane/elegoo-web/issues/109)) ([da709f2](https://github.com/runnane/elegoo-web/commit/da709f2bc29e9a93de196a259046dfafbc4f526a)), references [#107](https://github.com/runnane/elegoo-web/issues/107)
