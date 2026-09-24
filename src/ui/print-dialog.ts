@@ -10,7 +10,8 @@
 
 import type { PrinterState } from '../printer-state';
 import type { CommandSender } from '../ws-client';
-import type { CanvasInfo, CanvasTray } from '../types';
+import type { CanvasInfo } from '../types';
+import { type FlatTray, getAvailableTrays, needsTrayMapping } from './tray-mapping';
 import {
   escapeHtml,
   escapeAttr,
@@ -68,12 +69,6 @@ interface ColorMapping {
   mappedColor: string;
   /** Mapped tray filament type */
   mappedType: string;
-}
-
-/** All available Canvas trays flattened */
-interface FlatTray {
-  canvasId: number;
-  tray: CanvasTray;
 }
 
 /**
@@ -134,22 +129,6 @@ function contrastColor(hex: string): string {
   } catch {
     return '#fff';
   }
-}
-
-/** Get all available (non-empty) Canvas trays */
-function getAvailableTrays(canvas: CanvasInfo | null): FlatTray[] {
-  if (!canvas?.canvas_list?.length) return [];
-  const trays: FlatTray[] = [];
-  for (const unit of canvas.canvas_list) {
-    if (!unit.connected) continue;
-    for (const tray of unit.tray_list) {
-      if (tray.status !== 0) {
-        // not empty
-        trays.push({ canvasId: unit.canvas_id, tray });
-      }
-    }
-  }
-  return trays;
 }
 
 /** Auto-map gcode colors to Canvas trays */
@@ -223,9 +202,8 @@ function showDialog(
   document.getElementById('print-dialog-overlay')?.remove();
 
   const canvas = state.canvas;
-  const hasCanvas = !!canvas?.canvas_list?.length;
   const colorMap = state.colorMap;
-  const isMultiColor = hasCanvas && colorMap.length > 0;
+  const isMultiColor = needsTrayMapping(canvas, colorMap.length);
   const detail = state.lastFileDetail;
   const trays = getAvailableTrays(canvas);
 
