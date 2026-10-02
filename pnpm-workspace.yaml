@@ -29,7 +29,9 @@ overrides:
   qs: '>=6.15.2'
   body-parser: '>=2.3.0'
   fast-uri: '>=3.1.5'
-  ip-address: '>=10.3.1'
+  # 10.7.1 closes four SSRF/trust-boundary classifier advisories (ELEG-117). RUNTIME:
+  # express-rate-limit (via the sdk) and socks both resolve it.
+  ip-address: '>=10.7.1'
 
   # @huggingface/transformers 4.2.0 → onnxruntime-{node,web}. These two DO cross their
   # parent's declared range (onnxruntime-node wants adm-zip ^0.5.16), so they are the
