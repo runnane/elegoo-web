@@ -55,8 +55,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "dotenv": "^18.0.2",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "dotenv": "^18.0.4",
     "gcode-preview": "3.0.0-alpha.4",
     "grammy": "^1.46.0",
     "mqtt": "^5.16.0",
@@ -66,6 +66,6 @@
     "tsx": "^4.23.15",
     "winston": "^3.19.0",
     "ws": "^8.21.3",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   }
 }
