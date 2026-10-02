@@ -16,6 +16,7 @@ overrides:
   protobufjs: '>=7.6.5'
   sharp: '>=0.35.0'
   esbuild: '>=0.28.1'
+  fflate: ^0.8.3
 
 importers:
 
@@ -1891,9 +1892,6 @@ packages:
 
   fecha@4.2.3:
     resolution: {integrity: sha512-OP2IUU6HeYKJi3i0z4A19kHMQoLVs4Hc+DPqqxI2h/DPZHTm/vjsfC6P0b4jCMy14XizLBqvndQ+UilD7707Jw==}
-
-  fflate@0.8.2:
-    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   fflate@0.8.3:
     resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
@@ -3905,7 +3903,7 @@ snapshots:
       '@types/stats.js': 0.17.4
       '@types/webxr': 0.5.24
       '@webgpu/types': 0.1.69
-      fflate: 0.8.2
+      fflate: 0.8.3
       meshoptimizer: 0.18.1
 
   '@types/tough-cookie@4.0.5': {}
@@ -4497,8 +4495,6 @@ snapshots:
       picomatch: 4.0.7
 
   fecha@4.2.3: {}
-
-  fflate@0.8.2: {}
 
   fflate@0.8.3: {}
 

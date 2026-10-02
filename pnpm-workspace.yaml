@@ -49,6 +49,10 @@ overrides:
   # directly under `node --import tsx`, so this is not a build-only advisory.
   esbuild: '>=0.28.1'
 
+  # @types/three 0.178.1 pins fflate 0.8.2 exactly (GHSA-px8p-9vwx-vf98, moderate).
+  # Dev only — a types package. Caret, not >=, because 0.x minors may break (ELEG-117).
+  fflate: '^0.8.3'
+
 # Which dependencies may run install scripts (ELEG-9). pnpm 11 REMOVED
 # `onlyBuiltDependencies`, which this file used to carry. It is ignored now, not
 # misread. `strictDepBuilds` defaults to true in 11, so any build script not listed
