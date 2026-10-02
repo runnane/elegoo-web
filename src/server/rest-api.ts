@@ -11,6 +11,8 @@
  *   GET /api/health    — Service health check (incl. the deployed build stamp)
  *   GET /api/files/download — Proxy file download from printer
  *   POST /api/files/upload  — Proxy file upload to printer (chunked PUT)
+ *   GET /api/timelapse/video?url=<timelapse_url> — Stream a timelapse video from the printer
+ *                              (host is always the configured printer; Range passthrough)
  */
 
 import type { ClientRequest, IncomingMessage, ServerResponse } from 'http';
@@ -33,6 +35,7 @@ import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
 import { captureLogDir, gcodeCacheDir } from './data-paths.js';
 import { getLogger } from './logger.js';
+import { resolveTimelapseUpstream, type TimelapseUpstream } from './timelapse-proxy.js';
 import {
   STATUS_NAMES,
   SUB_STATUS_NAMES,
@@ -1240,6 +1243,21 @@ export function createRestRouter(
       return;
     }
 
+    // ── Timelapse video proxy (ELEG-114) ────────────────────────────
+    // GET /api/timelapse/video?url=<the printer's timelapse_url>
+    // The upstream host is always the configured printer; see timelapse-proxy.ts.
+    if (url.startsWith('/api/timelapse/video') && req.method === 'GET') {
+      const params = new URL(url, 'http://localhost').searchParams;
+      const target = resolveTimelapseUpstream(params.get('url'), config.printerIp);
+      if (!target.ok) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: target.error }));
+        return;
+      }
+      proxyTimelapseVideo(req, res, config, target);
+      return;
+    }
+
     // ── List cached gcode files ─────────────────────────────────────
     // GET /api/files/cached — returns array of filenames that have cached gcode
     if (url.startsWith('/api/files/cached') && req.method === 'GET') {
@@ -1698,6 +1716,70 @@ function uploadChunk(
     req.write(chunk);
     req.end();
   });
+}
+
+/** Stream a timelapse video from the printer, passing Range through so <video> can seek. */
+function proxyTimelapseVideo(
+  req: IncomingMessage,
+  res: ServerResponse,
+  config: ServiceConfig,
+  target: TimelapseUpstream,
+): void {
+  const headers: Record<string, string> = {};
+  const range = req.headers.range;
+  if (typeof range === 'string') headers.Range = range;
+
+  let finished = false;
+  const fail = (status: number, message: string) => {
+    if (finished) return;
+    finished = true;
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: message }));
+  };
+
+  const upstream = httpRequest(
+    {
+      hostname: config.printerIp,
+      port: target.port,
+      path: target.path,
+      method: 'GET',
+      headers,
+      timeout: 15_000,
+    },
+    (up) => {
+      const status = up.statusCode ?? 502;
+      if (status !== 200 && status !== 206) {
+        up.resume();
+        fail(status === 404 ? 404 : 502, `Printer returned ${status}`);
+        return;
+      }
+      const out: Record<string, string | number> = {
+        'Accept-Ranges': String(up.headers['accept-ranges'] || 'bytes'),
+        'Cache-Control': 'no-store',
+      };
+      const ct = String(up.headers['content-type'] || '').toLowerCase();
+      out['Content-Type'] = ct.startsWith('video/') ? ct : 'video/mp4';
+      if (up.headers['content-length'])
+        out['Content-Length'] = String(up.headers['content-length']);
+      if (up.headers['content-range']) out['Content-Range'] = String(up.headers['content-range']);
+      res.writeHead(status, out);
+      up.pipe(res);
+      up.on('error', () => res.destroy());
+    },
+  );
+  upstream.on('error', (err) => {
+    log.warn(`Timelapse proxy error: ${err.message}`);
+    fail(502, 'Could not fetch video from printer');
+  });
+  upstream.on('timeout', () => {
+    upstream.destroy(new Error('timeout'));
+  });
+  res.on('close', () => upstream.destroy());
+  upstream.end();
 }
 
 function formatUploadSize(bytes: number): string {

@@ -161,7 +161,9 @@ export function showTimelapsePlayer(url: string): void {
   const container = $('timelapse-player-wrap');
   if (!player || !container) return;
 
-  player.src = url;
+  // Through the service, not the printer: the browser may not be able to reach the printer
+  // at all (reverse proxy, off the LAN). Relative, like the other /api/ fetches (ELEG-114).
+  player.src = `/api/timelapse/video?url=${encodeURIComponent(url)}`;
   container.classList.remove('hidden');
   player.play().catch(() => {});
 }
