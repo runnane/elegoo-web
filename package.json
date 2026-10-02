@@ -42,7 +42,7 @@
     "@types/jsdom": "^30.0.0",
     "@types/pdfkit": "^0.17.6",
     "@types/three": "0.178.1",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "^5.0.2",
     "concurrently": "^10.0.5",
     "jsdom": "^30.1.1",
@@ -65,7 +65,7 @@
     "three": "0.178.0",
     "tsx": "^4.23.15",
     "winston": "^3.19.0",
-    "ws": "^8.21.3",
+    "ws": "^8.22.0",
     "zod": "^4.6.5"
   }
 }
