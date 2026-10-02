@@ -18,7 +18,9 @@
 # When a direct dependency's own range catches up, delete the line rather than leaving
 # a floor nobody can date. Check with: pnpm why <pkg>
 overrides:
-  undici: '>=6.24.0'
+  # release-it and jsdom (dev only) both pull undici 8.x. 8.10.2 closes the GHSA batch
+  # Dependabot raised on 8.0–8.10.1 (ELEG-117), two of them high.
+  undici: '>=8.10.2'
 
   # @modelcontextprotocol/sdk 1.30.0 → express / ajv / express-rate-limit / hono.
   # Its declared ranges already permit all of these; only the lockfile was stale.
