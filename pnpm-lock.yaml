@@ -32,8 +32,8 @@ importers:
         specifier: ^18.0.6
         version: 18.0.6
       gcode-preview:
-        specifier: 3.0.0-alpha.4
-        version: 3.0.0-alpha.4
+        specifier: 3.0.0-alpha.6
+        version: 3.0.0-alpha.6
       grammy:
         specifier: ^1.46.0
         version: 1.46.0(supports-color@10.2.2)
@@ -1927,8 +1927,8 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
-  gcode-preview@3.0.0-alpha.4:
-    resolution: {integrity: sha512-vNHQ72WHkfqbbmDkRJ36j9cIIrafaoB8l+4rJWscez6uZ3V6G8X/8gCmTV8Qije4hdEMygMbrS57Gjb0125Vsg==}
+  gcode-preview@3.0.0-alpha.6:
+    resolution: {integrity: sha512-pLgIhufGNdo6ChTrFeuRsjvl/eg2rH1LK4E+qUaLsL0BBWIE/phry2zfxuXHxBSdAKA5+cbXGpCmp/RsxHgVUQ==}
 
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
@@ -2676,10 +2676,6 @@ packages:
   socks@2.8.9:
     resolution: {integrity: sha512-LJhUYUvItdQ0LkJTmPeaEObWXAqFyfmP85x0tch/ez9cahmhlBBLbIqDFnvBnUJGagb0JbIQrkBs1wJ+yRYpEw==}
     engines: {node: '>= 10.0.0', npm: '>= 3.0.0'}
-
-  source-map-js@1.2.1:
-    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
-    engines: {node: '>=0.10.0'}
 
   source-map-js@1.2.2:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
@@ -4532,7 +4528,7 @@ snapshots:
 
   function-bind@1.1.2: {}
 
-  gcode-preview@3.0.0-alpha.4:
+  gcode-preview@3.0.0-alpha.6:
     dependencies:
       lil-gui: 0.20.0
       three: 0.178.0
@@ -4859,7 +4855,7 @@ snapshots:
     dependencies:
       '@babel/parser': 7.29.9
       '@babel/types': 7.29.8
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   matcher@4.0.0:
     dependencies:
@@ -5421,8 +5417,6 @@ snapshots:
     dependencies:
       ip-address: 10.7.2
       smart-buffer: 4.2.0
-
-  source-map-js@1.2.1: {}
 
   source-map-js@1.2.2: {}
 
