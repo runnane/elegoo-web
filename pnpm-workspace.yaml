@@ -58,7 +58,7 @@ overrides:
   # loaded when release-it resolves an ftp:// proxy/PAC URL, which this repo never sets.
   # This CROSSES get-uri's declared ^5.3.1 (get-uri has no release that widens it), so
   # upstream has not blessed it. Verified rather than assumed: get-uri's ftp.js calls only
-  # Client#access/size/lastMod/downloadTo/close, all unchanged in 6.x, and a probe drove
+  # Client#access/lastMod/list/downloadTo/close, all unchanged in 6.x, and a probe drove
   # get-uri's ftp path into basic-ftp 6.x (see the PR for ELEG-118).
   basic-ftp: '>=6.2.1'
 
