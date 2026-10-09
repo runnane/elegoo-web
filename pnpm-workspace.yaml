@@ -53,6 +53,15 @@ overrides:
   # Dev only — a types package. Caret, not >=, because 0.x minors may break (ELEG-117).
   fflate: '^0.8.3'
 
+  # release-it → proxy-agent → pac-proxy-agent → get-uri 8.0.1 → basic-ftp 5.3.1.
+  # GHSA-c475-qrg2-pj4r (high) affects <=6.2.0 and no 5.x is patched (ELEG-118). Dev only:
+  # loaded when release-it resolves an ftp:// proxy/PAC URL, which this repo never sets.
+  # This CROSSES get-uri's declared ^5.3.1 (get-uri has no release that widens it), so
+  # upstream has not blessed it. Verified rather than assumed: get-uri's ftp.js calls only
+  # Client#access/size/lastMod/downloadTo/close, all unchanged in 6.x, and a probe drove
+  # get-uri's ftp path into basic-ftp 6.x (see the PR for ELEG-118).
+  basic-ftp: '>=6.2.1'
+
 # Which dependencies may run install scripts (ELEG-9). pnpm 11 REMOVED
 # `onlyBuiltDependencies`, which this file used to carry. It is ignored now, not
 # misread. `strictDepBuilds` defaults to true in 11, so any build script not listed
