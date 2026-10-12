@@ -382,3 +382,8 @@ Enable with `AI_ENABLED=true`. Three detection backends run in parallel:
 ## License
 
 MIT
+
+
+### Connection notifications
+
+Set `TELEGRAM_CONNECTION_NOTIFICATIONS=false` to suppress only printer connection and disconnection messages. The default is `true`, preserving existing behavior. Print notifications remain enabled. MQTT registration responses from other clients are ignored, and duplicate successful responses do not emit additional connected events.
