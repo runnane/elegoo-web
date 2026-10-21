@@ -46,7 +46,7 @@ pnpm dev:web               # frontend only
 pnpm dev:service           # service only (tsx watch)
 ```
 
-Node ≥ 22.13, pnpm 11 — pinned by `packageManager` in `package.json`, and an older global
+Node ≥ 22.13 (`engines` in `package.json`; `@types/node` is pinned `^22` to that floor), pnpm 11 — pinned by `packageManager` in `package.json`, and an older global
 `pnpm` switches to it by itself. There is no database and no container needed for
 development.
 
