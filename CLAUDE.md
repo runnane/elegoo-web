@@ -11,7 +11,7 @@ Topic deep-dives are in `.agents/` and are **not** auto-loaded — open the rele
 on demand when working in that area:
 
 - `.agents/gates.md` — the gate command (which is what CI runs), why green means very
-  little here, the printer boundary no gate can enforce, and why `/auto --parallel N`'s
+  little here, the printer boundary no gate can enforce, and why `/rauto --parallel N`'s
   gate split is unnecessary in this repo (no e2e, no port-binding gate)
 - `.agents/architecture.md` — one MQTT connection fanned out to WebSocket / REST /
   `/mcp` / Moonraker / OctoPrint / Telegram; which layer a change belongs in
@@ -33,10 +33,10 @@ when loaded with `--plugin-dir`. They read [`.agents/repo.json`](.agents/repo.js
 learn this repo's gate command, tracker project, CI and release model, so they behave
 correctly here without carrying a paragraph about ELEG.
 
-- `/fix <ELEG-123>` — one issue end to end: branch, implement, gates, PR, tracker.
-- `/auto <ELEG-1 ELEG-2 …>` — a given, ordered list, worked serially and autonomously.
-- `/sweep` — discovers its own queue and fans out to subagents in worktrees.
-- `/plan`, `/research` — think first, record the outcome on the issue.
+- `/rfix <ELEG-123>` — one issue end to end: branch, implement, gates, PR, tracker.
+- `/rauto <ELEG-1 ELEG-2 …>` — a given, ordered list, worked serially and autonomously.
+- `/rsweep` — discovers its own queue and fans out to subagents in worktrees.
+- `/rplan`, `/rresearch` — think first, record the outcome on the issue.
 
 Three skills load on their own when they apply, also from the bundle:
 `gate-failures` (a gate went red), `pr-hygiene` (opening or verifying a PR) and

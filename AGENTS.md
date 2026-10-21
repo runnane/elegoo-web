@@ -326,9 +326,9 @@ measurably; RCP-878 replaced that with one bundle plus one manifest per repo, an
 ELEG-81 adopted it here. There is nothing left to sync, and no `sha256sum` check to run.
 
 - **The bundle** — `runnane/agent-userspace`: the constitution, the repo-agnostic
-  workflow commands (`/fix`, `/auto`, `/plan`, `/research`, `/sweep`), and the
+  workflow commands (`/rfix`, `/rauto`, `/rplan`, `/rresearch`, `/rsweep`), and the
   `pr-hygiene`, `gate-failures` and `agent-isolation` skills. Bare on a workstation, or
-  `/agent-userspace:fix` under `--plugin-dir`.
+  `/agent-userspace:rfix` under `--plugin-dir`.
 - **[`.agents/repo.json`](.agents/repo.json)** — the facts that differ between repos, and
   three of ELEG's differ from most of the set: `visibility: "public"`,
   `release: "release-it"` (**not** changesets — those are RCP's alone) and
