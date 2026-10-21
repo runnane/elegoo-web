@@ -223,9 +223,10 @@ settings. So on 11.28.5 the strict-off hole and the frozen-install red both look
 closed or changed. Keep the explicit key anyway: it costs nothing, and the behaviour
 has already moved once between 11.x patch releases.
 
-So strict changes what someone **adding** a dependency gets, not what CI does. A lockfile
-entry younger than 24h fails `pnpm install --frozen-lockfile` either way. That red heals
-itself once the entry is a day old. Wait it out, and do not lower the policy. A range
+So strict changes what someone **adding** a dependency gets, not what CI does. On 11.26.0
+a lockfile entry younger than 24h failed `pnpm install --frozen-lockfile` either way (the
+11.28.5 re-measurement above saw a frozen install pass instead). If it does go red, that
+red heals itself once the entry is a day old. Wait it out, and do not lower the policy. A range
 such as `pkg@^1` that also matches an older, mature version resolves to that version
 under both settings.
 
