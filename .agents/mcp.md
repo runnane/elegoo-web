@@ -5,7 +5,7 @@ StreamableHTTP at `POST /mcp` on `SERVICE_PORT`, implemented in
 `src/server/mcp-server.ts` and documented in [`MCP.md`](../MCP.md).
 
 It is also, separately, an MCP **client** of the RCP tracker — that is
-[`.mcp.json`](../.mcp.json), which is how the `/fix`, `/plan` and `/sweep` commands read
+[`.mcp.json`](../.mcp.json), which is how the `/rfix`, `/rplan` and `/rsweep` commands read
 and write ELEG issues. Two unrelated things with the same acronym; don't conflate them
 when reading a stack trace or an error message.
 

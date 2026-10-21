@@ -246,7 +246,7 @@ a GitHub problem or a workflow-trigger problem, not a runner problem.
 
 ## Running the gates concurrently — the split RCP needs, this repo does not (ELEG-78)
 
-The bundle's `/auto --parallel N` carries a gate split: **subagents run the fast gate; the
+The bundle's `/rauto --parallel N` carries a gate split: **subagents run the fast gate; the
 orchestrator runs anything binding a fixed port or a fixed database name, serially,
 itself.** That rule has a specific cause, and the cause is absent here — so do not port the
 ceremony along with the command.
