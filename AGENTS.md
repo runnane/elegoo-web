@@ -19,18 +19,19 @@ Printer MQTT ←→ MqttBridge (singleton) ←→ StateStore
 ```
 
 Work is tracked in the **ELEG** project of our own control-plane portal, reached over
-the `respawn-control` MCP server. [`.mcp.json`](.mcp.json) wires it up but deliberately
-contains **no URL and no token** — this repository is public, so both come from the
-environment:
+the `respawn-control` MCP server. [`.mcp.json`](.mcp.json) wires it up with the portal
+endpoint **fixed in the file** (a deliberate choice, c834c18) and **no token** — this
+repository is public, so the token is the one thing that comes from the environment:
 
 ```bash
-export RESPAWN_MCP_URL='https://<portal-host>/mcp?modules=issues'
 export RESPAWN_MCP_TOKEN='<api key>'
 ```
 
-Set those in your shell profile (not in a file in this repo). With them unset the MCP
-server simply fails to connect, and the `/`-commands below will tell you to fix it
-rather than guessing at issue state.
+Set it in your shell profile (not in a file in this repo). There is no URL variable:
+nothing reads one, so exporting it has no effect. With the token unset or rejected the
+server answers 401 and the MCP server fails to connect — look at the token first, not
+the URL — and the `/`-commands below will tell you to fix it rather than guessing at
+issue state.
 
 **The thing on the other end is a physical machine with heaters and motors.** That
 single fact is what makes this repo different from its siblings, and it has its own
