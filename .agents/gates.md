@@ -172,8 +172,9 @@ at that step's log before deciding it has hung.
 
 ## pnpm 11: build approvals, the release-age policy, and the pnpm-10 purge (ELEG-9)
 
-`packageManager` is `pnpm@11.26.0`. Everything here was measured against that pin on
-2026-09-15.
+`packageManager` is `pnpm@11.28.5`. The build-approval and strict-mode findings were
+first measured against 11.26.0 on 2026-09-15 and re-measured against 11.28.5 on
+2026-10-21 (ELEG-125); where the two disagree the text says so.
 
 **Build scripts need `allowBuilds`, and a missing entry is fatal.** pnpm 11 removed
 `onlyBuiltDependencies`. The old list is ignored, not misread. `strictDepBuilds` now
@@ -198,17 +199,29 @@ the install log's `postinstall: Done` lines for esbuild and onnxruntime-node, pl
 writes placeholders (`esbuild: set this to true or false`) into `allowBuilds` in
 `pnpm-workspace.yaml`. A non-strict `pnpm add` of a too-new version writes a
 `minimumReleaseAgeExclude` entry. After any failed or surprising install, run
-`git diff pnpm-workspace.yaml`, and commit neither.
+`git diff pnpm-workspace.yaml`, and commit neither. Re-measured on 11.28.5 (ELEG-125),
+non-TTY, with `allowBuilds` deleted: the install still fails with `ERR_PNPM_IGNORED_BUILDS`
+but **no placeholder was written** (nor did a failing `pnpm add` write an exclude entry).
+It may be TTY-only now; the trap is not disproven, so keep the check.
 
 **`minimumReleaseAge: 1440` is set explicitly, which turns strict mode on.** 1440 is
 pnpm 11's default. Setting the key explicitly also turns on `minimumReleaseAgeStrict`,
 which pnpm's config loader does only for an explicit key. Measured with a 14-day window
-against `pnpm@11.26.0`, then 9 days old:
+against `pnpm@11.26.0`, then 9 days old (11.26.0 results; the 11.28.5 re-measurement
+follows the table):
 
 | | `pnpm add pnpm@11.26.0` | frozen install of a lockfile holding it |
 | --- | --- | --- |
 | explicit key (strict) | `ERR_PNPM_NO_MATURE_MATCHING_VERSION` | `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` |
 | `minimumReleaseAgeStrict: false` | installs it, **and writes an exclude entry** | `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` |
+
+**Re-measured on 11.28.5 (2026-10-21, non-TTY, 20-day window, `pnpm@11.28.6` 5 days
+old):** strict `pnpm add` still gives `ERR_PNPM_NO_MATURE_MATCHING_VERSION`. But with
+`minimumReleaseAgeStrict: false` the add now **fails the same way** and writes nothing,
+and a frozen install of a lockfile holding the too-new entry **passed** under both
+settings. So on 11.28.5 the strict-off hole and the frozen-install red both looked
+closed or changed. Keep the explicit key anyway: it costs nothing, and the behaviour
+has already moved once between 11.x patch releases.
 
 So strict changes what someone **adding** a dependency gets, not what CI does. A lockfile
 entry younger than 24h fails `pnpm install --frozen-lockfile` either way. That red heals
