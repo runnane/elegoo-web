@@ -104,3 +104,13 @@ describe('PRINTER_IP validation', () => {
     expect(message).toContain('PRINTER_IP');
   });
 });
+
+describe('connection notification configuration', () => {
+  it('preserves connection notifications by default', () => {
+    expect(loadConfig().telegramConnectionNotifications).toBe(true);
+  });
+  it('allows connection notifications to be disabled independently', () => {
+    process.env.TELEGRAM_CONNECTION_NOTIFICATIONS = 'false';
+    expect(loadConfig().telegramConnectionNotifications).toBe(false);
+  });
+});

@@ -220,7 +220,10 @@ export class MqttBridge extends EventEmitter {
     }
 
     if (topic.includes('/register_response')) {
+      // Registration replies belong to the request that created them.
+      if (topic !== `elegoo/${this.sn}/${this.requestId}/register_response`) return;
       if (data.error === 'ok') {
+        if (this._connected) return;
         log.info('Registered successfully');
         this._connected = true;
         this._registerAttempts = 0;

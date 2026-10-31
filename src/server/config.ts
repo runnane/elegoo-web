@@ -34,6 +34,7 @@ export interface ServiceConfig {
 
   // Telegram (optional)
   telegramEnabled: boolean;
+  telegramConnectionNotifications: boolean;
   telegramToken: string;
   telegramChatId: string;
   /** Numeric sender ids permitted to issue bot commands; empty denies everyone (ELEG-3) */
@@ -173,6 +174,7 @@ export function loadConfig(): ServiceConfig {
     cameraUrl: env('CAMERA_URL') || `http://${printerIp}:8080`,
     corsPolicy: parseCorsPolicy(env('CORS_ALLOWED_ORIGINS')),
     telegramEnabled: !!(telegramToken && telegramChatId),
+    telegramConnectionNotifications: env('TELEGRAM_CONNECTION_NOTIFICATIONS') !== 'false',
     telegramToken,
     telegramChatId,
     telegramAllowedChatIds,

@@ -251,6 +251,11 @@ export class TelegramIntegration {
   }
 
   private async handleEvent(event: PrintEvent): Promise<void> {
+    if (
+      this.config.telegramConnectionNotifications === false &&
+      (event.type === 'connected' || event.type === 'disconnected')
+    )
+      return;
     const { text, urgent } = formatEvent(event);
     if (!text) return;
 
