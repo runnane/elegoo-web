@@ -33,8 +33,8 @@ importers:
         specifier: ^18.0.8
         version: 18.0.8
       gcode-preview:
-        specifier: 3.0.0-alpha.4
-        version: 3.0.0-alpha.4
+        specifier: 3.0.0-alpha.7
+        version: 3.0.0-alpha.7
       grammy:
         specifier: ^1.46.0
         version: 1.46.0(supports-color@10.2.2)
@@ -1937,8 +1937,8 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
-  gcode-preview@3.0.0-alpha.4:
-    resolution: {integrity: sha512-vNHQ72WHkfqbbmDkRJ36j9cIIrafaoB8l+4rJWscez6uZ3V6G8X/8gCmTV8Qije4hdEMygMbrS57Gjb0125Vsg==}
+  gcode-preview@3.0.0-alpha.7:
+    resolution: {integrity: sha512-fggAFXBi7bBziAy3RLAE37wEgocTHyrOx7ui+9uD51QJZJr7rvaER7w7x2KLBUNcrjEtypUE9wFSpVbCDzBpxA==}
 
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
@@ -2199,9 +2199,6 @@ packages:
   lightningcss@1.33.0:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
-
-  lil-gui@0.20.0:
-    resolution: {integrity: sha512-k7Ipr0ztqslMA2XvM5z5ZaWhxQtnEOwJBfI/hmSuRh6q4iMG9L0boqqrnZSzBR1jzyJ28OMl47l65ILzRe1TdA==}
 
   linebreak@1.1.0:
     resolution: {integrity: sha512-MHp03UImeVhB7XZtjd0E4n6+3xr5Dq/9xI/5FptGk5FrbDR3zagPa2DS6U8ks/3HjbKWG9Q1M2ufOzxV2qLYSQ==}
@@ -4534,9 +4531,8 @@ snapshots:
 
   function-bind@1.1.2: {}
 
-  gcode-preview@3.0.0-alpha.4:
+  gcode-preview@3.0.0-alpha.7:
     dependencies:
-      lil-gui: 0.20.0
       three: 0.178.0
 
   get-caller-file@2.0.5: {}
@@ -4806,8 +4802,6 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
-
-  lil-gui@0.20.0: {}
 
   linebreak@1.1.0:
     dependencies:
