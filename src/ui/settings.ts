@@ -11,6 +11,7 @@ import { notifySupport, requestNotifyPermission } from './notify-desktop';
 import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { mountPrinterPresets } from './printer-presets';
+import { syncMobileNavWithTab, tagMobileCards } from './mobile-nav';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
 
@@ -95,6 +96,9 @@ export function applyCardLayout(): void {
       toggleCardCollapse(card.id);
     });
   }
+
+  // Tag cards with mobile section/order metadata (non-destructive for desktop layout)
+  tagMobileCards();
 }
 
 // ---- Settings Tab ----
@@ -151,6 +155,8 @@ export function switchToTab(tab: 'dashboard' | 'settings' | 'tools' | 'help' | '
   } else if (tab === 'debug') {
     debugPage?.classList.remove('hidden');
   }
+
+  syncMobileNavWithTab(tab);
 }
 
 /** Render settings content into the settings page (called on tab switch) */

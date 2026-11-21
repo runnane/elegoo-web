@@ -66,6 +66,7 @@ import { maybeAlertForEvent } from './ui/alert-sound';
 import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
+import { initMobileNav } from './ui/mobile-nav';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -778,6 +779,9 @@ document.querySelectorAll('.main-tab').forEach((btn) => {
 
 // Apply saved card layout
 applyCardLayout();
+
+// Initialise mobile bottom-tab navigation (no-op visually on > 800px desktop)
+initMobileNav(switchToTab);
 
 // ---- Sidebar resize handle ----
 {

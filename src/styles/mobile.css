@@ -1,0 +1,885 @@
+/*
+ * Elegoo Web — Mobile-first responsive overrides (<= 800px).
+ *
+ * Loaded after main.css so mobile rules never lose the cascade to desktop rules
+ * declared later in main.css. Desktop (> 800px) is completely unaffected.
+ */
+
+/* Hidden on desktop; revealed at <= 800px */
+.mobile-bottom-nav,
+.mobile-more-bar {
+  display: none;
+}
+
+/* Fix text-mode print thumbnail placeholder ("No preview") clipping at 32px */
+.print-thumbnail-placeholder.is-text {
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  padding: 4px;
+  opacity: 0.65;
+}
+
+/* File row overflow/details button (usable on both touch and desktop) */
+.file-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.file-popover-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.file-popover-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+@media (max-width: 800px) {
+  :root {
+    --mobile-header-h: 52px;
+    --mobile-nav-h: 62px;
+  }
+
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+    min-height: 100dvh;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS Safari auto-zoom on input/select focus (requires >= 16px) */
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* ── Compact single-row sticky header ─────────────────────────── */
+  #app-header {
+    flex-wrap: nowrap;
+    height: auto;
+    min-height: var(--mobile-header-h);
+    padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+    gap: 8px;
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+
+  /* Desktop tab bar & sidebar toggle replaced by bottom nav on phone */
+  #app-header .header-center,
+  #app-header #sidebar-toggle {
+    display: none !important;
+  }
+
+  #app-header .header-left {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #app-header .header-left h1 {
+    font-size: 15px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #app-header .subtitle {
+    display: block;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #app-header .header-right {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  #app-header .svc-header-badge {
+    min-width: 40px;
+    min-height: 36px;
+    padding: 4px 8px;
+  }
+
+  #app-header .status-badge {
+    padding: 5px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  #app-header .svc-dropdown {
+    top: calc(100% + 4px);
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+  }
+
+  /* ── Main container + safe bottom clearance for bottom nav ────── */
+  #app {
+    min-height: calc(100dvh - var(--mobile-header-h));
+    padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 12px);
+  }
+
+  /* Toasts sit cleanly below the sticky header without covering nav */
+  body .toast-container {
+    top: calc(var(--mobile-header-h) + env(safe-area-inset-top) + 8px);
+    left: 10px;
+    right: 10px;
+    max-width: none;
+  }
+
+  /* ── Dashboard: flatten desktop panels so cards order cleanly ─── */
+  #dashboard {
+    height: auto;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 10px 0;
+  }
+
+  #dashboard.hidden {
+    display: none;
+  }
+
+  #dashboard .dashboard-panels,
+  #dashboard .dashboard-sidebar,
+  #dashboard .dashboard-main {
+    display: contents !important;
+  }
+
+  #dashboard .sidebar-resize-handle {
+    display: none !important;
+  }
+
+  #dashboard #exception-banner,
+  #dashboard #ota-banner {
+    order: 0;
+    margin: 0;
+  }
+
+  /* Section filtering via body[data-mobile-section] */
+  #dashboard .card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 14px;
+    border-radius: 12px;
+    order: var(--mobile-order, 99);
+  }
+
+  body[data-mobile-section="overview"] #dashboard .card:not([data-mobile-section="overview"]),
+  body[data-mobile-section="control"] #dashboard .card:not([data-mobile-section="control"]),
+  body[data-mobile-section="files"] #dashboard .card:not([data-mobile-section="files"]),
+  body[data-mobile-section="monitor"] #dashboard .card:not([data-mobile-section="monitor"]) {
+    display: none !important;
+  }
+
+  /* Wrap card headers cleanly so buttons never overflow horizontally */
+  .card-header,
+  .files-header,
+  .log-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-right: 18px;
+  }
+
+  /* ── Print Status Hero Card ───────────────────────────────────── */
+  #print-status-bar {
+    gap: 12px;
+  }
+
+  #print-status-bar .print-status-top {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #print-status-bar .print-thumbnail-wrap {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+  }
+
+  #print-status-bar .print-thumbnail {
+    object-fit: contain;
+  }
+
+  #print-status-bar .print-file {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+
+  #print-status-bar .print-status-badge {
+    font-size: 12px;
+    padding: 3px 10px;
+    margin: 4px 0 0;
+  }
+
+  #print-status-bar .progress-text-lg {
+    font-size: 24px;
+    min-width: 56px;
+  }
+
+  #print-status-bar .progress-bar {
+    height: 8px;
+    border-radius: 4px;
+  }
+
+  #print-status-bar .print-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    background: var(--bg-input);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  #print-status-bar .print-meta {
+    display: contents;
+  }
+
+  #print-status-bar .print-meta > span {
+    font-size: 12px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #print-status-bar .print-actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+
+  #print-status-bar .print-actions .btn-icon {
+    width: 100%;
+    height: 46px;
+    border-radius: 10px;
+    font-size: 20px;
+  }
+
+  /* ── Camera Card (prominent right below status in Overview) ──── */
+  #camera-card {
+    padding: 12px;
+  }
+
+  #camera-card .camera-header-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Expand toggles desktop grid-column span (no-op on 1-col mobile); tap video for fullscreen */
+  #camera-expand-btn {
+    display: none;
+  }
+
+  #camera-card .camera-wrap {
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #camera-card .camera-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .camera-modal {
+    padding: max(12px, env(safe-area-inset-top)) 8px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .camera-modal-content {
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .camera-modal-close {
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+  }
+
+  /* ── Temperatures Card ────────────────────────────────────────── */
+  #temps-card .temp-row {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #temps-card .temp-value {
+    font-size: 20px;
+  }
+
+  #temps-card .temp-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  #temps-card .temp-control input {
+    width: 72px;
+    min-height: 40px;
+    padding: 6px 8px;
+  }
+
+  #temps-card .temp-presets {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    align-items: stretch;
+  }
+
+  #temps-card .temp-presets .preset-label {
+    grid-column: 1 / -1;
+    margin-bottom: 2px;
+  }
+
+  #temps-card .temp-preset-btn {
+    min-height: 40px;
+    padding: 6px 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* ── Canvas / AMS Card ────────────────────────────────────────── */
+  #canvas-card .canvas-device {
+    flex-direction: column;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  /* Decorative side hub & extruder take ~120px width; hide on narrow phones */
+  #canvas-card .canvas-hub,
+  #canvas-card .canvas-extruder {
+    display: none;
+  }
+
+  #canvas-card .canvas-spools {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  #canvas-card .canvas-spool-slot {
+    padding: 12px 8px;
+    min-width: 0;
+  }
+
+  #canvas-card .spool-actions {
+    width: 100%;
+    margin-top: 6px;
+  }
+
+  #canvas-card .spool-actions .btn {
+    width: 100%;
+    min-height: 38px;
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  /* ── Control / Toolhead Card ──────────────────────────────────── */
+  #toolhead-card .move-section {
+    justify-content: center;
+    gap: 18px;
+  }
+
+  #toolhead-card .move-xy-grid {
+    grid-template-columns: repeat(3, 52px);
+    grid-template-rows: repeat(3, 46px);
+    gap: 6px;
+  }
+
+  #toolhead-card .move-z-col {
+    grid-template-rows: repeat(3, 46px);
+    gap: 6px;
+  }
+
+  #toolhead-card .move-btn {
+    width: 52px;
+    height: 46px;
+    min-height: 46px;
+    font-size: 14px;
+  }
+
+  #toolhead-card .move-distance {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+
+  #toolhead-card .dist-btn {
+    min-height: 40px;
+    padding: 6px 4px;
+    font-size: 12px;
+  }
+
+  #toolhead-card .speed-control {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  #toolhead-card .speed-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+
+  #toolhead-card .speed-btn {
+    min-height: 42px;
+    padding: 6px 4px;
+    font-size: 12px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  #toolhead-card .maintenance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #toolhead-card .maintenance-btn {
+    min-height: 52px;
+  }
+
+  /* ── Fans Card ────────────────────────────────────────────────── */
+  #fans-card .fan-adjust {
+    gap: 8px;
+  }
+
+  #fans-card .fan-dec,
+  #fans-card .fan-inc {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 18px;
+    padding: 0;
+  }
+
+  #fans-card .fan-bar-wrap {
+    min-width: 60px;
+  }
+
+  /* ── Touch targets across charts, lists & controls ────────────── */
+  .btn {
+    min-height: 42px;
+    padding: 8px 14px;
+  }
+
+  .btn-sm {
+    min-height: 38px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .chart-time-selector {
+    gap: 6px;
+  }
+
+  .chart-time-btn {
+    min-height: 34px;
+    min-width: 38px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .list-controls {
+    gap: 8px;
+  }
+
+  .list-controls .list-filter,
+  .list-controls .list-select {
+    min-height: 40px;
+    padding: 6px 10px;
+  }
+
+  .list-sort-btn {
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* ── Files Card & Touch Popover ───────────────────────────────── */
+  .file-item {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .file-actions {
+    gap: 6px;
+  }
+
+  .file-actions .btn {
+    min-width: 42px;
+    min-height: 42px;
+    padding: 6px 10px;
+    font-size: 15px;
+  }
+
+  .file-source-tab {
+    min-height: 38px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  .file-popover {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: 400px;
+    margin: 0 auto;
+    bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom) + 12px) !important;
+    top: auto !important;
+    max-height: 70dvh;
+    overflow-y: auto;
+    z-index: 9500;
+  }
+
+  .file-popover-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 8px;
+  }
+
+  .file-popover-actions .btn {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  /* ── Gcode Preview, History, Reports & MQTT Log ───────────────── */
+  #gcode-preview-card .gcode-preview-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #gcode-preview-card .gcode-preview-wrap {
+    height: 240px;
+  }
+
+  #gcode-preview-card .gcode-layer-slider {
+    height: 32px;
+  }
+
+  .history-entry-meta,
+  .report-entry-meta {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+
+  #log-card .log-controls {
+    gap: 8px;
+  }
+
+  #log-card .log-filter-input,
+  #log-card .log-select {
+    flex: 1 1 130px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 40px;
+  }
+
+  #log-card .log-tab {
+    min-height: 36px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  #log-card .slog-row-header,
+  #log-card .log-row {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+
+  #log-card .slog-time,
+  #log-card .slog-method,
+  #log-card .slog-topic,
+  #log-card .log-time,
+  #log-card .log-topic {
+    min-width: 0;
+  }
+
+  #log-card .slog-summary {
+    flex: 1 1 100%;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  /* ── Modals (Print Dialog, Power-Loss, Filament Editor) ───────── */
+  .print-dialog-overlay,
+  .modal-overlay {
+    padding: 12px 8px calc(12px + env(safe-area-inset-bottom));
+    align-items: flex-end;
+  }
+
+  .print-dialog,
+  .modal-content {
+    max-width: 100%;
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-body {
+    overflow-y: auto;
+    flex: 1 1 auto;
+  }
+
+  .print-dialog-close {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .print-mapping-row,
+  .print-mapping-trays {
+    flex-wrap: wrap;
+  }
+
+  .print-dialog-footer,
+  .modal-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .print-dialog-footer .btn,
+  .modal-footer .btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .fm-swatch {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* ── More Pages (Settings, Tools, Debug, Help) ────────────────── */
+  .mobile-more-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: calc(var(--mobile-header-h) + env(safe-area-inset-top));
+    z-index: 90;
+  }
+
+  .mobile-more-bar.hidden {
+    display: none;
+  }
+
+  .mobile-more-btn {
+    min-height: 38px;
+    padding: 6px 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-more-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  #app .settings-page {
+    padding: 12px 10px 24px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .settings-page-title {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .settings-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .settings-row label {
+    min-width: 0;
+    flex: 1 1 120px;
+  }
+
+  .settings-row input[type="text"],
+  .settings-row input[type="password"],
+  .settings-row select {
+    flex: 1 1 100%;
+    min-width: 0;
+    min-height: 40px;
+  }
+
+  .settings-card-row {
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 8px;
+  }
+
+  .settings-drag-handle {
+    display: none;
+  }
+
+  .settings-card-label {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+
+  .settings-card-move {
+    display: flex;
+    gap: 6px;
+  }
+
+  .settings-card-move .btn {
+    min-width: 38px;
+    min-height: 38px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .settings-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .spool-calc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .spool-calc-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .debug-controls .log-filter-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .help-api,
+  .help-ports {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* ── Fixed Bottom Navigation Bar ──────────────────────────────── */
+  .mobile-bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 200;
+    background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    border-top: 1px solid var(--border);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  .mobile-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 52px;
+    padding: 4px 2px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      background 0.15s;
+  }
+
+  .mobile-nav-btn svg {
+    width: 22px;
+    height: 22px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .mobile-nav-btn.active {
+    color: var(--accent-light);
+    background: var(--accent-dim);
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 340px) {
+  #print-status-bar .print-details {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  #temps-card .temp-presets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

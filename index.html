@@ -2,16 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#2196f3">
   <meta name="description" content="Browser-based web frontend for Elegoo Centauri Carbon 2 printers">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>Elegoo Web</title>
   <link rel="stylesheet" href="/src/styles/main.css">
+  <link rel="stylesheet" href="/src/styles/mobile.css">
 <script>
       /*
        * Set the theme before first paint (ELEG-34). Inline and synchronous on purpose:
@@ -69,6 +71,14 @@
       <span id="connection-status" class="status-badge connecting">Connecting…</span>
     </div>
   </header>
+
+  <!-- Mobile sub-tab switcher for More pages (Settings / Tools / Debug / Help) -->
+  <nav id="mobile-more-bar" class="mobile-more-bar hidden" aria-label="More sections">
+    <button class="mobile-more-btn active" data-more-tab="settings">Settings</button>
+    <button class="mobile-more-btn" data-more-tab="tools">Tools</button>
+    <button class="mobile-more-btn" data-more-tab="debug">Debug</button>
+    <button class="mobile-more-btn" data-more-tab="help">Help</button>
+  </nav>
 
   <main id="app">
     <!-- Connect dialog -->
@@ -693,6 +703,30 @@
       </div>
     </div>
   </main>
+
+  <!-- Mobile bottom navigation bar (shown only <= 800px via mobile.css) -->
+  <nav id="mobile-bottom-nav" class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <button class="mobile-nav-btn active" data-mobile-nav="overview" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Overview</span>
+    </button>
+    <button class="mobile-nav-btn" data-mobile-nav="control">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.5"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.5"/></svg>
+      <span>Control</span>
+    </button>
+    <button class="mobile-nav-btn" data-mobile-nav="files">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span>Files</span>
+    </button>
+    <button class="mobile-nav-btn" data-mobile-nav="monitor">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 13 7 13 10 6 14 18 17 13 21 13"/></svg>
+      <span>Monitor</span>
+    </button>
+    <button class="mobile-nav-btn" data-mobile-nav="more">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>More</span>
+    </button>
+  </nav>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

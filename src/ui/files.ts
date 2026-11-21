@@ -185,7 +185,7 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
     html += `<img class="file-popover-thumb ${THUMBNAIL_CLASS}" src="data:image/png;base64,${thumb}" alt="Preview">`;
   }
   html += '<div class="file-popover-details">';
-  html += `<div class="file-popover-name">${escapeHtml(file.filename)}</div>`;
+  html += `<div class="file-popover-header"><div class="file-popover-name">${escapeHtml(file.filename)}</div><button type="button" class="file-popover-close" aria-label="Close">&times;</button></div>`;
   html += '<table class="file-popover-table">';
   html += `<tr><td>Size</td><td>${formatBytes(file.size)}</td></tr>`;
   if (file.print_time)
@@ -228,7 +228,11 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
 
   document.body.appendChild(el);
 
-  // Bind popover action buttons
+  // Bind popover close & action buttons
+  el.querySelector('.file-popover-close')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeFilePopover();
+  });
   const source = currentSource === 'u-disk' ? 'u-disk' : 'local';
   el.querySelector('.file-popover-preview')?.addEventListener('click', () => {
     closeFilePopover();
@@ -268,8 +272,9 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
   const popH = el.offsetHeight || 200;
   let left = rect.right + 8;
   let top = rect.top;
-  // Keep within viewport
+  // Keep within viewport (including narrow phone screens)
   if (left + popW > window.innerWidth) left = rect.left - popW - 8;
+  left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
   if (top + popH > window.innerHeight) top = Math.max(8, window.innerHeight - popH - 8);
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
@@ -310,6 +315,14 @@ let fileDelegationBound = false;
 function ensureFileDelegation(container: HTMLElement): void {
   if (fileDelegationBound) return;
   fileDelegationBound = true;
+
+  // Close touch/click-opened popover when tapping outside it
+  document.addEventListener('click', (e) => {
+    if (!filePopover) return;
+    const t = e.target as HTMLElement;
+    if (t.closest('.file-popover, .file-info-btn')) return;
+    closeFilePopover();
+  });
 
   // Delegated mouseenter/mouseleave for file popovers (use capture for mouseenter)
   container.addEventListener(
@@ -361,6 +374,26 @@ function ensureFileDelegation(container: HTMLElement): void {
   // Delegated click for folders, breadcrumbs, and print buttons
   container.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+
+    // File details / actions button (essential on touch devices without hover)
+    const infoBtn = target.closest('.file-info-btn') as HTMLElement | null;
+    if (infoBtn) {
+      e.stopPropagation();
+      const item = infoBtn.closest('.file-item') as HTMLElement | null;
+      const filename = item?.dataset.filename;
+      if (item && filename) {
+        const file = _fileMap.get(filename);
+        if (file) {
+          if (filePopover && filePopover.dataset.filename === filename) {
+            closeFilePopover();
+          } else {
+            showFilePopover(file, item);
+            if (filePopover) filePopover.dataset.filename = filename;
+          }
+        }
+      }
+      return;
+    }
 
     // Print button
     const printBtn = target.closest('.file-print-btn') as HTMLElement | null;
@@ -621,6 +654,7 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
             <div class="file-size">${meta}</div>
           </div>
           <div class="file-actions">
+            ${isFolder ? '' : `<button class="btn btn-sm btn-ghost file-info-btn" title="Details &amp; actions" aria-label="Details and actions">⋯</button>`}
             ${isFolder ? '' : `<button class="btn btn-sm btn-ghost file-queue-btn" title="Add to print queue" aria-label="Add to print queue">＋</button>`}
             ${isFolder ? '' : `<button class="btn btn-sm btn-primary file-print-btn" title="Print">▶</button>`}
           </div>
