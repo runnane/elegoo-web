@@ -1460,14 +1460,20 @@ export function createRestRouter(
     if (url === '/api/reports' && req.method === 'GET') {
       if (!reportCollector) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ reports: [] }));
+        res.end(JSON.stringify({ reports: [], active: false, activePrint: null }));
         return;
       }
       reportCollector
         .listReports()
         .then((reports) => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ reports, active: reportCollector.isActive() }));
+          res.end(
+            JSON.stringify({
+              reports,
+              active: reportCollector.isActive(),
+              activePrint: reportCollector.getActiveSummary(),
+            }),
+          );
         })
         .catch(() => {
           res.writeHead(500, { 'Content-Type': 'application/json' });
