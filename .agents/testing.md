@@ -315,6 +315,30 @@ safest way to work here.
 came up", and those look identical. Print the status line too — a check that passes
 because nothing answered is worse than no check.
 
+## Rendering the gcode preview for real (ELEG-120)
+
+No gate draws `src/ui/gcode-preview.ts`, and a gcode-preview / three bump has changed
+both its API and its layer indexing without one test noticing. The recipe ELEG-120 used,
+with nothing of it committed:
+
+- **A throwaway vite page** in an untracked directory of the checkout, importing
+  `../src/ui/gcode-preview` and exposing `loadGcode` / `renderGcodePreview` on `window`,
+  with the four element ids the module looks up (`gcode-preview-canvas` with a real CSS
+  size — `resize()` divides by `offsetHeight` — `-status`, `-info`, `gcode-layer-slider`).
+  Its own vite config with **no proxy at all** and a non-default port, so nothing can
+  reach the service.
+- **`playwright-core` installed in a temp directory**, not in `package.json`, at the
+  version whose Chromium is already in `~/.cache/ms-playwright`. Launch with
+  `--use-angle=swiftshader --enable-unsafe-swiftshader` for WebGL. `page.route` answers
+  `/api/files/download` with a **generated** fixture and aborts every other request.
+- **What to check**: the status line reads `N layers · …` (a WebGL failure is swallowed
+  into `Error: …`); extrusion-coloured pixel counts against a travel-only control file
+  (the build-volume grid alone is "not blank"); rAF requests and `gl.clear` calls during
+  an idle second after load (0 — 60 means the animate-loop workaround missed); and a
+  follow-mode `renderGcodePreview` call showing the expected single layer, for a file
+  with and without slicer `;LAYER_CHANGE` comments. Use `page.screenshot`, not
+  `toDataURL` — `preserveDrawingBuffer` is off. Run it on `main` and on the branch.
+
 ## What nothing checks — say so instead of implying otherwise
 
 - **Layout and appearance.** No browser test, no screenshot, no playwright. jsdom (above)

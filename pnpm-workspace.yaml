@@ -52,8 +52,11 @@ overrides:
   # directly under `node --import tsx`, so this is not a build-only advisory.
   esbuild: '>=0.28.1'
 
-  # @types/three 0.178.1 pins fflate 0.8.2 exactly (GHSA-px8p-9vwx-vf98, moderate).
-  # Dev only — a types package. Caret, not >=, because 0.x minors may break (ELEG-117).
+  # fflate 0.8.2 has GHSA-px8p-9vwx-vf98 (moderate). Added in ELEG-117 when @types/three
+  # 0.178.1 pinned 0.8.2 exactly. Re-checked in ELEG-120 at @types/three 0.185.4: it now
+  # declares ~0.8.2, and png-js 2.0.0 (via pdfkit, a RUNTIME dependency) declares ^0.8.2.
+  # Both ranges still admit the vulnerable 0.8.2, so the floor stays; only pdfkit's own
+  # ^0.8.3 excludes it. Caret, not >=, because 0.x minors may break.
   fflate: '^0.8.3'
 
   # release-it → proxy-agent → pac-proxy-agent → get-uri 8.0.1 → basic-ftp 5.3.1.
@@ -106,6 +109,12 @@ allowBuilds:
 # .github/dependabot.yml keeps its PRs outside the window.
 minimumReleaseAge: 1440
 
+# three and @types/three are held out of `pnpm outdated` / `pnpm update` because
+# gcode-preview decides which three is allowed. 3.0.0-alpha.7 declares
+# three >=0.166.0 <0.186.0, so three is pinned exactly at 0.185.1 (the newest inside that
+# cap) and @types/three at 0.185.4 to match (ELEG-120). Move all three together, and only
+# after a real render of the preview — no gate draws it. gcode-preview itself is pinned
+# exactly in package.json: there is no semver promise between 3.0 alphas.
 updateConfig:
   ignoreDependencies:
     - three

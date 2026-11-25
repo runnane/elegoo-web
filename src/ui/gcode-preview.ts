@@ -1,6 +1,7 @@
 /** Gcode preview — 3D toolpath visualization using gcode-preview library */
 
-import { WebGLPreview } from 'gcode-preview';
+import { GCodePreview } from 'gcode-preview';
+import type { SceneManager } from 'gcode-preview';
 import {
   ConeGeometry,
   MeshBasicMaterial,
@@ -14,14 +15,27 @@ import type { Object3D } from 'three';
 import type { PrinterState } from '../printer-state';
 import { $, fetchTextTimeout } from './helpers';
 import { chartPalette } from './chart-palette';
+import { previewLayerOffset } from './gcode-layer-offset';
 
-/** Internal fields of WebGLPreview we need to access to stop the animate loop */
-interface WebGLPreviewInternals {
+/**
+ * Internal fields of the library's SceneManager we need to stop the animate loop.
+ * Since gcode-preview 3.0.0-alpha.5 the loop lives on `preview.sceneManager`, not on
+ * the preview object itself — aimed at the preview, this cast would silently do
+ * nothing and the 60fps loop would be back (ELEG-120).
+ */
+interface SceneManagerInternals {
   animationFrameId?: number;
   animate: () => void;
 }
 
-let preview: WebGLPreview | null = null;
+/**
+ * The library splits into GCodePreview (parsing, the job, `countLayers`) and its
+ * `sceneManager` (scene, renderer, camera, controls, layer range, render/resize).
+ * Never read `sceneManager` after `dispose()`: the getter lazily builds a fresh one,
+ * with a new renderer and a new animate loop. Every caller here nulls `preview`
+ * when it disposes it.
+ */
+let preview: GCodePreview | null = null;
 let loadedFile = '';
 let loading = false;
 let lastEndLayer = -1;
@@ -61,7 +75,7 @@ function ensureNozzle(): void {
   group.add(outline);
 
   nozzleMesh = group;
-  preview.scene.add(nozzleMesh);
+  preview.sceneManager.scene.add(nozzleMesh);
 }
 
 /** Update nozzle position from printer state */
@@ -116,7 +130,7 @@ function throttledRender(): void {
   const now = Date.now();
   if (now - lastRenderTime < RENDER_INTERVAL) return;
   lastRenderTime = now;
-  preview?.render();
+  preview?.sceneManager.render();
 }
 
 /** Lightweight WebGL-only redraw (no geometry rebuild) — for nozzle moves */
@@ -125,13 +139,18 @@ function lightRender(): void {
   if (now - lastRenderTime < RENDER_INTERVAL) return;
   lastRenderTime = now;
   if (!preview) return;
-  preview.renderer.render(preview.scene, preview.camera);
+  redraw(preview.sceneManager);
+}
+
+/** One WebGL draw of the current scene, no geometry rebuild */
+function redraw(sm: SceneManager): void {
+  sm.renderer.render(sm.scene, sm.camera);
 }
 
 /** Stop the library's internal 60fps rAF animate loop */
-function stopAnimateLoop(p: WebGLPreview): void {
+function stopAnimateLoop(sm: SceneManager): void {
   // animationFrameId is private but accessible at runtime
-  const internals = p as unknown as WebGLPreviewInternals;
+  const internals = sm as unknown as SceneManagerInternals;
   const id = internals.animationFrameId;
   if (id != null) cancelAnimationFrame(id);
   // Override animate() so it can't restart
@@ -141,7 +160,7 @@ function stopAnimateLoop(p: WebGLPreview): void {
 /** Render on orbit control changes (user dragging the 3D view) — throttled */
 function onOrbitChange(): void {
   if (!preview) return;
-  preview.renderer.render(preview.scene, preview.camera);
+  redraw(preview.sceneManager);
 }
 
 /** Exported for main.ts to call on each render frame */
@@ -175,14 +194,21 @@ export function renderGcodePreview(state: PrinterState): void {
   const currentLayer = ps?.current_layer ?? 0;
   if (isPrinting && currentLayer > 0 && currentLayer !== lastEndLayer) {
     lastEndLayer = currentLayer;
-    preview.singleLayerMode = singleLayerMode;
-    // gcode-preview counts preamble as layer 0, so printer layer N = preview layer N+1
-    preview.endLayer = currentLayer + 1;
+    preview.sceneManager.singleLayerMode = singleLayerMode;
+    // Without slicer layer comments the preamble is a preview layer of its own, so
+    // printer layer N is preview layer N+1; with them it is N (see gcode-layer-offset).
+    const offset = previewLayerOffset(
+      preview.countLayers,
+      ps?.total_layer ?? state.fileTotalLayers,
+      Boolean(preview.parser.metadata.slicerName),
+    );
+    const previewLayer = currentLayer + offset;
+    preview.sceneManager.endLayer = previewLayer;
     throttledRender();
 
-    // Sync slider
+    // Sync slider (it is in preview layers, like endLayer)
     const slider = $('gcode-layer-slider') as HTMLInputElement | null;
-    if (slider) slider.value = String(currentLayer);
+    if (slider) slider.value = String(previewLayer);
   } else if (isPrinting && nozzleMesh?.visible) {
     // Re-render to show updated nozzle position (lightweight, no geometry rebuild)
     lightRender();
@@ -190,7 +216,7 @@ export function renderGcodePreview(state: PrinterState): void {
 }
 
 /** Initialize the 3D preview on the canvas */
-function initPreview(colorMap?: Array<{ t: number; color: string }>): WebGLPreview | null {
+function initPreview(colorMap?: Array<{ t: number; color: string }>): GCodePreview | null {
   const pal = chartPalette();
   const canvas = $('gcode-preview-canvas') as HTMLCanvasElement | null;
   if (!canvas) return null;
@@ -209,7 +235,7 @@ function initPreview(colorMap?: Array<{ t: number; color: string }>): WebGLPrevi
   const extrusionColor =
     colorMap && colorMap.length > 0 ? buildExtrusionColors(colorMap) : pal.gcodeExtrusion;
 
-  const p = new WebGLPreview({
+  const p = new GCodePreview({
     canvas,
     backgroundColor: pal.gcodeBg,
     extrusionColor,
@@ -290,11 +316,11 @@ export async function loadGcode(filename: string, source = 'local'): Promise<voi
 
     // Stop the library's built-in 60fps animate loop — it calls WebGL render()
     // every frame, leaking ~23 MB/s. We render on-demand instead.
-    stopAnimateLoop(preview);
+    stopAnimateLoop(preview.sceneManager);
     // Re-render once after stopping the loop (processGCode's last frame may be lost)
-    preview.renderer.render(preview.scene, preview.camera);
+    redraw(preview.sceneManager);
     // Render on orbit control interaction (user dragging)
-    preview.controls.addEventListener('change', onOrbitChange);
+    preview.sceneManager.controls.addEventListener('change', onOrbitChange);
 
     loadedFile = filename;
 
@@ -335,7 +361,7 @@ function updateInfo(state: PrinterState): void {
   const totalLayer = ps?.total_layer ?? state.fileTotalLayers ?? preview.countLayers;
   const zPos = s?.gcode_move?.z ?? 0;
   const progress = s?.machine_status?.progress ?? 0;
-  const displayedLayer = preview.endLayer ?? preview.countLayers;
+  const displayedLayer = preview.sceneManager.endLayer ?? preview.countLayers;
 
   if (isPrinting) {
     const layerLabel = singleLayerMode ? `Showing ${displayedLayer}` : `Layer ${currentLayer}`;
@@ -361,16 +387,16 @@ export function bindGcodePreviewControls(): void {
       followMode = false;
       localStorage.setItem('gcode-follow', 'false');
       const val = parseInt(slider.value, 10);
-      preview.endLayer = val;
+      preview.sceneManager.endLayer = val;
       lastEndLayer = val;
-      preview.render();
+      preview.sceneManager.render();
 
       const followBtn = $('btn-gcode-follow');
       if (followBtn) followBtn.classList.remove('active');
 
       if (preview) {
-        preview.singleLayerMode = singleLayerMode;
-        preview.render();
+        preview.sceneManager.singleLayerMode = singleLayerMode;
+        preview.sceneManager.render();
       }
     });
   }
@@ -383,8 +409,8 @@ export function bindGcodePreviewControls(): void {
       localStorage.setItem('gcode-single-layer', String(singleLayerMode));
       singleBtn.classList.toggle('active', singleLayerMode);
       if (preview) {
-        preview.singleLayerMode = singleLayerMode;
-        preview.render();
+        preview.sceneManager.singleLayerMode = singleLayerMode;
+        preview.sceneManager.render();
       }
     });
   }
@@ -442,7 +468,7 @@ export function bindGcodePreviewControls(): void {
   const canvas = $('gcode-preview-canvas') as HTMLCanvasElement | null;
   if (canvas) {
     const ro = new ResizeObserver(() => {
-      if (preview) preview.resize();
+      if (preview) preview.sceneManager.resize();
     });
     ro.observe(canvas);
   }

@@ -51,8 +51,14 @@ Used Playwright MCP to measure `performance.memory.usedJSHeapSize` over timed in
 - **rAF blocked entirely**: 0.23 MB growth in 20s (confirmed leak is 100% animation loops)
 - **After fix**: 241 MB → 104 MB in 42s (GC reclaiming), 30 rAF calls/5s
 
+**Since gcode-preview 3.0.0-alpha.7 (ELEG-120)** the loop is `SceneManager.animate()`, reached as
+`preview.sceneManager`; `WebGLPreview` no longer exists (it became `GCodePreview` somewhere between
+alpha.4 and alpha.7). The workaround's `as unknown as` cast means aiming it at the wrong object
+typechecks and silently does nothing — measured: 60 rAF requests per idle second when aimed at the
+preview, 0 when aimed at the scene manager. Re-measure after every gcode-preview bump.
+
 ### Fix Applied (src/ui/gcode-preview.ts)
-1. After `processGCode()`, cancel library's `animationFrameId` and override `animate()` to no-op
+1. After `processGCode()`, cancel the library's `animationFrameId` and override `animate()` to no-op (on `preview.sceneManager` since ELEG-120)
 2. Render on orbit control `change` events (user dragging) — direct `renderer.render(scene, camera)`
 3. Throttle layer/nozzle renders to 2 FPS (500ms interval) via `throttledRender()` / `lightRender()`
 4. `preview.render()` (geometry rebuild) only for layer changes; `renderer.render()` for nozzle moves
