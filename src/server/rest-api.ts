@@ -1816,9 +1816,7 @@ function proxyTimelapseVideo(
     res.end(JSON.stringify({ error: message }));
   };
 
-  const fileName = decodeURIComponent(
-    target.path.replace(/^\/+/, '')
-  );
+  const fileName = decodeURIComponent(target.path.replace(/^\/+/, ''));
 
   const downloadPath =
     `/download?X-Token=${encodeURIComponent(config.printerPassword)}` +
