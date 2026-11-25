@@ -229,8 +229,11 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
 - **`IN_PRODUCTION` is real here, and merging is not it.** ELEG has
   `tracksProduction` on because production is a *separate step*: since ELEG-108
   (2026-09-16) the service runs as a Docker Compose stack rooted at
-  **`/opt/elegooweb`** (container `elegoo-web`, image `ghcr.io/runnane/elegoo-web:latest`)
-  — not the systemd unit, which is stopped and disabled and kept only for rollback. A
+  **`/opt/elegooweb`** on the production host (container `elegoo-web`, image
+  `ghcr.io/runnane/elegoo-web:latest`) — not the systemd unit, which is stopped and
+  disabled and kept only for rollback. **The production host is not necessarily the
+  machine you are on**: `ls /opt/elegooweb` first, and read a refused `localhost:8088`
+  on a machine without it as "not deployed here", not "production is down". A
   merged PR changes nothing that is running. See
   [`.agents/deployment.md`](.agents/deployment.md) — and note that performing the
   deploy is operator work.
@@ -249,7 +252,7 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
 
   | Action | Who runs it |
   | --- | --- |
-  | shell on this host, `docker compose`, reading `/opt/elegooweb`, `docker logs` | **them** — give exact commands, ask for output |
+  | shell on the production host, `docker compose`, reading `/opt/elegooweb`, `docker logs` | **them** — give exact commands, ask for output |
   | anything through an MCP tool or a tracker write | **you** — never "here are the MCP calls to make"; they have no client for it |
   | a printer command (temps, motion, print start/stop, emergency stop) | **them**, at or near the machine |
 
