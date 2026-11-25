@@ -95,7 +95,7 @@ export function mountPrinterPresets(root: HTMLElement): void {
   const lockedHint = el(
     'p',
     'settings-hint',
-    `Adding, removing and switching printers here is turned off. Set ${CONNECTION_PRESETS_API_ENV}=true in the service environment and restart to turn it on — the API has no authentication, so anyone who can reach this page could then re-point the service.`,
+    `Adding, removing and switching printers here is turned off. Set ${CONNECTION_PRESETS_API_ENV}=true in the service environment and restart to turn it on — and set SERVICE_API_KEY too, so those changes need the API key. Without a key, anyone who can reach the service could re-point it.`,
   );
   controls.append(formRow, lockedHint);
 
