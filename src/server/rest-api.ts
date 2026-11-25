@@ -36,7 +36,12 @@ import { applyCors, corsHeaders } from './cors.js';
 import { guardHttp } from './write-auth.js';
 import { captureLogDir, gcodeCacheDir } from './data-paths.js';
 import { getLogger } from './logger.js';
-import { resolveTimelapseUpstream, type TimelapseUpstream } from './timelapse-proxy.js';
+import {
+  buildPrinterDownloadPath,
+  resolveTimelapseUpstream,
+  type TimelapseDownload,
+  type TimelapseUpstream,
+} from './timelapse-proxy.js';
 import {
   STATUS_NAMES,
   SUB_STATUS_NAMES,
@@ -1828,12 +1833,20 @@ function uploadChunk(
 }
 
 /** Stream a timelapse video from the printer, passing Range through so <video> can seek. */
-function proxyTimelapseVideo(
+export function proxyTimelapseVideo(
   req: IncomingMessage,
   res: ServerResponse,
   config: ServiceConfig,
-  target: TimelapseUpstream,
+  target: TimelapseUpstream | TimelapseDownload,
 ): void {
+  // A `download` target goes through the printer's authenticated /download endpoint (see
+  // buildPrinterDownloadPath for the finding and its provenance). That path carries the
+  // printer password, so it must not reach a log line, an error body or a response header:
+  // nothing below echoes `path`, and upstream errors are logged by message only.
+  const path =
+    'kind' in target
+      ? buildPrinterDownloadPath(config.printerPassword, target.fileName)
+      : target.path;
   const headers: Record<string, string> = {};
   const range = req.headers.range;
   if (typeof range === 'string') headers.Range = range;
@@ -1854,10 +1867,13 @@ function proxyTimelapseVideo(
     {
       hostname: config.printerIp,
       port: target.port,
-      path: target.path,
+      path,
       method: 'GET',
       headers,
       timeout: 15_000,
+      // The printer's libhv sends both Content-Length and Transfer-Encoding: chunked, which
+      // Node's strict parser rejects. The same server answers the direct path too.
+      insecureHTTPParser: true,
     },
     (up) => {
       const status = up.statusCode ?? 502;
