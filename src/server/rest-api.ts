@@ -18,7 +18,7 @@
 import type { ClientRequest, IncomingMessage, ServerResponse } from 'http';
 import { request as httpRequest } from 'http';
 import { createHash } from 'crypto';
-import { writeFile, readdir, readFile, mkdir, stat, unlink } from 'fs/promises';
+import { writeFile, readdir, readFile, mkdir, stat, unlink, rename } from 'fs/promises';
 import { createReadStream, createWriteStream, existsSync } from 'fs';
 import { join, resolve, extname } from 'path';
 import { PassThrough } from 'stream';
@@ -131,14 +131,25 @@ async function evictOldCache(): Promise<void> {
   }
 }
 
-async function handleFileDownload(
+/** Upstream port and idle timeout of the printer download; injectable for tests. */
+export interface DownloadUpstreamOptions {
+  port?: number;
+  timeoutMs?: number;
+}
+
+const PRINTER_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+export async function handleFileDownload(
   res: ServerResponse,
   fileName: string,
   baseName: string,
   source: string,
   isGcode: boolean,
   config: ServiceConfig,
+  upstream: DownloadUpstreamOptions = {},
 ): Promise<void> {
+  const port = upstream.port ?? 80;
+  const timeoutMs = upstream.timeoutMs ?? PRINTER_DOWNLOAD_TIMEOUT_MS;
   // Try serving from cache first (gcode files only)
   if (isGcode) {
     try {
@@ -168,13 +179,36 @@ async function handleFileDownload(
   const dlPath = pathMap[source] ?? '/download';
   log.info(`Download proxy: ${fileName} from ${dlPath}`);
 
+  let failed = false;
+  let discardPartial: (() => void) | null = null;
+  // End the download. Before headers: the JSON error. After headers a status can no
+  // longer be sent, so the only way to tell the browser is to destroy the response
+  // (it used to be left open forever) and drop the partial cache file.
+  const failDownload = (
+    reason: string,
+    status = 502,
+    message = 'Printer download failed',
+  ): void => {
+    if (failed) return;
+    failed = true;
+    discardPartial?.();
+    if (!res.headersSent) {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    } else {
+      log.warn(`Download proxy: ${fileName} ended early (${reason}), destroying response`);
+      res.destroy();
+    }
+    proxyReq.destroy();
+  };
+
   const proxyReq = httpRequest(
     {
       hostname: config.printerIp,
-      port: 80,
+      port,
       path: `${dlPath}?X-Token=${encodeURIComponent(config.printerPassword)}&file_name=${encodeURIComponent(fileName)}`,
       method: 'GET',
-      timeout: 120_000,
+      timeout: timeoutMs,
       // Printer's libhv sends both Content-Length and Transfer-Encoding: chunked,
       // which is invalid HTTP. Node's strict parser rejects this.
       insecureHTTPParser: true,
@@ -187,7 +221,7 @@ async function handleFileDownload(
         return;
       }
       // Keep the socket alive during slow transfers
-      proxyRes.socket?.setTimeout(120_000);
+      proxyRes.socket?.setTimeout(timeoutMs);
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${baseName}"`,
@@ -196,20 +230,47 @@ async function handleFileDownload(
           : {}),
       });
 
-      // For gcode files, tee the stream to a cache file
+      // The printer went away or stalled mid-body: the response must not be left open.
+      proxyRes.on('aborted', () => failDownload('upstream aborted mid-body'));
+      proxyRes.on('close', () => {
+        if (!proxyRes.complete) failDownload('upstream closed before the body completed');
+      });
+      // The browser left: stop pulling from the printer and drop the partial file.
+      res.on('close', () => {
+        if (!res.writableFinished) failDownload('client closed the download');
+      });
+
+      // For gcode files, tee the stream to a cache file. It is written under a
+      // `.part` name and only renamed into place once the whole body arrived, so a
+      // partial file can never be served from the cache.
       if (isGcode) {
         const cachePath = join(gcodeCacheDir(), gcodeCacheKey(config.printerIp, fileName));
-        const cacheStream = createWriteStream(cachePath);
+        const partPath = `${cachePath}.part`;
+        const cacheStream = createWriteStream(partPath);
         const tee = new PassThrough();
         tee.pipe(res);
         tee.pipe(cacheStream);
         proxyRes.pipe(tee);
+        discardPartial = () => {
+          tee.destroy();
+          cacheStream.once('close', () => {
+            unlink(partPath).catch(() => {});
+          });
+          cacheStream.destroy();
+        };
         cacheStream.on('finish', () => {
-          evictOldCache().catch(() => {});
-          log.info(`Cached gcode: ${fileName}`);
+          if (failed || !proxyRes.complete) return;
+          rename(partPath, cachePath)
+            .then(() => {
+              evictOldCache().catch(() => {});
+              log.info(`Cached gcode: ${fileName}`);
+            })
+            .catch(() => {
+              unlink(partPath).catch(() => {});
+            });
         });
         cacheStream.on('error', () => {
-          unlink(cachePath).catch(() => {});
+          unlink(partPath).catch(() => {});
         });
       } else {
         proxyRes.pipe(res);
@@ -218,18 +279,11 @@ async function handleFileDownload(
   );
   proxyReq.on('error', (err) => {
     log.error(`Download proxy error: ${(err as NodeJS.ErrnoException).code} ${err.message}`);
-    if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Failed to connect to printer' }));
-    }
+    failDownload('upstream error', 502, 'Failed to connect to printer');
   });
   proxyReq.on('timeout', () => {
     log.error('Download proxy timeout');
-    proxyReq.destroy();
-    if (!res.headersSent) {
-      res.writeHead(504, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Download timed out' }));
-    }
+    failDownload('upstream timeout', 504, 'Download timed out');
   });
   proxyReq.end();
 }
@@ -289,28 +343,49 @@ export async function precacheGcodeAsync(
             return;
           }
           proxyRes.socket?.setTimeout(120_000);
-          const cacheStream = createWriteStream(cachePath);
+          // Written as `.part` and renamed only when the body completed, so a stalled
+          // or aborted download never leaves a partial file the cache would serve.
+          const partPath = `${cachePath}.part`;
+          const cacheStream = createWriteStream(partPath);
+          discardPartial = () => {
+            cacheStream.once('close', () => {
+              unlink(partPath).catch(() => {});
+            });
+            cacheStream.destroy();
+          };
           let bytes = 0;
           proxyRes.on('data', (chunk: Buffer) => {
             bytes += chunk.length;
           });
+          proxyRes.on('close', () => {
+            if (!proxyRes.complete)
+              fail(new Error('Precache download ended before the body completed'));
+          });
           proxyRes.pipe(cacheStream);
           cacheStream.on('finish', () => {
-            evictOldCache().catch(() => {});
-            log.info(`Precache: cached ${fileName} (${bytes} bytes)`);
-            resolve(bytes);
+            if (failed || !proxyRes.complete) return;
+            rename(partPath, cachePath)
+              .then(() => {
+                evictOldCache().catch(() => {});
+                log.info(`Precache: cached ${fileName} (${bytes} bytes)`);
+                resolve(bytes);
+              })
+              .catch((err: unknown) => fail(err as Error));
           });
-          cacheStream.on('error', (err) => {
-            unlink(cachePath).catch(() => {});
-            reject(err);
-          });
+          cacheStream.on('error', (err) => fail(err));
         },
       );
-      proxyReq.on('error', reject);
-      proxyReq.on('timeout', () => {
+      let failed = false;
+      let discardPartial: (() => void) | null = null;
+      const fail = (err: Error): void => {
+        if (failed) return;
+        failed = true;
+        discardPartial?.();
         proxyReq.destroy();
-        reject(new Error('Precache download timed out'));
-      });
+        reject(err);
+      };
+      proxyReq.on('error', (err) => fail(err));
+      proxyReq.on('timeout', () => fail(new Error('Precache download timed out')));
       proxyReq.end();
     });
 

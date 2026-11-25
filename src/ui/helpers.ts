@@ -21,6 +21,32 @@ export function fetchTimeout(
   return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
+/**
+ * Like fetchTimeout, but the abort timer stays live through the body: fetchTimeout
+ * clears it when the headers arrive, so a server that sends headers and then stalls
+ * left `resp.text()` pending forever (ELEG-131). `bodyError` is set (and `text` is
+ * null) when the headers arrived but the body did not complete in time or broke.
+ */
+export async function fetchTextTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = 15_000,
+): Promise<{ resp: Response; text: string | null; bodyError: Error | null }> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(input, { ...init, signal: controller.signal });
+    if (!resp.ok) return { resp, text: null, bodyError: null };
+    try {
+      return { resp, text: await resp.text(), bodyError: null };
+    } catch (e) {
+      return { resp, text: null, bodyError: e as Error };
+    }
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export function formatTime(seconds: number): string {
   if (!seconds || seconds < 0) return '--';
   const h = Math.floor(seconds / 3600);
