@@ -1816,14 +1816,23 @@ function proxyTimelapseVideo(
     res.end(JSON.stringify({ error: message }));
   };
 
+  const fileName = decodeURIComponent(
+    target.path.replace(/^\/+/, '')
+  );
+
+  const downloadPath =
+    `/download?X-Token=${encodeURIComponent(config.printerPassword)}` +
+    `&file_name=${encodeURIComponent(fileName)}`;
+
   const upstream = httpRequest(
     {
       hostname: config.printerIp,
       port: target.port,
-      path: target.path,
+      path: downloadPath,
       method: 'GET',
       headers,
       timeout: 15_000,
+      insecureHTTPParser: true,
     },
     (up) => {
       const status = up.statusCode ?? 502;
