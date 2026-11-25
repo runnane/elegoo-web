@@ -141,11 +141,15 @@ describe('printer download proxy (ELEG-131)', () => {
     expect(out.complete).toBe(true);
     expect(out.bytes).toBe('G1 X0 Y0\nG1 X1 Y1\n'.length);
 
-    // rename into place happens just after the response ends
-    for (let i = 0; i < 40 && (await readdir(gcodeCacheDir())).length === 0; i++) {
+    // The `.part` file exists from the first byte; the rename into place happens just
+    // after the response ends. Wait for the renamed file itself, not for "anything in
+    // the dir", or a loaded run reads the dir between the two (ELEG-147).
+    let files: string[] = [];
+    for (let i = 0; i < 80; i++) {
+      files = await readdir(gcodeCacheDir());
+      if (files.length === 1 && files[0].endsWith('.gcode')) break;
       await new Promise((r) => setTimeout(r, 25));
     }
-    const files = await readdir(gcodeCacheDir());
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/\.gcode$/);
   });
