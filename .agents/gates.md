@@ -719,7 +719,8 @@ machine**, and the temptation after a green run is to "just try it". Don't:
 printer is **operator work**: name the exact command, ask for the output, interpret it,
 record it on the issue.
 
-Two further collisions specific to running anything locally on this host, both in
+Two further collisions specific to running anything locally on the production host (the
+one with `/opt/elegooweb` — not necessarily yours), both in
 [`.agents/testing.md`](testing.md): production already holds ports **8088
 and 7125**, and a second service process means **two MQTT registrations for one printer** —
 which degrades *production*, not your dev window.

@@ -261,10 +261,14 @@ motors into whatever is on the bed, or abort a job that has been running for hou
 Verifying one of those is operator work: give the exact command, ask for the output,
 interpret it. See [`AGENTS.md`](../AGENTS.md).
 
-## `pnpm dev` on this host collides with production — three ways
+## `pnpm dev` on the production host collides with production — three ways
 
-Production runs on this same machine (see [deployment.md](deployment.md)), and it holds
-**both** service ports:
+**This section applies only on the production host** — the machine where
+`/opt/elegooweb` exists (see [deployment.md](deployment.md) for the two-command check).
+Elsewhere the ports are free and there is no second MQTT client, but the Telegram
+collision below still applies wherever your `.env` holds the production bot token.
+
+On the production host, production holds **both** service ports:
 
 ```
 LISTEN 0.0.0.0:8088      docker-proxy        (SERVICE_PORT, published by the elegoo-web container)
