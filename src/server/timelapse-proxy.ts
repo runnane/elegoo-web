@@ -18,6 +18,20 @@ export interface TimelapseUpstream {
   path: string;
 }
 
+/**
+ * A relative path or bare name: not fetchable at `/<path>`, so it goes through the printer's
+ * authenticated download endpoint. The token is NOT in this value — it is added at request
+ * time by `buildPrinterDownloadPath`, so nothing token-bearing is ever returned from here.
+ */
+export interface TimelapseDownload {
+  ok: true;
+  kind: 'download';
+  /** Always the printer's HTTP port. */
+  port: number;
+  /** Decoded, leading-slash-free path to hand the printer as `file_name`. */
+  fileName: string;
+}
+
 export interface TimelapseRejection {
   ok: false;
   error: string;
@@ -43,6 +57,22 @@ function reject(error: string): TimelapseRejection {
 }
 
 /**
+ * The request path for the printer's authenticated download endpoint.
+ *
+ * Protocol finding: the CC2 reports `time_lapse_video_url` as a RELATIVE path, and its HTTP
+ * server does not serve that at `/<path>` (404). The video is served by
+ * `GET /download?X-Token=<password>&file_name=<that path>`, and the response carries both
+ * Content-Length and Transfer-Encoding: chunked, so the request needs `insecureHTTPParser`.
+ * Provenance: reported in runnane/elegoo-web#209 by a CC2 Combo user on stock firmware; not
+ * yet measured on our printer — ELEG-115.
+ *
+ * The result contains the password: never log it or put it in an error or response header.
+ */
+export function buildPrinterDownloadPath(password: string, fileName: string): string {
+  return `/download?X-Token=${encodeURIComponent(password)}&file_name=${encodeURIComponent(fileName)}`;
+}
+
+/**
  * Turn the request's `url` value into a printer path, or refuse it.
  * Accepts the printer's absolute http URL (only if its host is `printerIp`) or a bare
  * path / name. Rejects empty values, other hosts, other schemes, `..`, backslashes and
@@ -51,7 +81,7 @@ function reject(error: string): TimelapseRejection {
 export function resolveTimelapseUpstream(
   raw: string | null | undefined,
   printerIp: string,
-): TimelapseUpstream | TimelapseRejection {
+): TimelapseUpstream | TimelapseDownload | TimelapseRejection {
   const value = (raw ?? '').trim();
   if (!value) return reject('Missing url parameter');
   if (value.length > 2048) return reject('url too long');
@@ -78,6 +108,11 @@ export function resolveTimelapseUpstream(
       return reject('Malformed url');
     }
     if (parsed.hostname !== PLACEHOLDER_HOST) return reject('url does not point at the printer');
+    // A relative value becomes `file_name`, which has no query. Refuse rather than fold
+    // `?x=1` into the file name or silently drop it. A literal `?` in a name is `%3F`.
+    if (value.includes('?') || value.includes('#')) {
+      return reject('Query strings and fragments are not allowed in a relative url');
+    }
   }
 
   // Judge the decoded path: `%2e%2e`, `%5c` and `%00` must not slip past the raw checks.
@@ -106,6 +141,14 @@ export function resolveTimelapseUpstream(
     return reject('Path traversal is not allowed');
   }
   if (decoded === '/' || decoded === '') return reject('url has no path');
+
+  if (!SCHEME.test(value)) {
+    // `decoded` already passed the control/backslash/traversal checks above; those are the
+    // same checks the value needs as `file_name`, which is exactly `decoded` minus slashes.
+    const fileName = decoded.replace(/^\/+/, '');
+    if (!fileName) return reject('url has no path');
+    return { ok: true, kind: 'download', port: PRINTER_HTTP_PORT, fileName };
+  }
 
   return { ok: true, port, path: `${parsed.pathname}${parsed.search}` };
 }
