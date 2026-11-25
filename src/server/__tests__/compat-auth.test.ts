@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   octoprintApiSettings,
+  octoprintCurrentUser,
   octoprintLoginPayload,
   NO_API_KEY_MESSAGE,
   NO_SESSIONS_MESSAGE,
@@ -15,19 +16,68 @@ import {
  */
 
 describe('octoprintApiSettings', () => {
-  it('reports API-key auth as disabled', () => {
-    expect(octoprintApiSettings()).toEqual({ enabled: false, key: null });
+  it('reports API-key auth as disabled when SERVICE_API_KEY is unset', () => {
+    expect(octoprintApiSettings(false)).toEqual({ enabled: false, key: null });
   });
 
-  it('never emits a key', () => {
+  it('reports API-key auth as enabled when SERVICE_API_KEY is set (ELEG-143)', () => {
+    expect(octoprintApiSettings(true)).toEqual({ enabled: true, key: null });
+  });
+
+  it('never emits a key, either way', () => {
     // The regression this exists to catch: a fixed string that made clients show
-    // themselves as authenticated against a service that checks nothing.
-    expect(octoprintApiSettings().key).toBeNull();
+    // themselves as authenticated against a service that checks nothing — or, now, the
+    // real key served to an anonymous read.
+    expect(octoprintApiSettings(false).key).toBeNull();
+    expect(octoprintApiSettings(true).key).toBeNull();
   });
 });
 
-describe('octoprintLoginPayload', () => {
-  const payload = octoprintLoginPayload();
+describe('octoprintCurrentUser (ELEG-143)', () => {
+  it('a guest is reported as a guest, not as admin', () => {
+    expect(octoprintCurrentUser('guest')).toEqual({
+      name: null,
+      admin: false,
+      groups: ['guests'],
+      permissions: [],
+      roles: [],
+    });
+  });
+
+  it.each(['open', 'apikey'] as const)('%s access is reported as admin, because it is', (a) => {
+    const u = octoprintCurrentUser(a);
+    expect(u.admin).toBe(true);
+    expect(u.groups).toEqual(['admins', 'users']);
+  });
+});
+
+describe('octoprintLoginPayload with the key presented (ELEG-143)', () => {
+  const payload = octoprintLoginPayload('apikey');
+
+  it('names the api key as the login mechanism, and carries no apikey field', () => {
+    expect(payload._login_mechanism).toBe('apikey');
+    expect('apikey' in payload).toBe(false);
+  });
+});
+
+describe('octoprintLoginPayload for a guest (ELEG-143)', () => {
+  const payload = octoprintLoginPayload('guest');
+
+  it('is an inactive guest with no admin, no user and no login mechanism', () => {
+    expect(payload).toMatchObject({
+      name: null,
+      admin: false,
+      user: false,
+      active: false,
+      groups: ['guests'],
+      _login_mechanism: null,
+    });
+    expect('apikey' in payload).toBe(false);
+  });
+});
+
+describe('octoprintLoginPayload with no key configured', () => {
+  const payload = octoprintLoginPayload('open');
 
   it('carries no apikey field at all', () => {
     expect('apikey' in payload).toBe(false);
@@ -59,8 +109,11 @@ describe('octoprintLoginPayload', () => {
 
 describe('the no-API-key answer', () => {
   it('explains itself rather than returning an empty string', () => {
-    expect(NO_API_KEY_MESSAGE).toMatch(/no authentication/i);
-    expect(NO_API_KEY_MESSAGE.length).toBeGreaterThan(20);
+    // ELEG-142: a key now exists, so the message says it is withheld and how to send it,
+    // in words that stay true whether or not one is configured.
+    expect(NO_API_KEY_MESSAGE).toMatch(/does not hand out its API key/);
+    expect(NO_API_KEY_MESSAGE).toMatch(/api_key in server\.connection\.identify/);
+    expect(NO_API_KEY_MESSAGE).toMatch(/when one is set/);
   });
 
   it('uses a JSON-RPC error code, not a success code', () => {
@@ -72,8 +125,8 @@ describe('the no-sessions answer (ELEG-53)', () => {
   it('explains itself, and points at the field that says login is unnecessary', () => {
     // A client's UI shows this string. "Unauthorized" would send someone hunting for a
     // password that does not exist; naming access.info tells them where to look instead.
-    expect(NO_SESSIONS_MESSAGE).toMatch(/no authentication/i);
-    expect(NO_SESSIONS_MESSAGE).toMatch(/login_required/);
+    expect(NO_SESSIONS_MESSAGE).toMatch(/login_required is false/);
+    expect(NO_SESSIONS_MESSAGE).toMatch(/when one is configured/);
     expect(NO_SESSIONS_MESSAGE.length).toBeGreaterThan(20);
   });
 

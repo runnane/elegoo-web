@@ -98,10 +98,12 @@ if (config.aiEnabled) {
 log.info(`Moonraker: http://${config.bindAddress}:${config.moonrakerPort}`);
 // Whether writes are gated (ELEG-139). Never the key itself — not even a prefix.
 if (config.serviceApiKey) {
-  log.info('Write auth: enabled — /api/* writes need SERVICE_API_KEY');
+  log.info(
+    'Write auth: enabled — /api/* writes, /ws commands and /mcp control tools need SERVICE_API_KEY',
+  );
 } else {
   log.warn(
-    '⚠  SERVICE_API_KEY is not set — every /api/* write is OPEN to anyone who can reach ' +
+    '⚠  SERVICE_API_KEY is not set — every /api/* write, /ws command and /mcp control tool is OPEN to anyone who can reach ' +
       'this port (uploads, the print queue, printer commands). Set a key of 32+ characters ' +
       'to require it (see README).',
   );
@@ -181,7 +183,7 @@ const httpServer = createServer((req, res) => {
         config.corsPolicy,
         req.headers.origin,
         'GET, POST, DELETE, OPTIONS',
-        'Content-Type, mcp-session-id',
+        'Content-Type, Authorization, mcp-session-id',
         'mcp-session-id',
       ),
     );
@@ -190,7 +192,7 @@ const httpServer = createServer((req, res) => {
       res.end();
       return;
     }
-    handleMcpRequest(req, res, store, bridge).catch((err) => {
+    handleMcpRequest(req, res, store, bridge, config.serviceApiKey).catch((err) => {
       log.error('MCP request error:', err);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -227,7 +229,7 @@ const httpServer = createServer((req, res) => {
         config.corsPolicy,
         req.headers.origin,
         'GET, POST, DELETE, OPTIONS',
-        'Content-Type, Authorization',
+        'Content-Type, Authorization, X-Api-Key',
       ),
     );
     if (req.method === 'OPTIONS') {
@@ -242,7 +244,7 @@ const httpServer = createServer((req, res) => {
 });
 
 // --- WebSocket Transport (for browser clients) ---
-const wsTransport = new WebSocketTransport(httpServer, store, bridge);
+const wsTransport = new WebSocketTransport(httpServer, store, bridge, config);
 
 // Provide service references for status panel
 wsTransport.setServices({ telegram, aiMonitor });

@@ -15,6 +15,54 @@ The MCP server uses [StreamableHTTP](https://modelcontextprotocol.io/specificati
 
 Each session gets its own MCP server instance with access to the shared printer state and MQTT bridge.
 
+## Authentication
+
+When the service runs with `SERVICE_API_KEY` set, **every tool that changes the machine
+needs the key**: all 21 tools under Control, Print Management, Maintenance, File & Filament
+and Camera & Advanced below, `send_command` included. The 10 Read-Only tools, all
+`printer://*` resources, `initialize` and `tools/list` stay open.
+
+Send the key as a Bearer token on **every** request (`X-Api-Key: <key>` is accepted too):
+
+```
+Authorization: Bearer <SERVICE_API_KEY>
+```
+
+- **Checked per HTTP request, not per session.** A session opened with the key grants
+  nothing to a later request on the same `Mcp-Session-Id` that does not carry it, so set the
+  header in the client config rather than only on `initialize`.
+- **No key presented** → reads work; a gated tool returns an MCP tool error (HTTP 200, the
+  JSON-RPC call succeeds) and nothing is sent to the printer:
+
+  ```json
+  { "content": [{ "type": "text", "text": "\"emergency_stop\" needs SERVICE_API_KEY. This action needs the service API key. Send it as \"Authorization: Bearer <key>\" or \"X-Api-Key: <key>\"." }], "isError": true }
+  ```
+
+- **A wrong key presented** → **HTTP 401** on any request, reads and `initialize` included.
+- **`SERVICE_API_KEY` unset** → every tool is open, as before the key existed.
+
+Client config, e.g. for Claude Code (the key comes from your environment, never a file in a
+repo):
+
+```bash
+claude mcp add --transport http elegoo http://localhost:8088/mcp \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+or in a JSON MCP config:
+
+```json
+{
+  "mcpServers": {
+    "elegoo": {
+      "type": "http",
+      "url": "http://localhost:8088/mcp",
+      "headers": { "Authorization": "Bearer ${SERVICE_API_KEY}" }
+    }
+  }
+}
+```
+
 ## Resources
 
 Read-only data exposed as MCP resources for context retrieval.
@@ -32,6 +80,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Read-Only
 
+Open — no key needed.
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `status` | — | Printer status summary (text) |
@@ -47,6 +97,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Control
 
+**Needs the key** when `SERVICE_API_KEY` is set (see [Authentication](#authentication)) — as does every tool below this point.
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `set_temperature` | `nozzle?` (0-300°C), `bed?` (0-120°C) | Set nozzle and/or bed temperature |
@@ -58,6 +110,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Print Management
 
+**Needs the key.**
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `start_print` | `filename`, `source?` (local\|u-disk, default local) | Start printing a file |
@@ -68,6 +122,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Maintenance
 
+**Needs the key.**
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `auto_level` | — | Start auto bed leveling |
@@ -76,6 +132,8 @@ Read-only data exposed as MCP resources for context retrieval.
 | `self_check` | `ringing?` (bool, default true), `pid?` (bool, default true), `leveling?` (bool, default true) | Run combined self-test |
 
 ### File & Filament
+
+**Needs the key.**
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
@@ -86,12 +144,16 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Camera & Advanced
 
+**Needs the key** — `send_command` always, because it sends any raw method number.
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `enable_video_stream` | `method?` (sdcp\|mqtt, default sdcp) | Enable camera MJPEG stream |
 | `send_command` | `method` (number), `params?` (JSON string, default "{}") | Send raw MQTT command (advanced) |
 
 ## Error Handling
+
+- A gated tool called without the key returns `isError: true` naming `SERVICE_API_KEY` (see [Authentication](#authentication)); a wrong key is an HTTP 401.
 
 - Tools that require a printer connection return `isError: true` with "Printer not connected" if the MQTT bridge is disconnected.
 - Parameter validation is enforced via Zod schemas — invalid values return descriptive errors.

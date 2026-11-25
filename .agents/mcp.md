@@ -26,6 +26,21 @@ Connecting a client locally:
 claude mcp add --transport http elegoo http://localhost:8088/mcp
 ```
 
+When the service has `SERVICE_API_KEY` set (ELEG-141), the control tools need it, so add
+the header — the key comes from your environment, never a file in a repo:
+
+```bash
+claude mcp add --transport http elegoo http://localhost:8088/mcp \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Without it the read tools and resources still work and every control tool returns a tool
+error naming the key; a **wrong** key is an HTTP 401 on every request. The key is checked
+per HTTP request, not per session, by `handleMcpRequest`, and the gate is applied by
+registering a tool through `writeTool()` instead of `mcp.registerTool()`.
+`src/server/__tests__/mcp-write-auth.test.ts` holds a table of every tool as gated or open
+and fails on any tool missing from it, so **a new tool must be classified there**.
+
 ## Two rules
 
 **1. `MCP.md` and `mcp-server.ts` change in the same commit.** The doc is the contract —
@@ -62,10 +77,11 @@ updating those by hand.
   (`nozzle` 0–300 °C, `bed` 0–120 °C, fan 0–100 %) and a new one must too, in the tool
   schema rather than downstream, because the schema is also the documentation an agent
   reads before calling.
-- **The endpoint is unauthenticated**, like the rest of the service — so every tool you
-  add is available to anyone who can reach the port. Read
-  [security.md](security.md) before adding one, and say on the issue that you are
-  widening that surface.
+- **Register it with `writeTool()`** (ELEG-141). With `SERVICE_API_KEY` set, that is the
+  only thing between the tool and anyone who can reach the port; plain `registerTool` is
+  for reads only. With the key unset the whole endpoint is still open. Read
+  [security.md](security.md) before adding one, and classify it in
+  `mcp-write-auth.test.ts`'s table.
 
 ## When a client's tool list looks wrong
 

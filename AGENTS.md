@@ -51,9 +51,11 @@ pnpm dev:web               # frontend only
 pnpm dev:service           # service only (tsx watch)
 ```
 
-Node ≥ 22.13 (`engines` in `package.json`; `@types/node` is pinned `^22` to that floor), pnpm 11 — pinned by `packageManager` in `package.json`, and an older global
-`pnpm` switches to it by itself. There is no database and no container needed for
-development.
+Node ≥ 22.13 (`engines` in `package.json`; `@types/node` is pinned `^22` to that floor), pnpm 12 — pinned by `packageManager` in `package.json`. A pnpm 10 or 11 global switches
+to it by itself; a different pnpm 12+ global does **not**, because `pmOnFail: ignore`
+(which keeps `pnpm-lock.yaml` one YAML document, ELEG-138) also turns that switch off.
+`pnpm gates` fails on a pnpm major that differs from the pin and on any document marker
+in the lockfile. There is no database and no container needed for development.
 
 **Coming from a pnpm-10 `node_modules`** (any checkout from before ELEG-9): the first
 pnpm 11 install has to purge it, and **refuses to without a TTY** —

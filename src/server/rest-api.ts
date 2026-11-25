@@ -886,7 +886,9 @@ export function createRestRouter(
         corsHeaders(
           config.corsPolicy,
           req.headers.origin,
-          'GET, POST, OPTIONS',
+          // DELETE too: /api/reports/:id, /api/queue/items/:id, /api/layer-data,
+          // /api/config/ai-labels and /api/printers/:id are DELETE writes (ELEG-149).
+          'GET, POST, DELETE, OPTIONS',
           'Content-Type, Authorization, X-Api-Key',
         ),
       );

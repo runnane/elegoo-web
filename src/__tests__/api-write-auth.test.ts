@@ -367,6 +367,15 @@ describe('reads', () => {
     expect(r.head).toMatch(/Access-Control-Allow-Headers: Content-Type, Authorization, X-Api-Key/i);
   });
 
+  it('a CORS preflight for a DELETE write admits DELETE (ELEG-149)', async () => {
+    const r = await send('OPTIONS', '/api/reports/some-report', {
+      Origin: 'http://127.0.0.1',
+      'Access-Control-Request-Method': 'DELETE',
+    });
+    expect(r.status).toBe(204);
+    expect(r.head).toMatch(/Access-Control-Allow-Methods: [^\r\n]*\bDELETE\b/i);
+  });
+
   it('a 401 still carries the CORS headers, so a cross-origin client can read it', async () => {
     const r = await send('POST', '/api/queue/clear', { Origin: 'http://127.0.0.1' }, '{}');
     expect(r.status).toBe(401);

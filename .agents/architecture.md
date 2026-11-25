@@ -51,6 +51,13 @@ the first match wins, and the static/SPA fallback is last.
 - **A new browser-facing read or action** → `rest-api.ts` + the matching card in
   `src/ui/*.ts`. Push state changes over `/ws` (`wsTransport.broadcast`) rather than
   making the browser poll.
+- **A new printer method sent from the browser over `/ws`** is gated by default
+  (ELEG-140): with `SERVICE_API_KEY` set, `ws-transport.ts` forwards a `command` frame
+  from a connection without the key only if `src/server/method-policy.ts` lists the
+  method as a read. A new read goes on that list **with its evidence** — the service
+  sending it itself, or a recorded reference finding — never from a `METHOD_NAMES`
+  label; until then an anonymous viewer just goes without it. The stream itself
+  (`init`, broadcasts) stays open.
 - **A new agent-facing capability** → `mcp-server.ts` **and** `MCP.md` in the same
   commit (see [mcp.md](mcp.md)).
 - **A new notification** → `src/server/telegram.ts`, driven off a `state-store` event,

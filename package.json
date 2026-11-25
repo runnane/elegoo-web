@@ -3,7 +3,7 @@
   "version": "1.1.2",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.28.5",
+  "packageManager": "pnpm@12.22.0",
   "engines": {
     "node": ">=22.13"
   },
@@ -54,12 +54,12 @@
     "release-it": "^21.1.1",
     "simple-git-hooks": "^2.14.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4",
+    "vite": "^8.3.8",
     "vitest": "^5.0.4"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "dotenv": "^18.0.8",
     "gcode-preview": "3.0.0-alpha.7",
     "grammy": "^1.46.0",

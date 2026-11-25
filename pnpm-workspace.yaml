@@ -2,7 +2,7 @@
 # reading it ("The `pnpm` field in package.json is no longer read by pnpm"), which
 # left the effective overrides empty while pnpm-lock.yaml still recorded them — and
 # --frozen-lockfile correctly refused the mismatch (ELEG-4). This file is the
-# documented new home and is read by both 10.x and 11.x.
+# documented new home and is read by 10.x, 11.x and 12.x.
 
 # Security pins, not compatibility shims — keep them.
 #
@@ -108,6 +108,18 @@ allowBuilds:
 # entry heals by itself once that entry is 24h old. Dependabot's `cooldown` in
 # .github/dependabot.yml keeps its PRs outside the window.
 minimumReleaseAge: 1440
+
+# Keeps pnpm-lock.yaml ONE YAML document (ELEG-138). Without it, pnpm 12 invoked
+# directly (as pnpm/action-setup runs it in CI) prepends its own toolchain lock as a
+# leading `packageManagerDependencies` document, and the project graph moves into a
+# second one. GitHub's dependency graph reads only the first document, so Dependabot
+# would see no npm dependency at all on this public repo, and its zero reads as clean.
+# Measured in ELEG-128; lookout (LOOK-102) and hexrealm (HEXR-825) shipped the same.
+#
+# The cost: pnpm 12 no longer switches itself to `packageManager` when the running
+# version differs. scripts/gates.sh therefore fails on a running pnpm major that
+# differs from the pin, and on any `---` / `...` document marker in the lockfile.
+pmOnFail: ignore
 
 # three and @types/three are held out of `pnpm outdated` / `pnpm update` because
 # gcode-preview decides which three is allowed. 3.0.0-alpha.7 declares

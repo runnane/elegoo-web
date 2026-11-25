@@ -63,12 +63,51 @@ run() {
   fi
 }
 
+# pnpm-lock.yaml must stay ONE YAML document (ELEG-138). pnpm 12, invoked directly as
+# pnpm/action-setup runs it, prepends a `packageManagerDependencies` document unless
+# `pmOnFail: ignore` is set in pnpm-workspace.yaml. GitHub's dependency graph reads only
+# the first document, so a second one silently blinds Dependabot on this public repo —
+# and nothing else here would notice. Any line that is a bare `---` or `...` fails.
+lockfile_single_document() {
+  local markers
+  if [ ! -f pnpm-lock.yaml ]; then
+    echo 'pnpm-lock.yaml is missing. Never delete it: the overrides in it are security pins.'
+    return 1
+  fi
+  markers="$(grep -nE '^(---|\.\.\.)([[:space:]]|$)' pnpm-lock.yaml)"
+  if [ -n "$markers" ]; then
+    echo "pnpm-lock.yaml has YAML document markers (GitHub reads only the first document):"
+    echo "$markers"
+    echo "Is \`pmOnFail: ignore\` still in pnpm-workspace.yaml? See .agents/gates.md (ELEG-138)."
+    return 1
+  fi
+  echo 'pnpm-lock.yaml is one YAML document (no ---/... markers).'
+}
+
+# The running pnpm's major must match `packageManager` (ELEG-138). `pmOnFail: ignore`
+# is what keeps the lockfile one document, and its cost is that pnpm 12 no longer
+# switches itself to the pinned version — a different global pnpm just runs. A patch or
+# minor drift is harmless; a major one is how CI and developers diverged before (ELEG-4).
+pnpm_major_matches_pin() {
+  local pin running
+  pin="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")"
+  running="$(pnpm --version)"
+  if [ "${running%%.*}" != "${pin%%.*}" ]; then
+    echo "running pnpm ${running} does not match packageManager pnpm@${pin} (major ${pin%%.*})."
+    echo "Install the pinned major (e.g. \`npm i -g pnpm@${pin}\`); pmOnFail: ignore means pnpm will not switch for you."
+    return 1
+  fi
+  echo "running pnpm ${running}, packageManager pnpm@${pin}: same major."
+}
+
 if [ "$fix" = 1 ]; then
   printf '\n\033[1m▶ biome check --write\033[0m  (fixing before the gates)\n'
   pnpm check || true
 fi
 
 # Order mirrors ci.yml: cheapest signal first.
+run 'lockfile is one YAML document' lockfile_single_document
+run 'pnpm major matches packageManager' pnpm_major_matches_pin
 run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci
 run 'typecheck: browser half (tsconfig.json)' pnpm exec tsc
 run 'typecheck: service half (tsconfig.server.json)' pnpm run service:check

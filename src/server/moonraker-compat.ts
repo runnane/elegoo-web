@@ -17,6 +17,8 @@ import type { ServiceConfig } from './config.js';
 import type { FanInfo } from '../types.js';
 import { getLogger } from './logger.js';
 import { otaDisplayMessage } from './ota-status.js';
+import { authorize, extractKey } from './write-auth.js';
+import { isMoonrakerHttpWrite, MOONRAKER_UNAUTHORIZED } from './moonraker-auth.js';
 import { loadavg, freemem } from 'os';
 
 const _log = getLogger('Moonraker');
@@ -265,6 +267,20 @@ export function createMoonrakerRouter(
     const query = parseQuery(fullUrl);
     // Strip the /moonraker prefix
     const path = urlPath.replace(/^\/moonraker/, '');
+
+    // Write auth (ELEG-142): one decision for every route under this mount, before any of
+    // them runs. A wrong key is refused even on a read; no key is refused only on a write.
+    // The key is read per request, never cached. Returning true matters: index.ts would
+    // otherwise fall through to the REST handler on a response already ended.
+    const verdict = authorize(
+      config.serviceApiKey,
+      extractKey(req),
+      isMoonrakerHttpWrite(method, path, query),
+    );
+    if (verdict !== 'ok') {
+      jsonRaw(res, { error: MOONRAKER_UNAUTHORIZED }, 401);
+      return true;
+    }
 
     // --- GET /server/info ---
     if (path === '/server/info' && method === 'GET') {
