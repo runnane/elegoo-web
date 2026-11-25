@@ -98,10 +98,10 @@ if (config.aiEnabled) {
 log.info(`Moonraker: http://${config.bindAddress}:${config.moonrakerPort}`);
 // Whether writes are gated (ELEG-139). Never the key itself — not even a prefix.
 if (config.serviceApiKey) {
-  log.info('Write auth: enabled — /api/* writes need SERVICE_API_KEY');
+  log.info('Write auth: enabled — /api/* writes and /ws commands need SERVICE_API_KEY');
 } else {
   log.warn(
-    '⚠  SERVICE_API_KEY is not set — every /api/* write is OPEN to anyone who can reach ' +
+    '⚠  SERVICE_API_KEY is not set — every /api/* write and /ws command is OPEN to anyone who can reach ' +
       'this port (uploads, the print queue, printer commands). Set a key of 32+ characters ' +
       'to require it (see README).',
   );
@@ -242,7 +242,7 @@ const httpServer = createServer((req, res) => {
 });
 
 // --- WebSocket Transport (for browser clients) ---
-const wsTransport = new WebSocketTransport(httpServer, store, bridge);
+const wsTransport = new WebSocketTransport(httpServer, store, bridge, config);
 
 // Provide service references for status panel
 wsTransport.setServices({ telegram, aiMonitor });

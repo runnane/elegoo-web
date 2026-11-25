@@ -2,16 +2,17 @@
 
 Start from the accurate statement, because every design decision here follows from it:
 
-> **Writes on `/api/*` need one shared key, `SERVICE_API_KEY` — when it is set
-> (ELEG-139). Nothing else is authenticated yet.** With the key unset, which is the
-> default, every write on every surface is open, exactly as before. With it set, every
-> `/api/*` write needs it (`Authorization: Bearer` or `X-Api-Key`), while **the WebSocket,
-> `/mcp`, the Moonraker layer (including `:7125`) and the OctoPrint layer still answer
-> any request that reaches the port** until ELEG-140…143 land. Reads stay open by
+> **Writes on `/api/*` and command frames on `/ws` need one shared key,
+> `SERVICE_API_KEY` — when it is set (ELEG-139, ELEG-140). Nothing else is authenticated
+> yet.** With the key unset, which is the default, every write on every surface is open,
+> exactly as before. With it set, every `/api/*` write needs it (`Authorization: Bearer`
+> or `X-Api-Key`) and so does every `/ws` command that is not a proven read, while
+> **`/mcp`, the Moonraker layer (including `:7125`) and the OctoPrint layer still answer
+> any request that reaches the port** until ELEG-141…143 land. Reads stay open by
 > design, the camera included (see below).
 
-So **a key on `/api/*` is not yet protection for the printer**: the same commands are one
-`/ws` frame or one `/mcp` call away. The owner's decision (ELEG-25) is read/write
+So **a key on `/api/*` and `/ws` is not yet protection for the printer**: the same
+commands are one `/mcp` call away. The owner's decision (ELEG-25) is read/write
 separation with one key across every surface, and it only means something once every
 surface enforces it — ELEG-144 (setting the key in production) is blocked on all of them
 for that reason.
@@ -56,7 +57,8 @@ Not just read. The control surface is complete:
 | `/api/*` reads | yes, by design | status, metrics, `/api/metrics/prometheus` (a stock Prometheus scrapes it with no credentials, or with the key as Bearer), camera snapshot/stream/overlay and `/webcam/*`, file and report downloads, `GET /api/queue` |
 | `/moonraker/*` and the dedicated `:7125` server | yes | the same class of control, in Moonraker's vocabulary |
 | `/octoprint/*` | yes | OctoPrint's job + control endpoints |
-| `/ws` | yes | live state, and command frames |
+| `/ws` command frames | **no, when `SERVICE_API_KEY` is set** (ELEG-140), except proven reads; yes when unset | every `{type:'command'}` method not on the default-deny read allowlist in `src/server/method-policy.ts` (`1002, 1036, 1044, 1045, 1046, 1048, 2005`, each with its evidence) — temperature, motion, print control, emergency stop, deletes, calibration, filament, and every method nobody has proven to be a read (2006 included). The key arrives as an `{type:'auth', key}` frame (browsers cannot set WebSocket headers; a `?key=` would land in proxy logs) or as `Authorization: Bearer` / `X-Api-Key` on the upgrade; a refused frame is answered `command_refused` and never forwarded. A wrong key leaves the connection unauthorised but still able to read |
+| `/ws` stream | yes, by design | connecting, the `init` snapshot and every broadcast: the same state `/api/status` serves |
 
 **Connection presets (ELEG-95) are the one write that is off by default.** `POST
 /api/printers`, `DELETE /api/printers/:id` and `POST /api/printers/:id/activate` refuse

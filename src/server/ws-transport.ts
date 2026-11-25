@@ -10,22 +10,39 @@
  *   { type: "raw", direction, topic, data } // MQTT raw log entry
  *   { type: "connection", connected }       // printer connection state
  *   { type: "service_status", ... }         // periodic service health
+ *   { type: "auth_result", ok }             // answer to an auth frame (or upgrade header)
+ *   { type: "command_refused", method, reason } // a gated command, never forwarded
  *
  * Client → Server:
+ *   { type: "auth", key }                   // authorise this connection (ELEG-140)
  *   { type: "command", method, params }     // forwarded to printer api_request
+ *
+ * Write auth (ELEG-140). Connecting, `init` and every broadcast are open: the stream is a
+ * read and carries what `/api/status` already serves. A `command` frame is classified by
+ * `method-policy.ts` (default-deny); with `SERVICE_API_KEY` set, a non-read is forwarded
+ * only on a connection that presented the key — by an `auth` frame (browsers cannot set
+ * WebSocket headers, and a `?key=` would land in proxy logs) or by `Authorization:
+ * Bearer` / `X-Api-Key` on the upgrade request. With the key unset, every frame is
+ * forwarded as before. The key is never logged or echoed.
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'http';
+import type { IncomingMessage, Server } from 'http';
 import type { StateStore, EventLogEntry } from './state-store.js';
 import { getCameraHealth } from './rest-api.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { TelegramIntegration } from './telegram.js';
 import type { AIMonitor } from './ai-monitor.js';
+import type { ServiceConfig } from './config.js';
 import { getLogger } from './logger.js';
 import { getBuildInfo } from './build-info.js';
+import { authorize, checkKey, extractKey } from './write-auth.js';
+import { isReadMethod } from './method-policy.js';
 
 const log = getLogger('WS');
+
+/** Per-connection auth: the key this connection proved, or null. Never sent anywhere. */
+const verifiedKeys = new WeakMap<WebSocket, string>();
 
 export interface ServiceStatusProvider {
   telegram: TelegramIntegration | null;
@@ -42,14 +59,20 @@ export class WebSocketTransport {
     server: Server,
     private store: StateStore,
     private bridge: MqttBridge,
+    /** Read per frame, never cached: `serviceApiKey` is `''` when unset. */
+    private auth: Pick<ServiceConfig, 'serviceApiKey'>,
   ) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
 
-    this.wss.on('connection', (ws) => {
+    this.wss.on('connection', (ws, req: IncomingMessage) => {
       log.info(`Client connected (total: ${this.wss.clients.size})`);
 
       // Send current state snapshot on connect
       this.sendInit(ws);
+
+      // A non-browser client may present the key on the upgrade request instead.
+      const presented = extractKey(req);
+      if (presented !== null) this.authenticate(ws, presented);
 
       ws.on('message', (raw) => {
         this.handleClientMessage(ws, raw.toString());
@@ -205,7 +228,22 @@ export class WebSocketTransport {
     ws.send(JSON.stringify(msg));
   }
 
-  private handleClientMessage(_ws: WebSocket, raw: string): void {
+  /**
+   * Check a presented key and record the outcome on the connection. A wrong or empty key
+   * leaves (or makes) the connection unauthorised — it can still read, and its writes are
+   * refused. Replies `{type:'auth_result', ok}`; never echoes the key.
+   */
+  private authenticate(ws: WebSocket, presented: unknown): void {
+    const expected = this.auth.serviceApiKey;
+    const key = typeof presented === 'string' ? presented : null;
+    // Unset: nothing to prove, everything is forwarded anyway.
+    const ok = !expected || (key !== null && checkKey(key, expected));
+    if (expected && ok && key !== null) verifiedKeys.set(ws, key);
+    else verifiedKeys.delete(ws);
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'auth_result', ok }));
+  }
+
+  private handleClientMessage(ws: WebSocket, raw: string): void {
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(raw);
@@ -213,10 +251,32 @@ export class WebSocketTransport {
       return;
     }
 
+    if (msg.type === 'auth') {
+      this.authenticate(ws, msg.key);
+      return;
+    }
+
     if (msg.type === 'command') {
       const method = msg.method as number;
       const params = (msg.params as Record<string, unknown>) ?? {};
       if (typeof method === 'number') {
+        // The verified key (or none) goes through the same decision as every HTTP
+        // surface; re-checked per frame, so it follows the configured key.
+        const verdict = authorize(
+          this.auth.serviceApiKey,
+          verifiedKeys.get(ws) ?? null,
+          !isReadMethod(method),
+        );
+        if (verdict !== 'ok') {
+          ws.send(
+            JSON.stringify({
+              type: 'command_refused',
+              method,
+              reason: verdict === 'invalid' ? 'Invalid API key' : 'API key required',
+            }),
+          );
+          return;
+        }
         this.bridge.sendCommand(method, params);
       }
     }
