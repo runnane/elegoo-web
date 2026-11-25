@@ -91,8 +91,10 @@ export function octoprintApiSettings(keyConfigured: boolean): { enabled: boolean
 export type OctoPrintAccess = 'open' | 'apikey' | 'guest';
 
 /**
- * OctoPrint's `GET /api/currentuser` body. A guest is reported as one — `name: null` and
- * the `guests` group — rather than as the admin it is not.
+ * OctoPrint's `GET /api/currentuser` body. A guest is reported as one rather than as the
+ * admin it is not. OctoPrint's data model says only that `name` is "unset if guest"; the
+ * `null` name and the `guests` group are this service's choice, not measured OctoPrint
+ * output.
  */
 export function octoprintCurrentUser(access: OctoPrintAccess): Record<string, unknown> {
   if (access === 'guest') {
@@ -108,17 +110,26 @@ export function octoprintCurrentUser(access: OctoPrintAccess): Record<string, un
 }
 
 /**
- * OctoPrint's `POST /api/login` body, for a caller that has full control (`open` or
- * `apikey`). A `guest` never gets here: with the key set, a login that presents no key is
- * refused 403 by the router's gate, which is what OctoPrint answers for a failed login.
+ * OctoPrint's `POST /api/login` body — a passive-login answer describing the caller.
+ * Login is open (OctoPrint's docs exempt it from the missing-key 403), so a `guest` gets
+ * the guest record plus the login fields, inactive, rather than a refusal.
  *
  * `_login_mechanism` says how access was granted: `'apikey'` when the key was presented,
- * null when nothing was checked. **No `apikey` field is ever returned** — the old fixed
- * string was ELEG-26's lie, and echoing the real key back is pointless at best.
+ * null otherwise. OctoPrint's API docs do not document this field's values; these are this
+ * service's choice. **No `apikey` field is ever returned** — the old fixed string was
+ * ELEG-26's lie, and echoing the real key back is pointless at best.
  */
-export function octoprintLoginPayload(
-  access: Exclude<OctoPrintAccess, 'guest'>,
-): Record<string, unknown> {
+export function octoprintLoginPayload(access: OctoPrintAccess): Record<string, unknown> {
+  if (access === 'guest') {
+    return {
+      ...octoprintCurrentUser('guest'),
+      _is_external_client: false,
+      _login_mechanism: null,
+      active: false,
+      needs: { group: [], role: [] },
+      user: false,
+    };
+  }
   return {
     _is_external_client: false,
     _login_mechanism: access === 'apikey' ? 'apikey' : null,

@@ -113,11 +113,17 @@ export function getTemperatureData(store: StateStore) {
 /**
  * Methods the OctoPrint layer treats as reads. **Everything else is a write and needs
  * `SERVICE_API_KEY`** when it is set (ELEG-143) — default-deny by method, so a POST route
- * added later is gated without anyone remembering to gate it. There is deliberately no
- * list of open writes: `POST /api/login` is gated too, because with the key set a login
- * that presents no key is a failed login, and OctoPrint answers that with 403.
+ * added later is gated without anyone remembering to gate it.
  */
 const READ_METHODS = new Set(['GET', 'HEAD']);
+
+/**
+ * The one non-GET request that is open: `POST /api/login`, a stub that changes nothing.
+ * OctoPrint's API docs exempt Login from the 403 that a missing key gets elsewhere, and a
+ * passive login returns "the current user", so a keyless caller gets a guest record here
+ * rather than a refusal (the ELEG-25 plan's open row). A **wrong** key is still a 403.
+ */
+const OPEN_NON_READS = new Set(['POST /api/login']);
 
 /** The refusal. OctoPrint answers a missing or wrong API key with 403, not 401. */
 function forbidden(res: ServerResponse, verdict: 'missing' | 'invalid'): void {
@@ -156,7 +162,8 @@ export function createOctoPrintRouter(
     // The key is read per request: `serviceApiKey` is '' when unset (writes open).
     const expected = config.serviceApiKey;
     const presented = extractKey(req);
-    const verdict = authorize(expected, presented, !READ_METHODS.has(method));
+    const isWrite = !READ_METHODS.has(method) && !OPEN_NON_READS.has(`${method} ${path}`);
+    const verdict = authorize(expected, presented, isWrite);
     if (verdict !== 'ok') {
       forbidden(res, verdict);
       return true;
@@ -469,10 +476,9 @@ export function createOctoPrintRouter(
     }
 
     // --- POST /api/login (stub) ---
-    // Reaching here means the gate admitted a write: the key is unset, or was presented.
-    // A guest (key set, none presented) was already refused 403 above.
+    // Open (OPEN_NON_READS): a keyless caller is answered as the guest it is.
     if (path === '/api/login' && method === 'POST') {
-      json(res, octoprintLoginPayload(access === 'apikey' ? 'apikey' : 'open'));
+      json(res, octoprintLoginPayload(access));
       return true;
     }
 

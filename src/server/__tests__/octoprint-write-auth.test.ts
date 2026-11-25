@@ -266,7 +266,7 @@ describe.each(MOUNTS)('OctoPrint compat through $mount', (m) => {
       expect(JSON.parse(r.body).admin).toBe(true);
     });
 
-    it('POST /api/login with no key is 403 when the key is set (a failed login)', async () => {
+    it('POST /api/login with no key is open, and answers an inactive guest (OctoPrint exempts Login)', async () => {
       const r = await send(
         m.port(),
         'POST',
@@ -274,7 +274,25 @@ describe.each(MOUNTS)('OctoPrint compat through $mount', (m) => {
         JSON_HEADERS,
         '{"passive":true}',
       );
+      expect(bridge.sendCommand).not.toHaveBeenCalled();
+      expect(r.status).toBe(200);
+      const u = JSON.parse(r.body);
+      expect(u.admin).toBe(false);
+      expect(u.active).toBe(false);
+      expect(u.groups).toEqual(['guests']);
+      expect(u._login_mechanism).toBeNull();
+    });
+
+    it('POST /api/login with a wrong key is 403', async () => {
+      const r = await send(
+        m.port(),
+        'POST',
+        `${m.prefix}/api/login`,
+        { ...JSON_HEADERS, 'X-Api-Key': WRONG },
+        '{"passive":true}',
+      );
       expect(r.status).toBe(403);
+      expect(r.body).not.toContain(WRONG);
     });
 
     it('POST /api/login with the right key names apikey as the mechanism, and never returns the key', async () => {
@@ -300,16 +318,16 @@ describe.each(MOUNTS)('OctoPrint compat through $mount', (m) => {
 
   /**
    * Every write the router knows, pinned — plus routes it does NOT handle. The gate is
-   * default-deny by method (anything but GET/HEAD needs the key), so `POST
-   * /api/files/local` (the slicer upload, which this router does not implement yet) and
-   * an invented route are refused too: a write route added later cannot slip through.
+   * default-deny by method (anything but GET/HEAD needs the key, except the one open
+   * `POST /api/login` stub), so `POST /api/files/local` (the slicer upload, which this
+   * router does not implement yet) and an invented route are refused too: a write route
+   * added later cannot slip through.
    */
   const GATED: Array<[string, string]> = [
     ['POST', '/api/printer/tool'],
     ['POST', '/api/printer/bed'],
     ['POST', '/api/printer/printhead'],
     ['POST', '/api/job'],
-    ['POST', '/api/login'],
     ['POST', '/api/files/local'],
     ['POST', '/api/connection'],
     ['DELETE', '/api/job'],

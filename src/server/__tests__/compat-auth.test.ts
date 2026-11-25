@@ -60,6 +60,22 @@ describe('octoprintLoginPayload with the key presented (ELEG-143)', () => {
   });
 });
 
+describe('octoprintLoginPayload for a guest (ELEG-143)', () => {
+  const payload = octoprintLoginPayload('guest');
+
+  it('is an inactive guest with no admin, no user and no login mechanism', () => {
+    expect(payload).toMatchObject({
+      name: null,
+      admin: false,
+      user: false,
+      active: false,
+      groups: ['guests'],
+      _login_mechanism: null,
+    });
+    expect('apikey' in payload).toBe(false);
+  });
+});
+
 describe('octoprintLoginPayload with no key configured', () => {
   const payload = octoprintLoginPayload('open');
 
