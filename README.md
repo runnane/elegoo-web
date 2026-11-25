@@ -213,7 +213,7 @@ on every request, so the slicer's "Test" button tells you whether the key is rig
 ## Prerequisites
 
 - Node.js 22.13+
-- pnpm 11. The exact version is pinned by `packageManager` in `package.json`, and an older `pnpm` switches to it by itself.
+- pnpm 12. The exact version is pinned by `packageManager` in `package.json`. A pnpm 10 or 11 global switches to it by itself; a different pnpm 12+ global does not, and `pnpm gates` fails on a major mismatch.
 - An Elegoo CC2 printer on the same network, set to **LAN-only mode**
 
 ## Quick Start
