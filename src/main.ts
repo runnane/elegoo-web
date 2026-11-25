@@ -391,7 +391,7 @@ function connectToService(): void {
 
       if (connState === 'error' && !dashboardShown) {
         ($('connect-btn') as HTMLButtonElement).disabled = false;
-        ($('connect-btn') as HTMLButtonElement).textContent = 'Connect';
+        ($('connect-btn') as HTMLButtonElement).textContent = 'Retry';
         $('connect-error').textContent =
           'Cannot reach service. Ensure the elegoo-web service is running.';
         toast('Service connection failed', 'error');
