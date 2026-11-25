@@ -19,19 +19,23 @@ Printer MQTT ←→ MqttBridge (singleton) ←→ StateStore
 ```
 
 Work is tracked in the **ELEG** project of our own control-plane portal, reached over
-the `respawn-control` MCP server. [`.mcp.json`](.mcp.json) wires it up with the portal
-endpoint **fixed in the file** (a deliberate choice, c834c18) and **no token** — this
-repository is public, so the token is the one thing that comes from the environment:
+the `respawn-control` MCP server. [`.mcp.json`](.mcp.json) stays tracked (untracking it
+would drop the tracker from every worktree session) but carries **no internal value**:
+this repository is public, so both the portal URL and the token are expanded from the
+environment — `"url": "${RESPAWN_MCP_URL}"` and `Bearer ${RESPAWN_MCP_TOKEN}` (ELEG-133).
+Set both under `env` in the **user-level** `~/.claude/settings.json`, which is the copy a
+worktree session sees — never in a file in this repo:
 
-```bash
-export RESPAWN_MCP_TOKEN='<api key>'
+```json
+{ "env": { "RESPAWN_MCP_URL": "<portal mcp url>", "RESPAWN_MCP_TOKEN": "<api key>" } }
 ```
 
-Set it in your shell profile (not in a file in this repo). There is no URL variable:
-nothing reads one, so exporting it has no effect. With the token unset or rejected the
-server answers 401 and the MCP server fails to connect — look at the token first, not
-the URL — and the `/`-commands below will tell you to fix it rather than guessing at
-issue state.
+How each fails differs, so read the symptom before the token. With `RESPAWN_MCP_URL`
+unset the config is rejected outright (`its url is not a valid URL`) and the tracker
+tools are simply absent. With the token unset or rejected the server answers 401 and the
+MCP server fails to connect. Either way the `/`-commands below will tell you to fix it
+rather than guessing at issue state. (ELEG-129 had briefly made the URL a literal in the
+file; the owner reversed that on 2026-11-25.)
 
 **The thing on the other end is a physical machine with heaters and motors.** That
 single fact is what makes this repo different from its siblings, and it has its own
