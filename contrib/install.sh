@@ -195,8 +195,9 @@ if [[ ! -f "$INSTALL_DIR/.env" ]]; then
 # Elegoo Web — Service Configuration
 # See README.md for all available options
 
-# Printer connection
-PRINTER_IP=172.20.100.236
+# Printer connection — REQUIRED. Left empty on purpose: the service refuses to start
+# with "PRINTER_IP is not set" until you fill it in (e.g. PRINTER_IP=192.0.2.50).
+PRINTER_IP=
 PRINTER_PASSWORD=123456
 
 # Service port (web UI + API)
@@ -208,7 +209,7 @@ SERVICE_PORT=${SERVICE_PORT}
 
 # Camera (auto-detected from printer IP if not set)
 # CAMERA_ENABLED=true
-# CAMERA_URL=http://172.20.100.236:8080
+# CAMERA_URL=http://<PRINTER_IP>:8080
 
 # Telegram notifications (optional)
 # TELEGRAM_BOT_TOKEN=
