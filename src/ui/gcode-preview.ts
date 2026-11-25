@@ -255,6 +255,35 @@ function initPreview(colorMap?: Array<{ t: number; color: string }>): GCodePrevi
   return p;
 }
 
+/**
+ * Everything that must follow `processGCode()`, whichever way the gcode arrived —
+ * the download proxy and the local file input both end here (ELEG-151: the file
+ * input used to skip the first three steps and left the 60fps loop running).
+ */
+function finishLoad(p: GCodePreview, filename: string, label: string): void {
+  // Stop the library's built-in 60fps animate loop — it calls WebGL render()
+  // every frame, leaking ~23 MB/s. We render on-demand instead.
+  stopAnimateLoop(p.sceneManager);
+  // Re-render once after stopping the loop (processGCode's last frame may be lost)
+  redraw(p.sceneManager);
+  // Render on orbit control interaction (user dragging)
+  p.sceneManager.controls.addEventListener('change', onOrbitChange);
+
+  loadedFile = filename;
+
+  // Set layer slider range
+  const totalLayers = p.countLayers;
+  const slider = $('gcode-layer-slider') as HTMLInputElement | null;
+  if (slider) {
+    slider.max = String(totalLayers);
+    slider.value = String(totalLayers);
+  }
+
+  // Show total layers
+  const statusEl = $('gcode-preview-status');
+  if (statusEl) statusEl.textContent = `${totalLayers} layers · ${label}`;
+}
+
 /** Load gcode file from the server download proxy */
 export async function loadGcode(filename: string, source = 'local'): Promise<void> {
   if (loading) return;
@@ -314,26 +343,7 @@ export async function loadGcode(filename: string, source = 'local'): Promise<voi
     // Process gcode (v3 is async)
     await preview.processGCode(gcode);
 
-    // Stop the library's built-in 60fps animate loop — it calls WebGL render()
-    // every frame, leaking ~23 MB/s. We render on-demand instead.
-    stopAnimateLoop(preview.sceneManager);
-    // Re-render once after stopping the loop (processGCode's last frame may be lost)
-    redraw(preview.sceneManager);
-    // Render on orbit control interaction (user dragging)
-    preview.sceneManager.controls.addEventListener('change', onOrbitChange);
-
-    loadedFile = filename;
-
-    // Set layer slider range
-    const totalLayers = preview.countLayers;
-    const slider = $('gcode-layer-slider') as HTMLInputElement | null;
-    if (slider) {
-      slider.max = String(totalLayers);
-      slider.value = String(totalLayers);
-    }
-
-    // Show total layers
-    if (statusEl) statusEl.textContent = `${totalLayers} layers · ${shortName(filename)}`;
+    finishLoad(preview, filename, shortName(filename));
   } catch (err) {
     console.error('Gcode preview load error:', err);
     if (statusEl) statusEl.textContent = `Error: ${(err as Error).message}`;
@@ -450,14 +460,7 @@ export function bindGcodePreviewControls(): void {
         preview = initPreview(cachedColorMap);
         if (!preview) return;
         await preview.processGCode(gcode);
-        loadedFile = file.name;
-        const slider = $('gcode-layer-slider') as HTMLInputElement | null;
-        if (slider) {
-          slider.max = String(preview.countLayers);
-          slider.value = String(preview.countLayers);
-        }
-        const statusEl = $('gcode-preview-status');
-        if (statusEl) statusEl.textContent = `${preview.countLayers} layers · ${file.name}`;
+        finishLoad(preview, file.name, file.name);
       };
       reader.readAsText(file);
       fileInput.value = '';
