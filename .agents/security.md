@@ -2,17 +2,17 @@
 
 Start from the accurate statement, because every design decision here follows from it:
 
-> **Writes on `/api/*` and command frames on `/ws` need one shared key,
-> `SERVICE_API_KEY` — when it is set (ELEG-139, ELEG-140). Nothing else is authenticated
-> yet.** With the key unset, which is the default, every write on every surface is open,
-> exactly as before. With it set, every `/api/*` write needs it (`Authorization: Bearer`
-> or `X-Api-Key`) and so does every `/ws` command that is not a proven read, while
-> **`/mcp`, the Moonraker layer (including `:7125`) and the OctoPrint layer still answer
-> any request that reaches the port** until ELEG-141…143 land. Reads stay open by
-> design, the camera included (see below).
+> **Writes on `/api/*`, command frames on `/ws` and the `/mcp` control tools need one
+> shared key, `SERVICE_API_KEY` — when it is set (ELEG-139, ELEG-140, ELEG-141). Nothing
+> else is authenticated yet.** With the key unset, which is the default, every write on
+> every surface is open, exactly as before. With it set, every `/api/*` write and `/mcp`
+> control tool needs it (`Authorization: Bearer` or `X-Api-Key`) and so does every `/ws`
+> command that is not a proven read, while **the Moonraker layer (including `:7125`) and
+> the OctoPrint layer still answer any request that reaches the port** until ELEG-142 and
+> ELEG-143 land. Reads stay open by design, the camera included (see below).
 
-So **a key on `/api/*` and `/ws` is not yet protection for the printer**: the same
-commands are one `/mcp` call away. The owner's decision (ELEG-25) is read/write
+So **the key is not yet protection for the printer**: the same commands are one
+Moonraker or OctoPrint call away. The owner's decision (ELEG-25) is read/write
 separation with one key across every surface, and it only means something once every
 surface enforces it — ELEG-144 (setting the key in production) is blocked on all of them
 for that reason.
@@ -52,7 +52,8 @@ Not just read. The control surface is complete:
 
 | Surface | Reachable without credentials | Includes |
 | --- | --- | --- |
-| `POST /mcp` | yes | `set_temperature`, `fan`, `led`, `home`, `move`, `start_print`, `pause_print`, `resume_print`, `stop_print`, **`emergency_stop`** |
+| `/mcp` control tools | **no, when `SERVICE_API_KEY` is set** (ELEG-141, Bearer or `X-Api-Key`, checked per HTTP request, not per session); yes when unset | all 21: `set_temperature`, `fan`, `speed_mode`, `led`, `home`, `move`, `start_print`, `pause_print`, `resume_print`, `stop_print`, **`emergency_stop`**, the calibrations and self-check, `delete_file`, filament load/unload, `set_auto_refill`, `enable_video_stream` and raw **`send_command`** (always gated) |
+| `/mcp` reads | yes, by design | the 10 read tools, every `printer://*` resource, `initialize`, `tools/list` — a **wrong** key is still a 401 |
 | `/api/*` writes | **no, when `SERVICE_API_KEY` is set** (ELEG-139); yes when unset | file upload and precache, the print queue (incl. `start-next`, ELEG-35), video-stream enable (printer commands), debug capture, layer-data and report deletes, Telegram/AI-label config, connection presets |
 | `/api/*` reads | yes, by design | status, metrics, `/api/metrics/prometheus` (a stock Prometheus scrapes it with no credentials, or with the key as Bearer), camera snapshot/stream/overlay and `/webcam/*`, file and report downloads, `GET /api/queue` |
 | `/moonraker/*` and the dedicated `:7125` server | yes | the same class of control, in Moonraker's vocabulary |
