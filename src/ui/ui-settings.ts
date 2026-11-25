@@ -35,7 +35,8 @@ export interface UISettings {
   relativeTimestamps: boolean;
   /**
    * The service's SERVICE_API_KEY, entered by the user in Settings (ELEG-139). Sent as
-   * `Authorization: Bearer` on REST writes by `api-key.ts`. The server never sends it to
+   * `Authorization: Bearer` on REST writes by `api-key.ts`, and as an `auth` frame on
+   * `/ws` by `ws-client.ts` (ELEG-140). The server never sends it to
    * the browser; empty means "none entered". localStorage is readable by any script on
    * the page — accepted for one shared key on a framework-free SPA (`.agents/security.md`).
    */
