@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   octoprintApiSettings,
+  octoprintCurrentUser,
   octoprintLoginPayload,
   NO_API_KEY_MESSAGE,
   NO_SESSIONS_MESSAGE,
@@ -15,19 +16,68 @@ import {
  */
 
 describe('octoprintApiSettings', () => {
-  it('reports API-key auth as disabled', () => {
-    expect(octoprintApiSettings()).toEqual({ enabled: false, key: null });
+  it('reports API-key auth as disabled when SERVICE_API_KEY is unset', () => {
+    expect(octoprintApiSettings(false)).toEqual({ enabled: false, key: null });
   });
 
-  it('never emits a key', () => {
+  it('reports API-key auth as enabled when SERVICE_API_KEY is set (ELEG-143)', () => {
+    expect(octoprintApiSettings(true)).toEqual({ enabled: true, key: null });
+  });
+
+  it('never emits a key, either way', () => {
     // The regression this exists to catch: a fixed string that made clients show
-    // themselves as authenticated against a service that checks nothing.
-    expect(octoprintApiSettings().key).toBeNull();
+    // themselves as authenticated against a service that checks nothing — or, now, the
+    // real key served to an anonymous read.
+    expect(octoprintApiSettings(false).key).toBeNull();
+    expect(octoprintApiSettings(true).key).toBeNull();
   });
 });
 
-describe('octoprintLoginPayload', () => {
-  const payload = octoprintLoginPayload();
+describe('octoprintCurrentUser (ELEG-143)', () => {
+  it('a guest is reported as a guest, not as admin', () => {
+    expect(octoprintCurrentUser('guest')).toEqual({
+      name: null,
+      admin: false,
+      groups: ['guests'],
+      permissions: [],
+      roles: [],
+    });
+  });
+
+  it.each(['open', 'apikey'] as const)('%s access is reported as admin, because it is', (a) => {
+    const u = octoprintCurrentUser(a);
+    expect(u.admin).toBe(true);
+    expect(u.groups).toEqual(['admins', 'users']);
+  });
+});
+
+describe('octoprintLoginPayload with the key presented (ELEG-143)', () => {
+  const payload = octoprintLoginPayload('apikey');
+
+  it('names the api key as the login mechanism, and carries no apikey field', () => {
+    expect(payload._login_mechanism).toBe('apikey');
+    expect('apikey' in payload).toBe(false);
+  });
+});
+
+describe('octoprintLoginPayload for a guest (ELEG-143)', () => {
+  const payload = octoprintLoginPayload('guest');
+
+  it('is an inactive guest with no admin, no user and no login mechanism', () => {
+    expect(payload).toMatchObject({
+      name: null,
+      admin: false,
+      user: false,
+      active: false,
+      groups: ['guests'],
+      _login_mechanism: null,
+    });
+    expect('apikey' in payload).toBe(false);
+  });
+});
+
+describe('octoprintLoginPayload with no key configured', () => {
+  const payload = octoprintLoginPayload('open');
 
   it('carries no apikey field at all', () => {
     expect('apikey' in payload).toBe(false);

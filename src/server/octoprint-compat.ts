@@ -16,7 +16,13 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import type { FanInfo } from '../types.js';
 import { getLogger } from './logger.js';
-import { octoprintApiSettings, octoprintLoginPayload } from './compat-auth.js';
+import {
+  type OctoPrintAccess,
+  octoprintApiSettings,
+  octoprintCurrentUser,
+  octoprintLoginPayload,
+} from './compat-auth.js';
+import { authorize, extractKey } from './write-auth.js';
 
 const _log = getLogger('OctoPrint');
 
@@ -104,6 +110,35 @@ export function getTemperatureData(store: StateStore) {
   };
 }
 
+/**
+ * Methods the OctoPrint layer treats as reads. **Everything else is a write and needs
+ * `SERVICE_API_KEY`** when it is set (ELEG-143) — default-deny by method, so a POST route
+ * added later is gated without anyone remembering to gate it.
+ */
+const READ_METHODS = new Set(['GET', 'HEAD']);
+
+/**
+ * The one non-GET request that is open: `POST /api/login`, a stub that changes nothing.
+ * OctoPrint's API docs exempt Login from the 403 that a missing key gets elsewhere, and a
+ * passive login returns "the current user", so a keyless caller gets a guest record here
+ * rather than a refusal (the ELEG-25 plan's open row). A **wrong** key is still a 403.
+ */
+const OPEN_NON_READS = new Set(['POST /api/login']);
+
+/** The refusal. OctoPrint answers a missing or wrong API key with 403, not 401. */
+function forbidden(res: ServerResponse, verdict: 'missing' | 'invalid'): void {
+  json(
+    res,
+    {
+      error: verdict === 'invalid' ? 'Invalid API key' : 'API key required',
+      message:
+        'This action needs the service API key. Enter SERVICE_API_KEY as the API key ' +
+        'in your OctoPrint host settings (sent as "X-Api-Key: <key>" or "Authorization: Bearer <key>").',
+    },
+    403,
+  );
+}
+
 export function createOctoPrintRouter(
   store: StateStore,
   bridge: MqttBridge,
@@ -119,6 +154,21 @@ export function createOctoPrintRouter(
     const [urlPath, _query] = fullUrl.split('?');
     // Strip the /octoprint prefix to get the OctoPrint-style path
     const path = urlPath.replace(/^\/octoprint/, '');
+
+    // --- The write gate (ELEG-143) ---
+    // Inside the router, before any route, so it covers BOTH mounts: /octoprint/* on the
+    // main port and :7125/api/* (moonraker-server.ts prepends /octoprint). A wrong key is
+    // refused on any route, reads included, so a slicer's "Test connection" is truthful.
+    // The key is read per request: `serviceApiKey` is '' when unset (writes open).
+    const expected = config.serviceApiKey;
+    const presented = extractKey(req);
+    const isWrite = !READ_METHODS.has(method) && !OPEN_NON_READS.has(`${method} ${path}`);
+    const verdict = authorize(expected, presented, isWrite);
+    if (verdict !== 'ok') {
+      forbidden(res, verdict);
+      return true;
+    }
+    const access: OctoPrintAccess = !expected ? 'open' : presented !== null ? 'apikey' : 'guest';
 
     // --- GET /api/version ---
     if (path === '/api/version' && method === 'GET') {
@@ -364,7 +414,7 @@ export function createOctoPrintRouter(
     // --- GET /api/settings (minimal stub) ---
     if (path === '/api/settings' && method === 'GET') {
       json(res, {
-        api: octoprintApiSettings(),
+        api: octoprintApiSettings(!!expected),
         feature: {
           sdSupport: true,
           temperatureGraph: true,
@@ -425,21 +475,16 @@ export function createOctoPrintRouter(
       return true;
     }
 
-    // --- GET /api/login (stub, always "logged in") ---
+    // --- POST /api/login (stub) ---
+    // Open (OPEN_NON_READS): a keyless caller is answered as the guest it is.
     if (path === '/api/login' && method === 'POST') {
-      json(res, octoprintLoginPayload());
+      json(res, octoprintLoginPayload(access));
       return true;
     }
 
     // --- GET /api/currentuser ---
     if (path === '/api/currentuser' && method === 'GET') {
-      json(res, {
-        name: 'elegoo',
-        admin: true,
-        groups: ['admins', 'users'],
-        permissions: [],
-        roles: ['admin', 'user'],
-      });
+      json(res, octoprintCurrentUser(access));
       return true;
     }
 

@@ -69,27 +69,70 @@ export const ONESHOT_TOKEN = 'no-auth-required';
 /**
  * OctoPrint's `api` block in `GET /api/settings`.
  *
- * `enabled: false` is the honest statement, and it is a statement OctoPrint clients
- * already understand: it means this server does not do API-key authentication. The old
- * `enabled: true` plus a fixed key claimed the opposite.
+ * `enabled` says whether this server checks an API key — which, since ELEG-143, it does
+ * on the OctoPrint layer exactly when `SERVICE_API_KEY` is set. With it unset,
+ * `enabled: false` is the honest statement OctoPrint clients already understand. Either
+ * way **`key` is always null**: the old fixed key made clients show themselves as
+ * authenticated (ELEG-26), and the real key must never be served to a caller — a read is
+ * open, so serving it would hand it to anyone.
  */
-export function octoprintApiSettings(): { enabled: false; key: null } {
-  return { enabled: false, key: null };
+export function octoprintApiSettings(keyConfigured: boolean): { enabled: boolean; key: null } {
+  return { enabled: keyConfigured, key: null };
 }
 
 /**
- * OctoPrint's `POST /api/login` body.
+ * How a caller's access to the OctoPrint layer came about (ELEG-143):
  *
- * `admin`/`user` stay true, and that is not a lie: with no authentication every caller
- * genuinely does have full control of this service — that is precisely the exposure
- * ELEG-2 is about, and understating it would be its own kind of dishonesty. What goes
- * is the claim about *how* the caller got that access: there is no api key and no login
- * mechanism, so `apikey` is dropped and `_login_mechanism` is null.
+ *   - `open` — `SERVICE_API_KEY` is unset, so every caller has full control. That is the
+ *     exposure ELEG-2 is about, and understating it would be its own dishonesty.
+ *   - `apikey` — the key is set and the caller presented it.
+ *   - `guest` — the key is set and the caller presented none: it may read, nothing else.
  */
-export function octoprintLoginPayload(): Record<string, unknown> {
+export type OctoPrintAccess = 'open' | 'apikey' | 'guest';
+
+/**
+ * OctoPrint's `GET /api/currentuser` body. A guest is reported as one rather than as the
+ * admin it is not. OctoPrint's data model says only that `name` is "unset if guest"; the
+ * `null` name and the `guests` group are this service's choice, not measured OctoPrint
+ * output.
+ */
+export function octoprintCurrentUser(access: OctoPrintAccess): Record<string, unknown> {
+  if (access === 'guest') {
+    return { name: null, admin: false, groups: ['guests'], permissions: [], roles: [] };
+  }
+  return {
+    name: 'elegoo',
+    admin: true,
+    groups: ['admins', 'users'],
+    permissions: [],
+    roles: ['admin', 'user'],
+  };
+}
+
+/**
+ * OctoPrint's `POST /api/login` body — a passive-login answer describing the caller.
+ * Login is open (OctoPrint's docs exempt it from the missing-key 403), so a `guest` gets
+ * the guest record plus the login fields, inactive, rather than a refusal.
+ *
+ * `_login_mechanism` says how access was granted: `'apikey'` when the key was presented,
+ * null otherwise. OctoPrint's API docs do not document this field's values; these are this
+ * service's choice. **No `apikey` field is ever returned** — the old fixed string was
+ * ELEG-26's lie, and echoing the real key back is pointless at best.
+ */
+export function octoprintLoginPayload(access: OctoPrintAccess): Record<string, unknown> {
+  if (access === 'guest') {
+    return {
+      ...octoprintCurrentUser('guest'),
+      _is_external_client: false,
+      _login_mechanism: null,
+      active: false,
+      needs: { group: [], role: [] },
+      user: false,
+    };
+  }
   return {
     _is_external_client: false,
-    _login_mechanism: null,
+    _login_mechanism: access === 'apikey' ? 'apikey' : null,
     active: true,
     admin: true,
     groups: ['admins', 'users'],

@@ -80,12 +80,13 @@ function stubConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     printerIp: '203.0.113.5',
     servicePort: 8088,
     cameraEnabled: false,
+    serviceApiKey: '',
     ...overrides,
   } as unknown as ServiceConfig;
 }
 
 function fakeReq(url: string, method = 'GET'): IncomingMessage {
-  return { url, method } as unknown as IncomingMessage;
+  return { url, method, headers: {} } as unknown as IncomingMessage;
 }
 
 function fakeRes(): { res: ServerResponse; status: () => number; body: () => unknown } {

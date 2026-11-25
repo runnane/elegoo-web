@@ -2,17 +2,18 @@
 
 Start from the accurate statement, because every design decision here follows from it:
 
-> **Writes on `/api/*`, command frames on `/ws` and the `/mcp` control tools need one
-> shared key, `SERVICE_API_KEY` — when it is set (ELEG-139, ELEG-140, ELEG-141). Nothing
-> else is authenticated yet.** With the key unset, which is the default, every write on
-> every surface is open, exactly as before. With it set, every `/api/*` write and `/mcp`
-> control tool needs it (`Authorization: Bearer` or `X-Api-Key`) and so does every `/ws`
-> command that is not a proven read, while **the Moonraker layer (including `:7125`) and
-> the OctoPrint layer still answer any request that reaches the port** until ELEG-142 and
-> ELEG-143 land. Reads stay open by design, the camera included (see below).
+> **Writes on `/api/*`, command frames on `/ws`, the `/mcp` control tools and OctoPrint
+> writes (on `/octoprint/*` and `:7125/api/*`) need one shared key, `SERVICE_API_KEY` —
+> when it is set (ELEG-139, ELEG-140, ELEG-141, ELEG-143). Nothing else is authenticated
+> yet.** With the key unset, which is the default, every write on every surface is open,
+> exactly as before. With it set, every `/api/*` write, `/mcp` control tool and OctoPrint
+> write needs it (`Authorization: Bearer` or `X-Api-Key`) and so does every `/ws`
+> command that is not a proven read, while **the Moonraker layer (including the rest of
+> `:7125`) still answers any request that reaches the port** until ELEG-142 lands. Reads
+> stay open by design, the camera included (see below).
 
 So **the key is not yet protection for the printer**: the same commands are one
-Moonraker or OctoPrint call away. The owner's decision (ELEG-25) is read/write
+Moonraker call away. The owner's decision (ELEG-25) is read/write
 separation with one key across every surface, and it only means something once every
 surface enforces it — ELEG-144 (setting the key in production) is blocked on all of them
 for that reason.
@@ -57,7 +58,8 @@ Not just read. The control surface is complete:
 | `/api/*` writes | **no, when `SERVICE_API_KEY` is set** (ELEG-139); yes when unset | file upload and precache, the print queue (incl. `start-next`, ELEG-35), video-stream enable (printer commands), debug capture, layer-data and report deletes, Telegram/AI-label config, connection presets |
 | `/api/*` reads | yes, by design | status, metrics, `/api/metrics/prometheus` (a stock Prometheus scrapes it with no credentials, or with the key as Bearer), camera snapshot/stream/overlay and `/webcam/*`, file and report downloads, `GET /api/queue` |
 | `/moonraker/*` and the dedicated `:7125` server | yes | the same class of control, in Moonraker's vocabulary |
-| `/octoprint/*` | yes | OctoPrint's job + control endpoints |
+| OctoPrint writes: `/octoprint/*` on the main port **and `:7125/api/*`** (one router, two mounts) | **no, when `SERVICE_API_KEY` is set** (ELEG-143, `X-Api-Key` or Bearer — what a slicer's OctoPrint host sends); yes when unset | `POST /api/printer/{tool,bed,printhead}`, `POST /api/job` (start, cancel, pause, resume, restart), and — default-deny by method inside `createOctoPrintRouter` — any non-GET/HEAD request except the `POST /api/login` stub (open, as OctoPrint exempts Login; a keyless caller is answered as an inactive guest), so a future upload route (`POST /api/files/local`) is gated before it exists. Refusals are **403**, OctoPrint's convention, not 401 |
+| OctoPrint reads | yes, by design | version, server, connection, printer/tool/bed/chamber, job, files, settings, printer profiles, current user — a **wrong** key is still a 403, so a slicer's "Test connection" is honest. `/api/settings` reports `api.enabled: true` with the key set and never the key; `/api/currentuser` answers a guest unless the key was presented |
 | `/ws` command frames | **no, when `SERVICE_API_KEY` is set** (ELEG-140), except proven reads; yes when unset | every `{type:'command'}` method not on the default-deny read allowlist in `src/server/method-policy.ts` (`1002, 1036, 1044, 1045, 1046, 1048, 2005`, each with its evidence) — temperature, motion, print control, emergency stop, deletes, calibration, filament, and every method nobody has proven to be a read (2006 included). The key arrives as an `{type:'auth', key}` frame (browsers cannot set WebSocket headers; a `?key=` would land in proxy logs) or as `Authorization: Bearer` / `X-Api-Key` on the upgrade; a refused frame is answered `command_refused` and never forwarded. A wrong key leaves the connection unauthorised but still able to read |
 | `/ws` stream | yes, by design | connecting, the `init` snapshot and every broadcast: the same state `/api/status` serves |
 
@@ -98,14 +100,17 @@ Three things make this sharper than a typical "no auth" note:
    policy for free only if you route through it** — the `:7125` server is the cautionary
    example: it sets the headers once in `handleHttp` precisely because ~100
    `jsonResult`/`jsonError` call sites could each have forgotten.
-3. **The compat layers advertise auth they do not have.** `octoprint-compat.ts` returns
-   a fixed `apikey: 'elegoo-cc2-compat'` and the Moonraker layer answers
-   `access.get_api_key` — so a client shows "connected, authenticated" while nothing was
-   ever checked. Do not read those endpoints as evidence that an auth path exists.
+3. **The compat layers used to advertise auth they did not have.** `octoprint-compat.ts`
+   returned a fixed `apikey: 'elegoo-cc2-compat'` and the Moonraker layer answered
+   `access.get_api_key` — so a client showed "connected, authenticated" while nothing was
+   ever checked. ELEG-26 withdrew both; ELEG-143 makes the OctoPrint answers follow the
+   real key (`src/server/compat-auth.ts`). Keep them truthful: an auth answer must
+   describe what the router actually checks, and must never carry the key.
 
 **Rule:** never add an endpoint on the assumption that only the LAN can reach it, and
 never add one that widens the write surface without saying so on the issue. A new `/api/*`
-write is gated automatically by the default-deny classifier in `rest-api.ts`; a new write
+write is gated automatically by the default-deny classifier in `rest-api.ts`, and a new
+OctoPrint route by the method check at the top of `createOctoPrintRouter`; a new write
 on any other surface is not, until that surface's child of ELEG-25 lands — say so on the
 issue, and don't design it as though the key already covered it.
 

@@ -148,7 +148,7 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 | `BIND_ADDRESS` | `0.0.0.0` | Interface both HTTP servers listen on. IPv4 only — see [`.agents/security.md`](.agents/security.md) before narrowing it in production |
 | `CAMERA_ENABLED` | `true` | Enable camera MJPEG proxy |
 | `CAMERA_URL` | `http://<PRINTER_IP>:8080` | Override camera URL. Applies to the `PRINTER_IP` printer only; a saved connection preset uses `http://<its address>:8080` |
-| `SERVICE_API_KEY` | — (writes open) | Shared key that every `/api/*` **write** needs: uploads, the print queue, settings changes, debug commands and connection presets — and every `/ws` printer command that is not a proven read (the WebSocket stream itself stays open). Send it as `Authorization: Bearer <key>` or `X-Api-Key: <key>` (on `/ws`, as an `{"type":"auth","key":"…"}` frame or on the upgrade request); in the web UI, enter it under **Settings → API key**. At least 32 characters (`openssl rand -hex 32`), or the service refuses to start. Reads stay open — status, metrics, `/api/metrics/prometheus` and the camera — but a **wrong** key is refused on any request. Unset keeps writes open and logs a warning at startup; `/api/health` reports `writeAuth: "enabled"` or `"disabled"`. The `/mcp` control tools need it too, as a Bearer header on every request — see [MCP.md](MCP.md#authentication). **Not yet enforced on Moonraker or OctoPrint** (ELEG-142, ELEG-143), so on its own it does not lock the printer down — see [`.agents/security.md`](.agents/security.md) |
+| `SERVICE_API_KEY` | — (writes open) | Shared key that every `/api/*` **write** needs: uploads, the print queue, settings changes, debug commands and connection presets — and every `/ws` printer command that is not a proven read (the WebSocket stream itself stays open). Send it as `Authorization: Bearer <key>` or `X-Api-Key: <key>` (on `/ws`, as an `{"type":"auth","key":"…"}` frame or on the upgrade request); in the web UI, enter it under **Settings → API key**. At least 32 characters (`openssl rand -hex 32`), or the service refuses to start. Reads stay open — status, metrics, `/api/metrics/prometheus` and the camera — but a **wrong** key is refused on any request. Unset keeps writes open and logs a warning at startup; `/api/health` reports `writeAuth: "enabled"` or `"disabled"`. The `/mcp` control tools need it too, as a Bearer header on every request — see [MCP.md](MCP.md#authentication). OctoPrint writes need it too, on `/octoprint/*` and `:7125/api/*` (ELEG-143; refused with 403) — see [Slicers](#slicers-octoprint-host). **Not yet enforced on Moonraker** (ELEG-142), so on its own it does not lock the printer down — see [`.agents/security.md`](.agents/security.md) |
 | `CONNECTION_PRESETS_API` | `false` | Allow adding, removing and switching saved printer connection presets from Settings (`/api/printers`). Off by default: with it on, anyone who can make a write can re-point the service at another address — set `SERVICE_API_KEY` too, so that takes the key. Listing presets always works. `PRINTER_IP` is always the built-in default preset, and `PRINTER_PASSWORD` is only ever sent to that printer |
 | `CORS_ALLOWED_ORIGINS` | — (same-origin) | Comma-separated origins allowed to make cross-origin requests to `/api/*`, `/mcp`, `/moonraker/*`, `/octoprint/*` and `:7125`. Unset means **no cross-origin access**. `*` restores the old allow-everything behaviour |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (enables notifications) |
@@ -187,6 +187,16 @@ All persistent data lives under `/app/data` inside the container:
 |------|----------|---------|
 | 8088 | HTTP/WS | Web UI, REST API, WebSocket, camera proxy, MCP |
 | 7125 | HTTP/WS | Moonraker compatibility API (for Mainsail/Fluidd/KlipperScreen) |
+
+### Slicers (OctoPrint host)
+
+OrcaSlicer, PrusaSlicer and other slicers with an **OctoPrint** physical-printer type can
+point at `http://<host>:7125` or `http://<host>:8088/octoprint`. When `SERVICE_API_KEY` is
+set, enter that key in the printer's **API Key** field: the slicer sends it as
+`X-Api-Key`, and every OctoPrint write (print start/cancel/pause, temperatures, jogging
+and homing) needs it. Without it, writes are refused with **403**; a **wrong** key is refused
+on every request, so the slicer's "Test" button tells you whether the key is right. With
+`SERVICE_API_KEY` unset, leave the field empty.
 
 ## Prerequisites
 
