@@ -250,6 +250,85 @@ past it is `pnpm install --config.confirmModulesPurge=false`. Running `pnpm inst
 in a real terminal and answering the prompt also works. Hosted CI never sees the refusal,
 because pnpm skips the prompt when `CI` is set.
 
+## pnpm 12 (ELEG-128): staying on 11, and why
+
+**Decision, 2026-11-25: the pin stays on 11.x.** The deciding fact is the lockfile shape,
+not anything the gates check. Measured in a scratch copy of this repo's `package.json`,
+`pnpm-workspace.yaml` and `pnpm-lock.yaml`, with `packageManager` set to `pnpm@12.22.0`
+(the newest 12.x over seven days old on that date). Nothing in the repo changed.
+
+**Invoked directly, pnpm 12 makes the lockfile two YAML documents.** A plain install
+prepends pnpm's own toolchain lock, and the project graph moves into a second document:
+
+```
+1:---
+2:lockfileVersion: '9.0'
+8:    packageManagerDependencies:
+167:---
+168:lockfileVersion: '9.0'
+```
+
+GitHub's dependency graph reads only the first document. lookout (LOOK-102) and hexrealm
+(HEXR-822/825) both measured it: their SBOM listed the `pnpm` / `@pnpm/exe.*` entries and
+no npm dependency at all. Dependabot then raises nothing, and its zero reads as clean. On
+this public repo the advisories path *is* Dependabot (see "Dependency advisories are
+deliberately NOT a gate" below), so taking 12 at its defaults would quietly switch it off.
+
+**How you invoke pnpm 12 changes the result, so measure it the way CI runs it.** Through
+the pnpm 11 global (which reads `packageManager` and switches to 12.22.0), 12 wrote **no**
+leading document: a frozen install, `--fix-lockfile` and a fresh `--lockfile-only` were all
+one document. LOOK-102 found the same: the older shim passes `pmOnFail=ignore` to its 12
+child. CI does not use a shim. `pnpm/action-setup` installs the pinned 12 and runs it
+directly, and run that way a frozen install against today's one-document lockfile fails:
+
+```
+ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE
+Cannot update packageManagerDependencies with "frozen-lockfile" because the lockfile is not up to date
+```
+
+So the move cannot be a pin bump plus a re-locked file. A shim-made lockfile fails in CI,
+and a directly-made one blinds Dependabot.
+
+**There is a way out, and it is ELEG-138, not this section.** `pmOnFail: ignore` in
+`pnpm-workspace.yaml` stops pnpm 12 writing the document. With it, pnpm 12.22.0 invoked
+directly left zero document markers after a frozen install, a plain install and
+`--fix-lockfile`. lookout and hexrealm shipped exactly that, and their SBOMs then listed
+the npm packages, read a few hours after merge. The cost is that pnpm 12 itself no longer
+switches to the pin. Here the pnpm 11 global still switched (it printed 12.22.0 in the
+scratch tree). The siblings added a gate that fails on any document marker and on a pnpm
+major mismatch. That is a tracked setting plus a new gate, so it is its own change.
+
+**The other 12.0 risks checked out clean here:**
+
+- **Workspace keys are all recognised.** No `ERR_PNPM_UNRECOGNIZED_WORKSPACE_SETTINGS` for
+  `overrides`, `allowBuilds`, `minimumReleaseAge` or `updateConfig`. The check does run:
+  adding a bogus key turned it red with "The following settings in pnpm-workspace.yaml are
+  not recognized by this version of pnpm".
+- **Overrides are honoured from `pnpm-workspace.yaml`.** A lockfile pnpm 12 generated from
+  scratch carries the same 13-entry `overrides:` block as 11's. SOPP-118's `pnpm.overrides`
+  trap does not apply, because there is no `pnpm` field in `package.json`.
+- **Peer re-keying was not noisy here.** Through the shim, `--fix-lockfile` produced five
+  small hunks (one `peerDependencies` block, `argue-cli` 3.1.0 → 3.2.0, one dropped
+  `engines` line), not a re-keyed tree.
+
+**The pnpm 11 measurements above, re-run against 12.22.0 (directly invoked):**
+
+- `allowBuilds` / `strictDepBuilds`: with the `allowBuilds` key deleted, the install fails
+  with `ERR_PNPM_IGNORED_BUILDS  Ignored build scripts: esbuild@0.28.2,
+  onnxruntime-node@1.30.0, simple-git-hooks@2.14.0`, the same as 11. Only that negative
+  half was measured cleanly. Whether every approved script runs needs a clean directory.
+  The probe directory had an earlier `--ignore-scripts` install, and it logged only
+  esbuild's `postinstall: Done`. ELEG-138 owes that check.
+- The placeholder trap: that failing install, run non-TTY, wrote **nothing** into
+  `pnpm-workspace.yaml`. A diff against a copy taken just before was empty. This matches
+  11.28.5, so the check stays.
+- The `minimumReleaseAge` strict table was **not** re-run. ELEG-138 owes it.
+
+**What reopens this:** GitHub's dependency graph learning to read multi-document pnpm
+lockfiles, or pnpm writing the toolchain lock somewhere other than the front of
+`pnpm-lock.yaml`. Either one turns the move back into a pin bump. Until then, ELEG-138
+is the route.
+
 ## CI works here, unlike in the private siblings
 
 `.github/workflows/ci.yml` runs on `ubuntu-latest`, and that is deliberate: **this repo
