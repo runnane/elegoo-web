@@ -91,7 +91,7 @@ importers:
         specifier: ^10.0.6
         version: 10.0.6
       jsdom:
-        specifier: 31.0.1
+        specifier: ^31.0.1
         version: 31.0.1(@noble/hashes@1.8.0)
       knip:
         specifier: ^6.44.1
