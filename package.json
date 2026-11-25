@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@12.22.0",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.22.2"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec biome check --staged --write --no-errors-on-unmatched"
@@ -49,7 +49,7 @@
     "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "^5.0.4",
     "concurrently": "^10.0.6",
-    "jsdom": "^30.1.3",
+    "jsdom": "^31.0.1",
     "knip": "^6.44.1",
     "release-it": "^21.1.1",
     "simple-git-hooks": "^2.14.0",
