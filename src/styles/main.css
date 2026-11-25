@@ -2858,16 +2858,32 @@ body {
   font-weight: 500;
 }
 .status-dot {
-  width: 7px;
-  height: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
 }
 .status-dot-ok {
   background: var(--success);
 }
 .status-dot-err {
   background: var(--danger);
+}
+.status-dot-off {
+  background: var(--text-muted);
+}
+.svc-state {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  min-width: 5.5em;
+  text-align: right;
 }
 .svc-loading {
   color: var(--text-muted);
