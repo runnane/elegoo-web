@@ -229,7 +229,7 @@ const httpServer = createServer((req, res) => {
         config.corsPolicy,
         req.headers.origin,
         'GET, POST, DELETE, OPTIONS',
-        'Content-Type, Authorization',
+        'Content-Type, Authorization, X-Api-Key',
       ),
     );
     if (req.method === 'OPTIONS') {
