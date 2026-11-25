@@ -1,5 +1,6 @@
 import type { CommandSender } from '../ws-client';
-import { $, fetchTimeout } from './helpers';
+import { $ } from './helpers';
+import { apiWrite } from './api-key';
 import { toast } from './toast';
 
 let controlsBound = false;
@@ -225,7 +226,7 @@ export function bindControls(client: CommandSender): void {
     captureBtn.disabled = true;
     captureBtn.textContent = `⏳ ${duration}s...`;
     try {
-      const res = await fetchTimeout(
+      const res = await apiWrite(
         '/api/debug/capture',
         {
           method: 'POST',

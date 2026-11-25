@@ -96,6 +96,16 @@ if (config.aiEnabled) {
   );
 }
 log.info(`Moonraker: http://${config.bindAddress}:${config.moonrakerPort}`);
+// Whether writes are gated (ELEG-139). Never the key itself — not even a prefix.
+if (config.serviceApiKey) {
+  log.info('Write auth: enabled — /api/* writes need SERVICE_API_KEY');
+} else {
+  log.warn(
+    '⚠  SERVICE_API_KEY is not set — every /api/* write is OPEN to anyone who can reach ' +
+      'this port (uploads, the print queue, printer commands). Set a key of 32+ characters ' +
+      'to require it (see README).',
+  );
+}
 
 // --- State Store (shared state for all consumers) ---
 const store = new StateStore(bridge, config.progressInterval);

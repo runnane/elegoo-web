@@ -16,6 +16,7 @@ import type { CommandSender } from '../ws-client';
 import type { PrinterState } from '../printer-state';
 import type { QueueSnapshot } from '../print-queue-shared';
 import { escapeAttr, escapeHtml, fetchTimeout } from './helpers';
+import { apiWrite } from './api-key';
 import { toast } from './toast';
 import { requestPrintDialog } from './print-dialog';
 import { baseName, queueRows, startNextView } from './print-queue-view';
@@ -36,7 +37,8 @@ type QueueResponse = { ok: boolean; body: Record<string, unknown> };
 
 async function queueRequest(path: string, init?: RequestInit): Promise<QueueResponse> {
   try {
-    const res = await fetchTimeout(path, init);
+    // Only writes carry the key (ELEG-139); the GET is open.
+    const res = init?.method ? await apiWrite(path, init) : await fetchTimeout(path, init);
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (body.queue) handlePrintQueueUpdate(body.queue);
     return { ok: res.ok, body };

@@ -202,6 +202,10 @@ PRINTER_PASSWORD=123456
 # Service port (web UI + API)
 SERVICE_PORT=${SERVICE_PORT}
 
+# Write authentication (recommended). Every /api/* write then needs this key; reads stay
+# open. 32+ characters, e.g. from: openssl rand -hex 32. Unset = writes open to anyone.
+# SERVICE_API_KEY=<your-random-key>
+
 # Camera (auto-detected from printer IP if not set)
 # CAMERA_ENABLED=true
 # CAMERA_URL=http://172.20.100.236:8080

@@ -13,6 +13,7 @@ import {
 } from './helpers';
 import { requestPrintDialog } from './print-dialog';
 import { addToPrintQueue } from './print-queue';
+import { NEEDS_API_KEY_MESSAGE, applyApiKey, notifyIfUnauthorized } from './api-key';
 import { type ListControls, createListControls } from './list-controls';
 
 let currentSource: 'local' | 'u-disk' = 'local';
@@ -715,6 +716,7 @@ async function uploadFile(file: File, client: CommandSender): Promise<void> {
   try {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api/files/upload?source=${encodeURIComponent(source)}`);
+    applyApiKey(xhr); // ELEG-139: the upload is a gated write
 
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
@@ -735,6 +737,7 @@ async function uploadFile(file: File, client: CommandSender): Promise<void> {
           } catch {
             /* ignore */
           }
+          if (notifyIfUnauthorized(xhr.status)) msg = NEEDS_API_KEY_MESSAGE;
           reject(new Error(msg));
         }
       };

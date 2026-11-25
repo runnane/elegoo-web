@@ -9,13 +9,14 @@
  *   POST   /api/queue/resume           — release a hold (never starts a job)
  *   POST   /api/queue/start-next       — { id, bedCleared: true, config? } start the head
  *
- * **`start-next` is a printer command, and this service has no authentication**
- * (`.agents/security.md`). Anyone who can reach the port can call it, exactly as they can
- * press the existing Print button or call `/mcp`'s `start_print`. The refusals in
- * `PrintQueue.startNext` narrow *when* it acts; they are not access control.
+ * **`start-next` is a printer command.** Every mutation here needs `SERVICE_API_KEY` when
+ * one is set — enforced once, by the `/api/*` write gate in `rest-api.ts`, before this
+ * handler is reached (ELEG-139). With the key unset, anyone who can reach the port can
+ * call it (`.agents/security.md`). The refusals in `PrintQueue.startNext` narrow *when*
+ * it acts; they are not access control.
  *
- * Mounted by `rest-api.ts` after its CORS block, so these routes get the same policy as
- * every other `/api/*` route.
+ * Mounted by `rest-api.ts` after its CORS block and its write gate, so these routes get
+ * the same policy as every other `/api/*` route.
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
