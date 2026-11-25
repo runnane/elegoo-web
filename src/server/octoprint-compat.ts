@@ -16,7 +16,13 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
 import type { FanInfo } from '../types.js';
 import { getLogger } from './logger.js';
-import { octoprintApiSettings, octoprintLoginPayload } from './compat-auth.js';
+import {
+  type OctoPrintAccess,
+  octoprintApiSettings,
+  octoprintCurrentUser,
+  octoprintLoginPayload,
+} from './compat-auth.js';
+import { authorize, extractKey } from './write-auth.js';
 
 const _log = getLogger('OctoPrint');
 
@@ -104,6 +110,29 @@ export function getTemperatureData(store: StateStore) {
   };
 }
 
+/**
+ * Methods the OctoPrint layer treats as reads. **Everything else is a write and needs
+ * `SERVICE_API_KEY`** when it is set (ELEG-143) — default-deny by method, so a POST route
+ * added later is gated without anyone remembering to gate it. There is deliberately no
+ * list of open writes: `POST /api/login` is gated too, because with the key set a login
+ * that presents no key is a failed login, and OctoPrint answers that with 403.
+ */
+const READ_METHODS = new Set(['GET', 'HEAD']);
+
+/** The refusal. OctoPrint answers a missing or wrong API key with 403, not 401. */
+function forbidden(res: ServerResponse, verdict: 'missing' | 'invalid'): void {
+  json(
+    res,
+    {
+      error: verdict === 'invalid' ? 'Invalid API key' : 'API key required',
+      message:
+        'This action needs the service API key. Enter SERVICE_API_KEY as the API key ' +
+        'in your OctoPrint host settings (sent as "X-Api-Key: <key>" or "Authorization: Bearer <key>").',
+    },
+    403,
+  );
+}
+
 export function createOctoPrintRouter(
   store: StateStore,
   bridge: MqttBridge,
@@ -119,6 +148,20 @@ export function createOctoPrintRouter(
     const [urlPath, _query] = fullUrl.split('?');
     // Strip the /octoprint prefix to get the OctoPrint-style path
     const path = urlPath.replace(/^\/octoprint/, '');
+
+    // --- The write gate (ELEG-143) ---
+    // Inside the router, before any route, so it covers BOTH mounts: /octoprint/* on the
+    // main port and :7125/api/* (moonraker-server.ts prepends /octoprint). A wrong key is
+    // refused on any route, reads included, so a slicer's "Test connection" is truthful.
+    // The key is read per request: `serviceApiKey` is '' when unset (writes open).
+    const expected = config.serviceApiKey;
+    const presented = extractKey(req);
+    const verdict = authorize(expected, presented, !READ_METHODS.has(method));
+    if (verdict !== 'ok') {
+      forbidden(res, verdict);
+      return true;
+    }
+    const access: OctoPrintAccess = !expected ? 'open' : presented !== null ? 'apikey' : 'guest';
 
     // --- GET /api/version ---
     if (path === '/api/version' && method === 'GET') {
@@ -364,7 +407,7 @@ export function createOctoPrintRouter(
     // --- GET /api/settings (minimal stub) ---
     if (path === '/api/settings' && method === 'GET') {
       json(res, {
-        api: octoprintApiSettings(),
+        api: octoprintApiSettings(!!expected),
         feature: {
           sdSupport: true,
           temperatureGraph: true,
@@ -425,21 +468,17 @@ export function createOctoPrintRouter(
       return true;
     }
 
-    // --- GET /api/login (stub, always "logged in") ---
+    // --- POST /api/login (stub) ---
+    // Reaching here means the gate admitted a write: the key is unset, or was presented.
+    // A guest (key set, none presented) was already refused 403 above.
     if (path === '/api/login' && method === 'POST') {
-      json(res, octoprintLoginPayload());
+      json(res, octoprintLoginPayload(access === 'apikey' ? 'apikey' : 'open'));
       return true;
     }
 
     // --- GET /api/currentuser ---
     if (path === '/api/currentuser' && method === 'GET') {
-      json(res, {
-        name: 'elegoo',
-        admin: true,
-        groups: ['admins', 'users'],
-        permissions: [],
-        roles: ['admin', 'user'],
-      });
+      json(res, octoprintCurrentUser(access));
       return true;
     }
 
