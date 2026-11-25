@@ -19,15 +19,18 @@
 # a floor nobody can date. Check with: pnpm why <pkg>
 overrides:
   # release-it and jsdom (dev only) both pull undici 8.x. 8.10.2 closes the GHSA batch
-  # Dependabot raised on 8.0–8.10.1 (ELEG-117), two of them high.
-  undici: '>=8.10.2'
+  # Dependabot raised on 8.0–8.10.1 (ELEG-117), two of them high. 8.12.2 closes the
+  # next batch on 8.0–8.12.1 (ELEG-137), four of them high.
+  undici: '>=8.12.2'
 
   # @modelcontextprotocol/sdk 1.30.0 → express / ajv / express-rate-limit / hono.
   # Its declared ranges already permit all of these; only the lockfile was stale.
-  hono: '>=4.12.34'
-  '@hono/node-server': '>=2.0.5'
-  qs: '>=6.15.2'
-  body-parser: '>=2.3.0'
+  # Raised again in ELEG-137: hono <4.13.16 (five advisories), @hono/node-server
+  # <2.1.6 (two), qs <=6.16.0 (one), body-parser <2.4.0 (one, high).
+  hono: '>=4.13.16'
+  '@hono/node-server': '>=2.1.6'
+  qs: '>=6.16.1'
+  body-parser: '>=2.4.0'
   fast-uri: '>=3.1.5'
   # 10.7.1 closes four SSRF/trust-boundary classifier advisories (ELEG-117). RUNTIME:
   # express-rate-limit (via the sdk) and socks both resolve it.
@@ -59,8 +62,9 @@ overrides:
   # This CROSSES get-uri's declared ^5.3.1 (get-uri has no release that widens it), so
   # upstream has not blessed it. Verified rather than assumed: get-uri's ftp.js calls only
   # Client#access/lastMod/list/downloadTo/close, all unchanged in 6.x, and a probe drove
-  # get-uri's ftp path into basic-ftp 6.x (see the PR for ELEG-118).
-  basic-ftp: '>=6.2.1'
+  # get-uri's ftp path into basic-ftp 6.x (see the PR for ELEG-118). Raised to 6.2.4 for
+  # GHSA-5pm8-86m8-9m6r on <=6.2.3 (ELEG-137), a patch within the same 6.x line.
+  basic-ftp: '>=6.2.4'
 
 # Which dependencies may run install scripts (ELEG-9). pnpm 11 REMOVED
 # `onlyBuiltDependencies`, which this file used to carry. It is ignored now, not
