@@ -12,11 +12,19 @@ export interface CameraZoom {
   /** Back to the fitted view — on open and on close. */
   reset(): void;
   /**
-   * True once after a pan or pinch. The modal closes on a backdrop click, and a gesture
-   * that started on the image can still end in one; this lets the click handler ignore it.
+   * True when a click at `timeStamp` is the tail of a pan or pinch. The modal closes on
+   * a backdrop click. Pointer capture is the primary guard: it retargets a drag's click
+   * to `surface`, so a drag released over the backdrop does not close (measured in
+   * Chromium — this check alone changes nothing there). This is the fallback for an
+   * engine that captures but still targets the click at the common ancestor. Time-boxed
+   * because a touch gesture usually ends with no click at all: a flag left set swallowed
+   * the next real tap on the backdrop (measured, before this was a timestamp).
    */
-  consumeGesture(): boolean;
+  isGestureClick(timeStamp: number): boolean;
 }
+
+/** A click this soon (ms) after a gesture ends is that gesture's own click. */
+const GESTURE_CLICK_MS = 300;
 
 /** Movement below this (px) is still a tap, not a pan. */
 const TAP_SLOP = 8;
@@ -27,6 +35,7 @@ const DOUBLE_TAP_PX = 30;
 export function attachCameraZoom(surface: HTMLElement, img: HTMLImageElement): CameraZoom {
   let view: View = { ...IDENTITY };
   let gestured = false;
+  let gestureEndedAt = Number.NEGATIVE_INFINITY;
   const pointers = new Map<number, { x: number; y: number }>();
   let downAt: { x: number; y: number } | null = null;
   let moved = false;
@@ -91,6 +100,10 @@ export function attachCameraZoom(surface: HTMLElement, img: HTMLImageElement): C
 
   const end = (e: PointerEvent) => {
     if (!pointers.delete(e.pointerId)) return;
+    if (gestured) {
+      gestureEndedAt = e.timeStamp;
+      if (pointers.size === 0) gestured = false;
+    }
     if (pointers.size > 0 || moved || e.type === 'pointercancel') return;
     // A clean single tap: two of them close together make a double-tap.
     const p = local(e.clientX, e.clientY);
@@ -127,12 +140,11 @@ export function attachCameraZoom(surface: HTMLElement, img: HTMLImageElement): C
       pointers.clear();
       lastTap = null;
       gestured = false;
+      gestureEndedAt = Number.NEGATIVE_INFINITY;
       apply();
     },
-    consumeGesture() {
-      const g = gestured;
-      gestured = false;
-      return g;
+    isGestureClick(timeStamp) {
+      return timeStamp - gestureEndedAt < GESTURE_CLICK_MS;
     },
   };
 }

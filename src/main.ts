@@ -288,7 +288,7 @@ function showDashboard(): void {
     // Only the backdrop closes it. Taps on the image are zoom gestures now (ELEG-158), and
     // a pan that started on the image and ended over the backdrop is not a close either.
     cameraModal.addEventListener('click', (e) => {
-      if (cameraZoom.consumeGesture()) return;
+      if (cameraZoom.isGestureClick(e.timeStamp)) return;
       if (e.target === cameraModal) closeModal();
     });
 
