@@ -51,7 +51,7 @@ pnpm dev:web               # frontend only
 pnpm dev:service           # service only (tsx watch)
 ```
 
-Node ≥ 22.13 (`engines` in `package.json`; `@types/node` is pinned `^22` to that floor), pnpm 12 — pinned by `packageManager` in `package.json`. A pnpm 10 or 11 global switches
+Node ≥ 22.22.2 (`engines` in `package.json`, set by the dev-only `jsdom` 31 requirement; `@types/node` is pinned `^22` to that floor's major), pnpm 12 — pinned by `packageManager` in `package.json`. A pnpm 10 or 11 global switches
 to it by itself; a different pnpm 12+ global does **not**, because `pmOnFail: ignore`
 (which keeps `pnpm-lock.yaml` one YAML document, ELEG-138) also turns that switch off.
 `pnpm gates` fails on a pnpm major that differs from the pin and on any document marker

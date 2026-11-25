@@ -29,7 +29,7 @@ jobs:
       # fails on a document marker — so this job is where that setting is proven.
       #
       # `node-version: 22` resolves to the newest 22.x, which satisfies the
-      # `engines.node >=22.13` floor in package.json.
+      # `engines.node >=22.22.2` floor in package.json.
       - uses: pnpm/action-setup@v6
 
       # `cache: pnpm` is explicit and must stay. setup-node v5 added automatic
