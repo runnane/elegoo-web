@@ -12,7 +12,7 @@ import {
 } from 'three';
 import type { Object3D } from 'three';
 import type { PrinterState } from '../printer-state';
-import { $, fetchTimeout } from './helpers';
+import { $, fetchTextTimeout } from './helpers';
 import { chartPalette } from './chart-palette';
 
 /** Internal fields of WebGLPreview we need to access to stop the animate loop */
@@ -243,12 +243,27 @@ export async function loadGcode(filename: string, source = 'local'): Promise<voi
 
     const url = `/api/files/download?file=${encodeURIComponent(filename)}&source=${encodeURIComponent(source)}`;
     let resp: Response | null = null;
+    let gcode: string | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        resp = await fetchTimeout(url, undefined, 120_000);
-        if (resp.ok) break;
+        // The bound covers the body too, not just the headers (ELEG-131).
+        const got = await fetchTextTimeout(url, undefined, 120_000);
+        if (got.bodyError) {
+          // Headers arrived, then the printer stalled or dropped the file. Retrying
+          // would only wait out the bound again, so report it straight away.
+          throw new Error(
+            'The printer did not deliver the file (the download stalled or was cut off). ' +
+              'It may refuse file downloads while printing — try again when the print has finished.',
+          );
+        }
+        resp = got.resp;
+        if (resp.ok) {
+          gcode = got.text;
+          break;
+        }
         resp = null;
       } catch (e) {
+        if ((e as Error).message.startsWith('The printer did not deliver')) throw e;
         if (attempt < 3) {
           if (statusEl) statusEl.textContent = `Retry ${attempt}/2 — download failed`;
           await new Promise((r) => setTimeout(r, 2000));
@@ -259,9 +274,9 @@ export async function loadGcode(filename: string, source = 'local'): Promise<voi
     }
     if (!resp || !resp.ok) throw new Error(`Download failed: ${resp?.status ?? 'no response'}`);
 
-    if (statusEl) statusEl.textContent = 'Parsing gcode…';
+    if (gcode === null) throw new Error('Download failed: empty response');
 
-    const gcode = await resp.text();
+    if (statusEl) statusEl.textContent = 'Parsing gcode…';
 
     // Initialize clean preview with filament colors
     preview = initPreview(cachedColorMap);
