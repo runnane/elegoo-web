@@ -33,6 +33,7 @@ import { handlePrintQueueRequest } from './print-queue-routes.js';
 import { generateReportPDF } from './print-report-pdf.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
+import { guardHttp } from './write-auth.js';
 import { captureLogDir, gcodeCacheDir } from './data-paths.js';
 import { getLogger } from './logger.js';
 import { resolveTimelapseUpstream, type TimelapseUpstream } from './timelapse-proxy.js';
@@ -841,6 +842,26 @@ function serveStatic(url: string, res: ServerResponse): void {
   res.end('Not found');
 }
 
+/**
+ * `/api/*` writes that stay open with a key set (ELEG-139). Exact method + path.
+ * `POST /api/client-error` is a size-capped log line the SPA must be able to send
+ * before anyone has entered a key; it reaches neither the printer nor any config.
+ */
+const OPEN_API_WRITES = new Set(['POST /api/client-error']);
+
+/**
+ * Whether an `/api/*` request is a write that needs the key. **Default-deny:** every
+ * method other than GET and HEAD is a write unless it is listed in OPEN_API_WRITES, so a
+ * write route added later is gated without anyone remembering to gate it. Reads (GET)
+ * stay open — that includes the camera, `/api/metrics/prometheus` and downloads.
+ */
+function isGatedApiWrite(method: string | undefined, url: string): boolean {
+  const m = (method || 'GET').toUpperCase();
+  if (m === 'GET' || m === 'HEAD') return false;
+  const path = url.split('?')[0];
+  return !OPEN_API_WRITES.has(`${m} ${path}`);
+}
+
 export function createRestRouter(
   store: StateStore,
   config: ServiceConfig,
@@ -862,13 +883,22 @@ export function createRestRouter(
     if (url.startsWith('/api/')) {
       applyCors(
         res,
-        corsHeaders(config.corsPolicy, req.headers.origin, 'GET, POST, OPTIONS', 'Content-Type'),
+        corsHeaders(
+          config.corsPolicy,
+          req.headers.origin,
+          'GET, POST, OPTIONS',
+          'Content-Type, Authorization, X-Api-Key',
+        ),
       );
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
         return;
       }
+      // Write authentication (ELEG-139): the one gate for every /api/* route, including
+      // the presets and queue handlers below. After the CORS block, so a preflight (which
+      // never carries credentials) still answers and a 401 still carries CORS headers.
+      if (!guardHttp(req, res, config.serviceApiKey, isGatedApiWrite(req.method, url))) return;
     }
 
     if (presetsHandler && url.startsWith('/api/printers') && presetsHandler(req, res)) return;
@@ -898,6 +928,8 @@ export function createRestRouter(
           // Which address the one connection targets — changes when a connection preset is
           // switched (ELEG-95). Already sent to every `/ws` client in `service_status`.
           printerIp: _bridge?.ip ?? null,
+          // Whether SERVICE_API_KEY gates writes (ELEG-139). Never the key itself.
+          writeAuth: config.serviceApiKey ? 'enabled' : 'disabled',
           clients: 0, // filled in by ws-transport if needed
           // Which commit is serving this. All-null on an unstamped deploy or a dev
           // run; cached, because this endpoint is polled.

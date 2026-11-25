@@ -10,7 +10,7 @@
  * - Search/filter across all fields
  */
 
-import { fetchTimeout } from './helpers';
+import { apiWrite } from './api-key';
 import { PrinterState } from '../printer-state';
 import { STATUS_NAMES, SUB_STATUS_NAMES, EXCEPTION_NAMES, SPEED_MODE_NAMES } from '../types';
 
@@ -565,7 +565,7 @@ export function bindDebugPanel(): void {
       sdcpBtn.disabled = true;
       if (resultSpan) resultSpan.textContent = 'SDCP: connecting...';
       try {
-        const resp = await fetchTimeout('/api/debug/videostream/sdcp', { method: 'POST' }, 15_000);
+        const resp = await apiWrite('/api/debug/videostream/sdcp', { method: 'POST' }, 15_000);
         const data = await resp.json();
         if (resultSpan)
           resultSpan.textContent = data.success
@@ -586,7 +586,7 @@ export function bindDebugPanel(): void {
       mqttBtn.disabled = true;
       if (resultSpan) resultSpan.textContent = 'MQTT: sending...';
       try {
-        const resp = await fetchTimeout('/api/debug/videostream/mqtt', { method: 'POST' }, 15_000);
+        const resp = await apiWrite('/api/debug/videostream/mqtt', { method: 'POST' }, 15_000);
         const data = await resp.json();
         if (resultSpan)
           resultSpan.textContent = data.success

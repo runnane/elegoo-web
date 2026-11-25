@@ -3,6 +3,7 @@
  */
 
 import { $, escapeHtml, formatTime, fetchTimeout } from './helpers';
+import { apiWrite } from './api-key';
 import { type ListControls, createListControls } from './list-controls';
 import { nonZero } from './list-sort';
 
@@ -148,7 +149,7 @@ function renderReportList(): void {
       const id = (btn as HTMLElement).dataset.reportId;
       if (!id || !confirm(`Delete report for this print?`)) return;
       try {
-        const res = await fetchTimeout(`/api/reports/${encodeURIComponent(id)}`, {
+        const res = await apiWrite(`/api/reports/${encodeURIComponent(id)}`, {
           method: 'DELETE',
         });
         if (res.ok) {

@@ -165,7 +165,7 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   in the only place agents look. Same for `README.md`'s environment-variable table
   when `src/server/config.ts` gains a key.
 - **Secrets stay server-side and out of git.** `PRINTER_PASSWORD`,
-  `TELEGRAM_BOT_TOKEN`, `AI_VLM_API_KEY` are read from the environment
+  `TELEGRAM_BOT_TOKEN`, `AI_VLM_API_KEY`, `SERVICE_API_KEY` are read from the environment
   (`.env`, which is gitignored) at runtime — never hardcoded, never returned to the
   browser, never logged, and **placeholders only** in `.env.example`,
   `docker-compose.example.yml` and anything else committed. Mirrors the org

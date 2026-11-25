@@ -16,11 +16,11 @@ import {
   escapeHtml,
   escapeAttr,
   formatTime,
-  fetchTimeout,
   applyDarkThumbnailCheck,
   THUMBNAIL_CLASS,
 } from './helpers';
 import { toast } from './toast';
+import { apiWrite } from './api-key';
 import { currentFileSource } from './files';
 import { BED_CLEAR_CONFIRM_LABEL, BED_CLEAR_REMINDER } from '../print-queue-shared';
 
@@ -376,7 +376,7 @@ function showDialog(
       fillEl.style.width = '30%';
 
       try {
-        const resp = await fetchTimeout(
+        const resp = await apiWrite(
           '/api/files/precache',
           {
             method: 'POST',
