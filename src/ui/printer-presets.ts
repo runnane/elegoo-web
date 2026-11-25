@@ -13,6 +13,7 @@
  */
 
 import { CONNECTION_PRESETS_API_ENV } from '../types';
+import { apiWrite } from './api-key';
 
 interface PresetView {
   id: string;
@@ -40,11 +41,13 @@ async function request(
   url: string,
   body?: unknown,
 ): Promise<{ ok: boolean; data: Record<string, unknown> }> {
-  const res = await fetch(url, {
+  const init: RequestInit = {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  };
+  // Writes carry the key and explain a 401 (ELEG-139); the GET list is open.
+  const res = method === 'GET' ? await fetch(url, init) : await apiWrite(url, init);
   let data: Record<string, unknown> = {};
   try {
     data = (await res.json()) as Record<string, unknown>;

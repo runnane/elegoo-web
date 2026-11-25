@@ -32,6 +32,13 @@ export interface ServiceConfig {
   /** Cross-origin policy for every HTTP surface; defaults to same-origin (ELEG-24) */
   corsPolicy: CorsPolicy;
 
+  /**
+   * The shared key that gates writes (ELEG-25, ELEG-139); see `write-auth.ts`. Empty
+   * means unset: writes stay open, as they always were, and startup warns. When set it
+   * is at least 32 characters. **Never log it, return it, or put it in an error.**
+   */
+  serviceApiKey: string;
+
   // Telegram (optional)
   telegramEnabled: boolean;
   telegramToken: string;
@@ -48,8 +55,9 @@ export interface ServiceConfig {
 
   /**
    * Allow adding, removing and switching printer connection presets over the REST API
-   * (ELEG-95). Off by default: the API has no authentication, and switching re-points
-   * every consumer and makes the service dial an address a request chose.
+   * (ELEG-95). Off by default: switching re-points every consumer and makes the service
+   * dial an address a request chose. When `SERVICE_API_KEY` is set the writes also need
+   * the key (ELEG-139); this flag still applies on top of it.
    */
   connectionPresetsApi: boolean;
 
@@ -116,6 +124,31 @@ export function validateIPv4(value: string, name: string): void {
   }
 }
 
+/** The shortest `SERVICE_API_KEY` accepted — long enough that HTTP brute force is moot. */
+export const SERVICE_API_KEY_MIN_LENGTH = 32;
+
+/**
+ * Validates `SERVICE_API_KEY` (ELEG-139). Unset or empty is `''` — writes stay open.
+ * Set means at least 32 characters, with no leading or trailing whitespace: the HTTP
+ * parser strips that from header values, so such a key could never be presented.
+ *
+ * Unlike the other validators here, **the errors never quote the value** — it is a
+ * secret, and boot errors land in logs.
+ */
+export function parseServiceApiKey(raw: string | undefined): string {
+  if (!raw) return '';
+  if (raw.trim() !== raw) {
+    throw new Error('SERVICE_API_KEY must not begin or end with whitespace');
+  }
+  if (raw.length < SERVICE_API_KEY_MIN_LENGTH) {
+    throw new Error(
+      `SERVICE_API_KEY is set but shorter than ${SERVICE_API_KEY_MIN_LENGTH} characters ` +
+        '(generate one with: openssl rand -hex 32)',
+    );
+  }
+  return raw;
+}
+
 export function loadConfig(): ServiceConfig {
   // No default. It used to fall back to a real address on the maintainer's own LAN,
   // which shipped in a public image (ELEG-73) — so a user who forgot to set this got a
@@ -163,6 +196,8 @@ export function loadConfig(): ServiceConfig {
     );
   }
 
+  const serviceApiKey = parseServiceApiKey(process.env.SERVICE_API_KEY);
+
   return {
     printerIp,
     printerPassword: env('PRINTER_PASSWORD', '123456'),
@@ -172,6 +207,7 @@ export function loadConfig(): ServiceConfig {
     cameraEnabled: env('CAMERA_ENABLED') !== 'false',
     cameraUrl: env('CAMERA_URL') || `http://${printerIp}:8080`,
     corsPolicy: parseCorsPolicy(env('CORS_ALLOWED_ORIGINS')),
+    serviceApiKey,
     telegramEnabled: !!(telegramToken && telegramChatId),
     telegramToken,
     telegramChatId,

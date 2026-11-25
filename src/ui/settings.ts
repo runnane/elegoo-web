@@ -11,6 +11,7 @@ import { notifySupport, requestNotifyPermission } from './notify-desktop';
 import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { mountPrinterPresets } from './printer-presets';
+import { API_KEY_SECTION, apiWrite, getApiKey, setApiKey } from './api-key';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
 
@@ -256,6 +257,19 @@ function buildSettingsHTML(content: HTMLElement): void {
     </section>
 
     <section class="settings-section">
+      <h3>${API_KEY_SECTION}</h3>
+      <p class="settings-hint">The service's <code>SERVICE_API_KEY</code>. When the service has one set, uploads, the print queue, settings changes and other writes need it; viewing does not. Stored in this browser only.</p>
+      <div class="settings-row">
+        <label for="settings-api-key">${API_KEY_SECTION}</label>
+        <input type="password" id="settings-api-key" class="log-select" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="settings-actions">
+        <button id="settings-api-key-save" class="btn btn-sm btn-ghost">Save key</button>
+        <button id="settings-api-key-clear" class="btn btn-sm btn-ghost">Clear</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h3>Printer connections</h3>
       <p class="settings-hint">Saved printer addresses. The service talks to one printer at a time: switching disconnects from the current one and clears its charts, layer times and event log. <code>PRINTER_IP</code> is always the default entry.</p>
       <div id="settings-printer-presets"></div>
@@ -280,6 +294,22 @@ function buildSettingsHTML(content: HTMLElement): void {
 
   const presetsRoot = document.getElementById('settings-printer-presets');
   if (presetsRoot) mountPrinterPresets(presetsRoot);
+
+  // ---- API key (ELEG-139) ---- set through .value, never interpolated into the HTML.
+  const apiKeyInput = content.querySelector('#settings-api-key') as HTMLInputElement | null;
+  if (apiKeyInput) {
+    apiKeyInput.value = getApiKey();
+    content.querySelector('#settings-api-key-save')?.addEventListener('click', () => {
+      setApiKey(apiKeyInput.value);
+      apiKeyInput.value = getApiKey();
+      toast(getApiKey() ? 'API key saved' : 'API key cleared', 'success');
+    });
+    content.querySelector('#settings-api-key-clear')?.addEventListener('click', () => {
+      setApiKey('');
+      apiKeyInput.value = '';
+      toast('API key cleared', 'success');
+    });
+  }
 
   // Bind card visibility toggles
   content.querySelectorAll('.settings-card-visible').forEach((cb) => {
@@ -542,7 +572,7 @@ async function loadTelegramStatus(): Promise<void> {
         return;
       }
       try {
-        const saveRes = await fetchTimeout('/api/config/telegram', {
+        const saveRes = await apiWrite('/api/config/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ progressInterval: val }),
@@ -698,7 +728,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
       return;
     }
     try {
-      const res = await fetchTimeout('/api/config/ai-labels', {
+      const res = await apiWrite('/api/config/ai-labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ labels: updated }),
@@ -717,7 +747,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
   container.querySelector('#ai-labels-reset')?.addEventListener('click', async () => {
     if (!confirm('Reset all AI label configs to defaults?')) return;
     try {
-      const res = await fetchTimeout('/api/config/ai-labels', { method: 'DELETE' });
+      const res = await apiWrite('/api/config/ai-labels', { method: 'DELETE' });
       if (res.ok) {
         const data = (await res.json()) as { labels: AILabelConfig[] };
         renderAILabelEditor(container, data.labels);

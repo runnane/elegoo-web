@@ -54,6 +54,7 @@ import {
   bindKeyboardShortcuts,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
+import { apiWrite } from './ui/api-key';
 import {
   bindPrintQueue,
   handlePrintQueueUpdate,
@@ -220,7 +221,7 @@ function showDashboard(): void {
     $('btn-reset-layer-data').addEventListener('click', async () => {
       if (!confirm('Reset all layer duration data?')) return;
       try {
-        const res = await fetchTimeout('/api/layer-data', { method: 'DELETE' });
+        const res = await apiWrite('/api/layer-data', { method: 'DELETE' });
         if (res.ok) {
           toast('Layer data reset', 'success');
         } else {
