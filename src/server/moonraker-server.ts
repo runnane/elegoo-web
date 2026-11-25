@@ -51,6 +51,13 @@ import { MOONRAKER_VERSION, AVAILABLE_OBJECTS, queryObjects } from './moonraker-
 import { createOctoPrintRouter } from './octoprint-compat.js';
 import { getLogger } from './logger.js';
 import { cacheGcodeBuffer } from './rest-api.js';
+import { authorize, checkKey, extractKey } from './write-auth.js';
+import {
+  classifyRpc,
+  isMoonrakerHttpWrite,
+  isProtectedDbNamespace,
+  MOONRAKER_UNAUTHORIZED,
+} from './moonraker-auth.js';
 
 const log = getLogger('MoonrakerSrv');
 
@@ -246,6 +253,13 @@ interface ClientState {
   ws: WebSocket;
   connectionId: number;
   identified: boolean;
+  /**
+   * The service API key this connection proved — by `server.connection.identify {api_key}`
+   * or by `X-Api-Key` / `Authorization: Bearer` on the upgrade — or null. Re-checked per
+   * frame against the configured key, so it is the `authorised` state without being able
+   * to go stale. Private to the server: never sent, never logged.
+   */
+  verifiedKey: string | null;
   subscribedObjects: Record<string, string[] | null>; // object name → attrs or null (all)
   /** Snapshot of last sent values per object.attr to compute deltas */
   lastSent: Record<string, Record<string, unknown>>;
@@ -281,30 +295,37 @@ export class MoonrakerServer {
     this.httpServer = createServer((req, res) => this.handleHttp(req, res));
 
     // ── WebSocket Server ──
-    this.wss = new WebSocketServer({ server: this.httpServer, path: '/websocket' });
-    // Also accept connections at root path for clients that connect to ws://host:7125/
+    // `/websocket`, plus every other upgrade path (/, /klippy, …) for clients that connect
+    // to ws://host:7125/. Both are `noServer` and routed by ONE upgrade listener: a
+    // WebSocketServer attached with `{server, path}` answers 400 to every upgrade whose
+    // path is not its own, so the catch-all answered 400 on `/` — measured with ws 8.22
+    // while gating both paths (ELEG-142). Same dispatcher, same write gate.
+    this.wss = new WebSocketServer({ noServer: true });
     const wssRoot = new WebSocketServer({ noServer: true });
     this.httpServer.on('upgrade', (req, socket, head) => {
       const pathname = (req.url || '/').split('?')[0];
-      if (pathname === '/websocket') {
-        // Let the primary WSS handle it
-        return;
-      }
-      // Accept all other upgrade paths (/, /klippy, etc.)
-      wssRoot.handleUpgrade(req, socket, head, (ws) => {
-        wssRoot.emit('connection', ws, req);
+      const target = pathname === '/websocket' ? this.wss : wssRoot;
+      target.handleUpgrade(req, socket, head, (ws) => {
+        target.emit('connection', ws, req);
       });
     });
 
-    const setupWs = (ws: WebSocket) => {
+    // Both WebSocket servers — `/websocket` and the catch-all — land here with the upgrade
+    // request, so a key on its headers authorises the connection on either path.
+    const setupWs = (ws: WebSocket, req: IncomingMessage) => {
       const client: ClientState = {
         ws,
         connectionId: nextConnectionId++,
         identified: false,
+        verifiedKey: null,
         subscribedObjects: {},
         lastSent: {},
         lastMessageTime: Date.now(),
       };
+      // A wrong key on the upgrade leaves the connection unauthorised (it can still read);
+      // there is no reply channel yet, and its first write gets the 401.
+      const presented = extractKey(req);
+      if (presented !== null) this.verifyKey(client, presented);
       this.clients.set(ws, client);
       log.info(`WS client connected (id: ${client.connectionId}, total: ${this.clients.size})`);
 
@@ -489,6 +510,19 @@ export class MoonrakerServer {
     }
   }
 
+  /**
+   * Check a presented key and record the outcome on the connection: the right key
+   * authorises it, anything else (wrong, empty, not a string) clears any earlier
+   * authorisation. With no key configured there is nothing to prove and every key passes.
+   */
+  private verifyKey(client: ClientState, presented: unknown): boolean {
+    const expected = this.config.serviceApiKey;
+    const key = typeof presented === 'string' ? presented : null;
+    const ok = !expected || (key !== null && checkKey(key, expected));
+    client.verifiedKey = expected && ok ? key : null;
+    return ok;
+  }
+
   // ── WebSocket JSON-RPC handler ──
   private handleWsMessage(client: ClientState, raw: string): void {
     // Any response we send resets the client's keepalive timer
@@ -507,11 +541,38 @@ export class MoonrakerServer {
       return;
     }
 
-    const params = msg.params || {};
+    // Only an object is a params object. A primitive (`"params": "x"`) would make the
+    // `'api_key' in params` check below throw inside a socket listener.
+    const params: Record<string, unknown> =
+      msg.params !== null && typeof msg.params === 'object' ? msg.params : {};
+
+    // Write auth (ELEG-142) — the one gate for both `:7125` WebSockets, before dispatch.
+    // Default-deny: a method in neither table of `moonraker-auth.ts` runs nothing at all.
+    const kind = classifyRpc(msg.method, params);
+    if (kind === 'unknown') {
+      log.warn(`Unknown JSON-RPC method: ${msg.method}`);
+      client.ws.send(rpcError(msg.id, -32601, `Method not found: ${msg.method}`));
+      return;
+    }
+    const verdict = authorize(this.config.serviceApiKey, client.verifiedKey, kind === 'write');
+    if (verdict !== 'ok') {
+      client.ws.send(rpcError(msg.id, MOONRAKER_UNAUTHORIZED.code, MOONRAKER_UNAUTHORIZED.message));
+      return;
+    }
 
     switch (msg.method) {
       // ── Connection ──
       case 'server.connection.identify':
+        // KlipperScreen's `moonraker_api_key` arrives here (MoonrakerApi.py). A wrong or
+        // non-string key is Moonraker's 401 — what Mainsail's identify error path checks —
+        // and revokes any earlier authorisation. No `api_key` at all is a plain anonymous
+        // identify (Mainsail, Fluidd), which leaves the connection as it was.
+        if ('api_key' in params && !this.verifyKey(client, params.api_key)) {
+          client.ws.send(
+            rpcError(msg.id, MOONRAKER_UNAUTHORIZED.code, MOONRAKER_UNAUTHORIZED.message),
+          );
+          break;
+        }
         client.identified = true;
         log.info(
           `Client identified: ${params.client_name} v${params.version} (type: ${params.type})`,
@@ -1037,10 +1098,11 @@ export class MoonrakerServer {
 
       case 'access.get_api_key':
       case 'access.post_api_key':
-        // No key is issued, so none is returned. Answering with a fixed string made
-        // clients display themselves as authenticated against a service that checks
-        // nothing (ELEG-26). `access.info` below reports login_required: false, which
-        // is how a client is supposed to learn that no credential is needed.
+        // Never hands out a key — not a fake one (ELEG-26), and not SERVICE_API_KEY
+        // either (ELEG-142): this method is open, so returning the real key would give
+        // it to anyone who asks. The key is configured by the operator and entered in
+        // the client (KlipperScreen's `moonraker_api_key`). `access.info` below keeps
+        // login_required: false, because reads still need no credential.
         client.ws.send(rpcError(msg.id, MOONRAKER_NO_API_KEY_CODE, NO_API_KEY_MESSAGE));
         break;
 
@@ -1245,6 +1307,20 @@ export class MoonrakerServer {
       const handled = this.octoPrintHandler(req, res);
       req.url = originalUrl;
       if (handled) return;
+    }
+
+    // Write auth (ELEG-142) for every Moonraker route on this server. Placed after the
+    // OctoPrint block on purpose: that router has its own gate and refusal (ELEG-143).
+    // A wrong key is refused even on a read; no key is refused only on a write.
+    if (
+      authorize(
+        this.config.serviceApiKey,
+        extractKey(req),
+        isMoonrakerHttpWrite(method, urlPath, query),
+      ) !== 'ok'
+    ) {
+      jsonError(res, MOONRAKER_UNAUTHORIZED.message, MOONRAKER_UNAUTHORIZED.code);
+      return;
     }
 
     // --- GET /server/info ---
@@ -1599,6 +1675,15 @@ export class MoonrakerServer {
           const parsed = JSON.parse(body);
           const ns = String(parsed.namespace ?? '');
           const key = String(parsed.key ?? '');
+          // The namespace is in the body, so the route-level gate could not see it: a
+          // write to `webcams` is what gated `POST /server/webcams/item` does (ELEG-142).
+          if (
+            isProtectedDbNamespace(ns) &&
+            authorize(this.config.serviceApiKey, extractKey(req), true) !== 'ok'
+          ) {
+            jsonError(res, MOONRAKER_UNAUTHORIZED.message, MOONRAKER_UNAUTHORIZED.code);
+            return;
+          }
           jsonResult(res, this.db.postItem(ns, key, parsed.value));
         })
         .catch(() => jsonError(res, 'Invalid JSON'));

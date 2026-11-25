@@ -109,8 +109,11 @@ describe('octoprintLoginPayload with no key configured', () => {
 
 describe('the no-API-key answer', () => {
   it('explains itself rather than returning an empty string', () => {
-    expect(NO_API_KEY_MESSAGE).toMatch(/no authentication/i);
-    expect(NO_API_KEY_MESSAGE.length).toBeGreaterThan(20);
+    // ELEG-142: a key now exists, so the message says it is withheld and how to send it,
+    // in words that stay true whether or not one is configured.
+    expect(NO_API_KEY_MESSAGE).toMatch(/does not hand out its API key/);
+    expect(NO_API_KEY_MESSAGE).toMatch(/api_key in server\.connection\.identify/);
+    expect(NO_API_KEY_MESSAGE).toMatch(/when one is set/);
   });
 
   it('uses a JSON-RPC error code, not a success code', () => {
@@ -122,8 +125,8 @@ describe('the no-sessions answer (ELEG-53)', () => {
   it('explains itself, and points at the field that says login is unnecessary', () => {
     // A client's UI shows this string. "Unauthorized" would send someone hunting for a
     // password that does not exist; naming access.info tells them where to look instead.
-    expect(NO_SESSIONS_MESSAGE).toMatch(/no authentication/i);
-    expect(NO_SESSIONS_MESSAGE).toMatch(/login_required/);
+    expect(NO_SESSIONS_MESSAGE).toMatch(/login_required is false/);
+    expect(NO_SESSIONS_MESSAGE).toMatch(/when one is configured/);
     expect(NO_SESSIONS_MESSAGE.length).toBeGreaterThan(20);
   });
 

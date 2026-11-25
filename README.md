@@ -148,7 +148,7 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 | `BIND_ADDRESS` | `0.0.0.0` | Interface both HTTP servers listen on. IPv4 only — see [`.agents/security.md`](.agents/security.md) before narrowing it in production |
 | `CAMERA_ENABLED` | `true` | Enable camera MJPEG proxy |
 | `CAMERA_URL` | `http://<PRINTER_IP>:8080` | Override camera URL. Applies to the `PRINTER_IP` printer only; a saved connection preset uses `http://<its address>:8080` |
-| `SERVICE_API_KEY` | — (writes open) | Shared key that every `/api/*` **write** needs: uploads, the print queue, settings changes, debug commands and connection presets — and every `/ws` printer command that is not a proven read (the WebSocket stream itself stays open). Send it as `Authorization: Bearer <key>` or `X-Api-Key: <key>` (on `/ws`, as an `{"type":"auth","key":"…"}` frame or on the upgrade request); in the web UI, enter it under **Settings → API key**. At least 32 characters (`openssl rand -hex 32`), or the service refuses to start. Reads stay open — status, metrics, `/api/metrics/prometheus` and the camera — but a **wrong** key is refused on any request. Unset keeps writes open and logs a warning at startup; `/api/health` reports `writeAuth: "enabled"` or `"disabled"`. The `/mcp` control tools need it too, as a Bearer header on every request — see [MCP.md](MCP.md#authentication). OctoPrint writes need it too, on `/octoprint/*` and `:7125/api/*` (ELEG-143; refused with 403) — see [Slicers](#slicers-octoprint-host). **Not yet enforced on Moonraker** (ELEG-142), so on its own it does not lock the printer down — see [`.agents/security.md`](.agents/security.md) |
+| `SERVICE_API_KEY` | — (writes open) | Shared key that every `/api/*` **write** needs: uploads, the print queue, settings changes, debug commands and connection presets — and every `/ws` printer command that is not a proven read (the WebSocket stream itself stays open). Send it as `Authorization: Bearer <key>` or `X-Api-Key: <key>` (on `/ws`, as an `{"type":"auth","key":"…"}` frame or on the upgrade request); in the web UI, enter it under **Settings → API key**. At least 32 characters (`openssl rand -hex 32`), or the service refuses to start. Reads stay open — status, metrics, `/api/metrics/prometheus` and the camera — but a **wrong** key is refused on any request. Unset keeps writes open and logs a warning at startup; `/api/health` reports `writeAuth: "enabled"` or `"disabled"`. The `/mcp` control tools need it too, as a Bearer header on every request — see [MCP.md](MCP.md#authentication). OctoPrint writes need it too, on `/octoprint/*` and `:7125/api/*` (ELEG-143; refused with 403) — see [Slicers](#slicers-octoprint-host). Moonraker writes need it too, on `/moonraker/*` and on `:7125` HTTP and WebSockets (ELEG-142; refused with Moonraker's 401) — see [Moonraker clients](#moonraker-clients) for what that means for KlipperScreen, Mainsail and Fluidd. Every write surface is enforced once the key is set — see [`.agents/security.md`](.agents/security.md) |
 | `CONNECTION_PRESETS_API` | `false` | Allow adding, removing and switching saved printer connection presets from Settings (`/api/printers`). Off by default: with it on, anyone who can make a write can re-point the service at another address — set `SERVICE_API_KEY` too, so that takes the key. Listing presets always works. `PRINTER_IP` is always the built-in default preset, and `PRINTER_PASSWORD` is only ever sent to that printer |
 | `CORS_ALLOWED_ORIGINS` | — (same-origin) | Comma-separated origins allowed to make cross-origin requests to `/api/*`, `/mcp`, `/moonraker/*`, `/octoprint/*` and `:7125`. Unset means **no cross-origin access**. `*` restores the old allow-everything behaviour |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (enables notifications) |
@@ -187,6 +187,18 @@ All persistent data lives under `/app/data` inside the container:
 |------|----------|---------|
 | 8088 | HTTP/WS | Web UI, REST API, WebSocket, camera proxy, MCP |
 | 7125 | HTTP/WS | Moonraker compatibility API (for Mainsail/Fluidd/KlipperScreen) |
+
+### Moonraker clients
+
+With `SERVICE_API_KEY` set, the Moonraker layer — `/moonraker/*`, the `:7125` HTTP routes
+and both `:7125` WebSockets — answers reads to anyone and refuses writes (print control,
+emergency stop, G-code, file/queue/history/webcam changes, restarts) with Moonraker's own
+`401 Unauthorized` until the key is presented. **KlipperScreen works**: put the key in its
+`moonraker_api_key` option and it sends it in `server.connection.identify`. HTTP clients
+send it as `X-Api-Key` (or `Authorization: Bearer`). **Mainsail and Fluidd connect
+read-only**: neither can send a static API key, so they show status, temperatures, files
+and the camera, and their controls are refused. Whether Fluidd gets a write path is a
+separate decision (ELEG-145).
 
 ### Slicers (OctoPrint host)
 

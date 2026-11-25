@@ -89,7 +89,9 @@ function stubConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
 }
 
 function fakeReq(url: string, method = 'GET'): IncomingMessage {
-  return { url, method } as unknown as IncomingMessage;
+  // `headers` is always present on a real request; the router reads it for the write gate
+  // (ELEG-142).
+  return { url, method, headers: {} } as unknown as IncomingMessage;
 }
 
 function fakeRes(): { res: ServerResponse; status: () => number; body: () => unknown } {
