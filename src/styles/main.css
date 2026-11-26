@@ -3454,6 +3454,12 @@ body {
   color: var(--text-muted);
   margin: 0 0 8px;
 }
+.spool-calc-error {
+  color: var(--danger);
+}
+.spool-calc-inputs input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
 .settings-hint code {
   background: var(--bg-input);
   padding: 1px 4px;
