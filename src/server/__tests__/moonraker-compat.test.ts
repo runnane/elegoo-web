@@ -182,12 +182,16 @@ describe('queryObjects — Klipper-style printer object shapes', () => {
     expect(r.is_active).toBe(false);
   });
 
-  it('virtual_sdcard: is_active while paused (status 3), not only while actively printing (status 2)', () => {
+  it('virtual_sdcard: is_active while paused (status 2 + 2502), not while Loading Filament (status 3)', () => {
     const s = makeStore();
+    s.status = baseStatus({
+      machine_status: { status: 2, sub_status: 2502, exception_status: [], progress: 47 },
+    });
+    expect(queryObjects(s, { virtual_sdcard: null }).virtual_sdcard.is_active).toBe(true);
     s.status = baseStatus({
       machine_status: { status: 3, sub_status: 0, exception_status: [], progress: 47 },
     });
-    expect(queryObjects(s, { virtual_sdcard: null }).virtual_sdcard.is_active).toBe(true);
+    expect(queryObjects(s, { virtual_sdcard: null }).virtual_sdcard.is_active).toBe(false);
   });
 
   it('display_status: progress mirrors machine_status.progress / 100 regardless of print state', () => {
@@ -330,26 +334,26 @@ describe('queryObjects — print_stats.state: CC2 machine_status/sub_status → 
     expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('printing');
   });
 
-  it('status 3 → paused', () => {
+  it('status 3 (Loading Filament) → standby, not paused', () => {
     const s = makeStore();
     s.status = baseStatus({
       machine_status: { status: 3, sub_status: 0, exception_status: [], progress: 10 },
     });
-    expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('paused');
+    expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('standby');
   });
 
-  it('sub_status 2502 → paused, independent of machine_status', () => {
+  it('status 2 + sub_status 2502 → paused', () => {
     const s = makeStore();
     s.status = baseStatus({
-      machine_status: { status: 1, sub_status: 2502, exception_status: [], progress: 10 },
+      machine_status: { status: 2, sub_status: 2502, exception_status: [], progress: 10 },
     });
     expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('paused');
   });
 
-  it('sub_status 2505 → paused', () => {
+  it('status 2 + sub_status 2505 → paused', () => {
     const s = makeStore();
     s.status = baseStatus({
-      machine_status: { status: 1, sub_status: 2505, exception_status: [], progress: 10 },
+      machine_status: { status: 2, sub_status: 2505, exception_status: [], progress: 10 },
     });
     expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('paused');
   });
