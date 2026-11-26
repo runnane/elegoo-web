@@ -91,7 +91,11 @@ export function translateGcode(raw: string): PrinterCommand[] {
     const target = script.match(/TARGET=(\d+)/)?.[1];
     if (!heater || target === undefined) return [];
     const temp = parseInt(target);
-    return [[TEMPERATURE, heater === 'heater_bed' ? { heater_bed: temp } : { extruder: temp }]];
+    // Only the two heaters the printer has. Any other name (chamber, a typo, a Klipper
+    // temperature_fan) must not fall through to the nozzle (ELEG-185).
+    if (heater === 'heater_bed') return [[TEMPERATURE, { heater_bed: temp }]];
+    if (heater === 'extruder' || heater === 'extruder0') return [[TEMPERATURE, { extruder: temp }]];
+    return [];
   }
   if (script === 'TURN_OFF_HEATERS') {
     return [

@@ -19,6 +19,11 @@ describe('translateGcode', () => {
     ['SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0', [[1028, { heater_bed: 0 }]]],
     ['SET_HEATER_TEMPERATURE HEATER=extruder TARGET=210', [[1028, { extruder: 210 }]]],
     ['SET_HEATER_TEMPERATURE HEATER=extruder', []],
+    ['SET_HEATER_TEMPERATURE HEATER=extruder0 TARGET=190', [[1028, { extruder: 190 }]]],
+    ['SET_HEATER_TEMPERATURE HEATER=chamber TARGET=60', []],
+    ['SET_HEATER_TEMPERATURE HEATER=chamber TARGET=0', []],
+    ['SET_HEATER_TEMPERATURE HEATER=extrduer TARGET=200', []],
+    ['SET_HEATER_TEMPERATURE HEATER=temperature_fan_x TARGET=40', []],
     [
       'TURN_OFF_HEATERS',
       [
