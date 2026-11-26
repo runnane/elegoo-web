@@ -74,24 +74,26 @@ export function mountPrinterPresets(root: HTMLElement): void {
   const errorOf = (data: Record<string, unknown>, fallback: string) =>
     typeof data.error === 'string' ? data.error : fallback;
 
-  const nameInput = el('input');
+  // `settings-input`, so they take the theme rather than the browser's light-grey
+  // disabled styling, which was unreadable in the dark theme (ELEG-174).
+  const nameInput = el('input', 'settings-input');
   nameInput.type = 'text';
   nameInput.maxLength = 64;
   nameInput.placeholder = 'Name';
   nameInput.setAttribute('aria-label', 'Printer name');
-  const ipInput = el('input');
+  const ipInput = el('input', 'settings-input');
   ipInput.type = 'text';
   ipInput.inputMode = 'decimal';
   ipInput.placeholder = 'IPv4 address';
   ipInput.setAttribute('aria-label', 'Printer IPv4 address');
-  const passwordInput = el('input');
+  const passwordInput = el('input', 'settings-input');
   passwordInput.type = 'password';
   passwordInput.autocomplete = 'new-password';
   passwordInput.placeholder = 'Access code (optional)';
   passwordInput.setAttribute('aria-label', 'Printer access code');
   const addButton = el('button', 'btn btn-sm btn-ghost', 'Add printer');
   addButton.type = 'button';
-  const formRow = el('div', 'settings-row');
+  const formRow = el('div', 'settings-row printer-presets-form');
   formRow.append(nameInput, ipInput, passwordInput, addButton);
   const lockedHint = el(
     'p',

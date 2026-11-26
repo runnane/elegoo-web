@@ -4,6 +4,7 @@ import type { PrinterState } from '../printer-state';
 import { type LayerTimeEntry, trailingLayerRun } from '../types';
 import { $ } from './helpers';
 import { chartPalette } from './chart-palette';
+import { placeEndLabel, placeTickLabel } from './chart-labels';
 
 const PADDING = { top: 10, right: 12, bottom: 28, left: 48 };
 // Colours come from the stylesheet via chartPalette() so the chart follows the theme
@@ -172,7 +173,10 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
     ctx.lineTo(x, PADDING.top + plotH);
     ctx.stroke();
     ctx.fillStyle = pal.label;
-    ctx.fillText(`L${layer}`, x, PADDING.top + plotH + 4);
+    const tick = `L${layer}`;
+    const at = placeTickLabel(x, ctx.measureText(tick).width, w);
+    ctx.textAlign = at.align;
+    ctx.fillText(tick, at.x, PADDING.top + plotH + 4);
   }
 
   // Series, fill and dots are clipped to the plot rect — the domain above keeps every
@@ -231,14 +235,9 @@ function drawLayerChart(canvas: HTMLCanvasElement, state: PrinterState): void {
   ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textBaseline = 'middle';
   const lastLabel = `L${last.layer}: ${last.duration.toFixed(1)}s`;
-  const lastX = xMap(last.layer);
-  if (lastX + 6 + ctx.measureText(lastLabel).width <= w) {
-    ctx.textAlign = 'left';
-    ctx.fillText(lastLabel, lastX + 6, yMap(last.duration));
-  } else {
-    ctx.textAlign = 'right';
-    ctx.fillText(lastLabel, lastX - 6, yMap(last.duration));
-  }
+  const at = placeEndLabel(xMap(last.layer), ctx.measureText(lastLabel).width, w, 6);
+  ctx.textAlign = at.align;
+  ctx.fillText(lastLabel, at.x, yMap(last.duration));
 
   // Average line
   const avgDuration = visible.reduce((s, lt) => s + lt.duration, 0) / visible.length;

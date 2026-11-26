@@ -3,6 +3,7 @@
 import type { ChartStore, Series } from '../chart-store';
 import { saveChartWindow, getChartWindow } from './ui-settings';
 import { chartPalette } from './chart-palette';
+import { placeEndLabel, placeTickLabel } from './chart-labels';
 
 const PADDING = { top: 10, right: 12, bottom: 24, left: 48 };
 // Colours come from the stylesheet via chartPalette() (ELEG-34).
@@ -279,11 +280,11 @@ function drawChart(config: ChartConfig): void {
     ctx.lineTo(x, PADDING.top + plotH);
     ctx.stroke();
     const d = new Date(t);
-    ctx.fillText(
-      `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`,
-      x,
-      PADDING.top + plotH + 4,
-    );
+    const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+    // The last tick sits on the plot's right edge; centred, half of it fell off (ELEG-174).
+    const at = placeTickLabel(x, ctx.measureText(label).width, w);
+    ctx.textAlign = at.align;
+    ctx.fillText(label, at.x, PADDING.top + plotH + 4);
   }
 
   // Draw each series
@@ -312,9 +313,11 @@ function drawChart(config: ChartConfig): void {
     if (last) {
       ctx.fillStyle = s.color;
       ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${s.label}: ${last.v.toFixed(1)}`, xMap(last.t) + 4, yMap(last.v));
+      const valueLabel = `${s.label}: ${last.v.toFixed(1)}`;
+      const at = placeEndLabel(xMap(last.t), ctx.measureText(valueLabel).width, w, 4);
+      ctx.textAlign = at.align;
+      ctx.fillText(valueLabel, at.x, yMap(last.v));
     }
   }
 
