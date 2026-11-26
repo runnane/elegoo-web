@@ -340,31 +340,19 @@ const WITH_KEY = { headers: { 'X-Api-Key': KEY } };
 const script = (s: string) => ({ ...WITH_KEY, body: { script: s } });
 
 /**
- * The two mounts translate 1028 into different param shapes (ELEG-180), so each row pins
- * what that mount sends. Both shapes are recognised by the guard.
+ * Both mounts share one translator and send the SPA's param shapes (ELEG-180), so every
+ * row below pins the same exact params: `{homed_axes}` for 1026 and `{extruder}` /
+ * `{heater_bed}` for 1028, never `{axes: [...]}` or `{target, temperature}`.
  */
+const HOME_ALL = [1026, { homed_axes: 'xyz' }];
+const HEATERS_OFF = [
+  [1028, { extruder: 0 }],
+  [1028, { heater_bed: 0 }],
+];
 describe.each([
-  {
-    name: '/moonraker/* on the main port',
-    base: () => compatBase,
-    bedOff: [
-      [1028, { target: 'extruder', temperature: 0 }],
-      [1028, { target: 'heater_bed', temperature: 0 }],
-    ],
-    m140: [1028, { target: 'heater_bed', temperature: 60 }],
-    m104: [1028, { target: 'extruder', temperature: 215 }],
-  },
-  {
-    name: 'the :7125 server',
-    base: () => serverBase,
-    bedOff: [
-      [1028, { extruder: 0 }],
-      [1028, { heater_bed: 0 }],
-    ],
-    m140: [1028, { heater_bed: 60 }],
-    m104: [1028, { extruder: 215 }],
-  },
-])('the print guard on POST /printer/gcode/script, $name', ({ base, bedOff, m140, m104 }) => {
+  { name: '/moonraker/* on the main port', base: () => compatBase },
+  { name: 'the :7125 server', base: () => serverBase },
+])('the print guard on POST /printer/gcode/script, $name', ({ base }) => {
   it.each([
     ['G28', 'homing'],
     ['M140 S0', 'turning a heater off'],
@@ -388,7 +376,36 @@ describe.each([
     const off = await call(base(), 'POST', '/printer/gcode/script', script('TURN_OFF_HEATERS'));
     expect(home.status).toBe(200);
     expect(off.status).toBe(200);
-    expect(bridge.sendCommand.mock.calls).toEqual([[1026, { axes: ['x', 'y', 'z'] }], ...bedOff]);
+    expect(bridge.sendCommand.mock.calls).toEqual([HOME_ALL, ...HEATERS_OFF]);
+  });
+
+  it('idle: G28 with arguments still homes all three axes', async () => {
+    store.status = job(1);
+    const r = await call(base(), 'POST', '/printer/gcode/script', script('G28 X Y'));
+    expect(r.status).toBe(200);
+    expect(bridge.sendCommand.mock.calls).toEqual([HOME_ALL]);
+  });
+
+  it('idle: SET_HEATER_TEMPERATURE is translated, lower-case script included', async () => {
+    store.status = job(1);
+    const bed = await call(
+      base(),
+      'POST',
+      '/printer/gcode/script',
+      script('set_heater_temperature heater=heater_bed target=55'),
+    );
+    const nozzle = await call(
+      base(),
+      'POST',
+      '/printer/gcode/script',
+      script('SET_HEATER_TEMPERATURE HEATER=extruder TARGET=200'),
+    );
+    expect(bed.status).toBe(200);
+    expect(nozzle.status).toBe(200);
+    expect(bridge.sendCommand.mock.calls).toEqual([
+      [1028, { heater_bed: 55 }],
+      [1028, { extruder: 200 }],
+    ]);
   });
 
   it('mid-print allow: M140 S60 and M104 S215 are forwarded', async () => {
@@ -397,7 +414,10 @@ describe.each([
     const nozzle = await call(base(), 'POST', '/printer/gcode/script', script('M104 S215'));
     expect(bed.status).toBe(200);
     expect(nozzle.status).toBe(200);
-    expect(bridge.sendCommand.mock.calls).toEqual([m140, m104]);
+    expect(bridge.sendCommand.mock.calls).toEqual([
+      [1028, { heater_bed: 60 }],
+      [1028, { extruder: 215 }],
+    ]);
   });
 
   it('mid-print: unrecognised gcode (a babystep) is still answered ok and sends nothing', async () => {
@@ -418,7 +438,9 @@ describe.each([
     const nozzle = await call(base(), 'POST', '/printer/gcode/script', script('M104 S150'));
     expect(bed.status).toBe(200);
     expect(nozzle.status).toBe(200);
-    expect(bridge.sendCommand).toHaveBeenCalledTimes(2);
-    expect(bridge.sendCommand.mock.calls.map(([m]) => m)).toEqual([1028, 1028]);
+    expect(bridge.sendCommand.mock.calls).toEqual([
+      [1028, { heater_bed: 0 }],
+      [1028, { extruder: 150 }],
+    ]);
   });
 });

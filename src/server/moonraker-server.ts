@@ -53,6 +53,7 @@ import { getLogger } from './logger.js';
 import { cacheGcodeBuffer } from './rest-api.js';
 import { authorize, checkKey, extractKey } from './write-auth.js';
 import { printBusyRefusalAll } from './print-guard.js';
+import { translateGcode } from './printer-commands.js';
 import {
   classifyRpc,
   isMoonrakerHttpWrite,
@@ -246,41 +247,6 @@ function rpcError(id: number | string | null | undefined, code: number, message:
 
 function rpcNotify(method: string, params: unknown[]): string {
   return JSON.stringify({ jsonrpc: '2.0', method, params });
-}
-
-/**
- * The printer commands a Klipper gcode script maps to on this server, in order. Shared by
- * the HTTP `/printer/gcode/script` route and the `printer.gcode.script` RPC, which were two
- * copies of the same translation. Translating before sending lets the print guard
- * (ELEG-176) decide the whole script up front: `TURN_OFF_HEATERS` mid-print sends neither
- * half. Anything unrecognised maps to nothing. (`moonraker-compat.ts` has its own copy in a
- * different 1028 param shape; reconciling the two is ELEG-180.)
- */
-function translateGcode(script: string): Array<[number, Record<string, unknown>]> {
-  if (script === 'G28' || script.startsWith('G28 ')) return [[1026, { axes: ['x', 'y', 'z'] }]];
-  if (script.startsWith('M104 ')) {
-    const m = script.match(/S(\d+)/);
-    return m ? [[1028, { extruder: parseInt(m[1]) }]] : [];
-  }
-  if (script.startsWith('M140 ')) {
-    const m = script.match(/S(\d+)/);
-    return m ? [[1028, { heater_bed: parseInt(m[1]) }]] : [];
-  }
-  if (script === 'M112') return [[1022, {}]];
-  if (script.startsWith('SET_HEATER_TEMPERATURE')) {
-    const heater = script.match(/HEATER=(\S+)/)?.[1]?.toLowerCase();
-    const target = script.match(/TARGET=(\d+)/)?.[1];
-    if (!heater || target === undefined) return [];
-    const temp = parseInt(target);
-    return [[1028, heater === 'heater_bed' ? { heater_bed: temp } : { extruder: temp }]];
-  }
-  if (script === 'TURN_OFF_HEATERS') {
-    return [
-      [1028, { extruder: 0 }],
-      [1028, { heater_bed: 0 }],
-    ];
-  }
-  return [];
 }
 
 // ── Per-client subscription state ────────────────────────────────

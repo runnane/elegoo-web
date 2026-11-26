@@ -23,7 +23,13 @@ import {
   octoprintLoginPayload,
 } from './compat-auth.js';
 import { authorize, extractKey } from './write-auth.js';
-import { printBusyRefusal } from './print-guard.js';
+import { printBusyRefusal, printBusyRefusalAll } from './print-guard.js';
+import {
+  homeCommand,
+  moveCommands,
+  type PrinterCommand,
+  temperatureCommand,
+} from './printer-commands.js';
 
 const _log = getLogger('OctoPrint');
 
@@ -184,6 +190,16 @@ export function createOctoPrintRouter(
       bridge.sendCommand(m, params);
       return true;
     };
+    /** The compound form: if any command is refused, none is sent. */
+    const sendAllUnlessBusy = (sends: PrinterCommand[]): boolean => {
+      const busy = printBusyRefusalAll(sends, store.status);
+      if (busy) {
+        json(res, { error: busy }, 409);
+        return false;
+      }
+      for (const [m, params] of sends) bridge.sendCommand(m, params);
+      return true;
+    };
 
     // --- GET /api/version ---
     if (path === '/api/version' && method === 'GET') {
@@ -253,11 +269,12 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'target' && cmd.targets?.tool0 != null) {
-            const sent = sendUnlessBusy(1028, {
-              target: 'extruder',
-              temperature: cmd.targets.tool0,
-            });
-            if (!sent) return;
+            const send = temperatureCommand('extruder', cmd.targets.tool0);
+            if (!send) {
+              json(res, { error: 'targets.tool0 must be a number' }, 400);
+              return;
+            }
+            if (!sendUnlessBusy(...send)) return;
           }
           noContent(res);
         })
@@ -284,11 +301,12 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'target' && cmd.target != null) {
-            const sent = sendUnlessBusy(1028, {
-              target: 'heater_bed',
-              temperature: cmd.target,
-            });
-            if (!sent) return;
+            const send = temperatureCommand('heater_bed', cmd.target);
+            if (!send) {
+              json(res, { error: 'target must be a number' }, 400);
+              return;
+            }
+            if (!sendUnlessBusy(...send)) return;
           }
           noContent(res);
         })
@@ -315,19 +333,24 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'jog') {
-            const axes: Record<string, number> = {};
-            if (cmd.x != null) axes.x = cmd.x;
-            if (cmd.y != null) axes.y = cmd.y;
-            if (cmd.z != null) axes.z = cmd.z;
-            const sent = sendUnlessBusy(1027, {
-              direction: 'relative',
-              ...axes,
-              speed: cmd.speed ?? 3000,
-            });
-            if (!sent) return;
+            // OctoPrint's `absolute: true` makes x/y/z coordinates, not distances. The
+            // printer's move is relative only, so sending them as distances would move the
+            // head somewhere nobody asked for: refuse instead.
+            if (cmd.absolute === true) {
+              json(res, { error: 'Absolute jog is not supported; send relative distances' }, 400);
+              return;
+            }
+            // One 1027 per non-zero axis (ELEG-180), decided as a whole by the print guard
+            // before any is sent. `speed` has no field in the printer's move and is dropped.
+            const sends = moveCommands({ x: cmd.x, y: cmd.y, z: cmd.z });
+            if (!sendAllUnlessBusy(sends)) return;
           } else if (cmd.command === 'home') {
-            const homeAxes = cmd.axes?.length ? cmd.axes : ['x', 'y', 'z'];
-            if (!sendUnlessBusy(1026, { axes: homeAxes })) return;
+            const send = homeCommand(Array.isArray(cmd.axes) ? cmd.axes : undefined);
+            if (!send) {
+              json(res, { error: 'axes must name x, y and/or z' }, 400);
+              return;
+            }
+            if (!sendUnlessBusy(...send)) return;
           }
           noContent(res);
         })
