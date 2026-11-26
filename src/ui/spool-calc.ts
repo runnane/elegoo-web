@@ -16,7 +16,7 @@ const MATERIALS: Record<string, number> = {
 
 const STORAGE_KEY = 'elegoo-web-spool-calc';
 
-interface SpoolParams {
+export interface SpoolParams {
   hubDiameter: number; // mm — inner diameter (the core around which filament is wound)
   flangeDiameter: number; // mm — outer diameter of the spool flanges
   spoolWidth: number; // mm — width/depth of the spool
@@ -28,7 +28,7 @@ interface SpoolParams {
   currentOuterDiameter: number; // mm — measured outer diameter of remaining filament on spool
 }
 
-const DEFAULTS: SpoolParams = {
+export const DEFAULTS: SpoolParams = {
   hubDiameter: 55,
   flangeDiameter: 200,
   spoolWidth: 63,
@@ -43,7 +43,11 @@ const DEFAULTS: SpoolParams = {
 function loadParams(): SpoolParams {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (raw) {
+      const loaded = { ...DEFAULTS, ...JSON.parse(raw) } as SpoolParams;
+      // A value saved by an older build may be impossible; start over rather than render it.
+      if (Object.keys(validateSpool(loaded)).length === 0) return loaded;
+    }
   } catch {
     /* ignore */
   }
@@ -69,8 +73,52 @@ function outerDiameterToMass(
   return Math.max(0, volume * density); // grams
 }
 
+type SpoolErrors = Partial<Record<keyof SpoolParams, string>>;
+
+const isPositive = (n: number): boolean => Number.isFinite(n) && n > 0;
+
+/**
+ * Reject impossible spool geometry and weights. Returns one message per offending
+ * field; an empty object means the input is usable. A current outer diameter of 0
+ * means "not measured" and is not checked.
+ */
+export function validateSpool(p: SpoolParams): SpoolErrors {
+  const e: SpoolErrors = {};
+  if (!isPositive(p.hubDiameter)) e.hubDiameter = 'Enter a hub diameter above 0.';
+  if (!isPositive(p.flangeDiameter)) e.flangeDiameter = 'Enter a flange diameter above 0.';
+  if (!isPositive(p.spoolWidth)) e.spoolWidth = 'Enter a spool width above 0.';
+  if (!isPositive(p.filamentDiameter)) e.filamentDiameter = 'Enter a filament diameter above 0.';
+  if (!Number.isFinite(p.emptyWeight) || p.emptyWeight < 0) {
+    e.emptyWeight = 'Enter an empty weight of 0 or more.';
+  }
+  if (!isPositive(p.fullWeight)) e.fullWeight = 'Enter a full weight above 0.';
+  if (!isPositive(p.currentWeight)) e.currentWeight = 'Enter a current weight above 0.';
+
+  if (!e.hubDiameter && !e.flangeDiameter && p.hubDiameter >= p.flangeDiameter) {
+    e.hubDiameter = 'Hub diameter must be smaller than the flange diameter.';
+  }
+  if (!e.emptyWeight && !e.fullWeight && p.fullWeight <= p.emptyWeight) {
+    e.fullWeight = 'Full weight must be greater than the empty spool weight.';
+  }
+  if (!e.emptyWeight && !e.currentWeight && p.currentWeight < p.emptyWeight) {
+    e.currentWeight = 'Current weight cannot be below the empty spool weight.';
+  }
+
+  const od = p.currentOuterDiameter;
+  if (od !== 0) {
+    if (!isPositive(od)) {
+      e.currentOuterDiameter = 'Enter an outer diameter above 0, or leave it empty.';
+    } else if (!e.flangeDiameter && od > p.flangeDiameter) {
+      e.currentOuterDiameter = 'Outer diameter cannot exceed the flange diameter.';
+    } else if (!e.hubDiameter && od <= p.hubDiameter) {
+      e.currentOuterDiameter = 'Outer diameter must be larger than the hub diameter.';
+    }
+  }
+  return e;
+}
+
 /** Calculate filament remaining stats */
-function calculate(p: SpoolParams) {
+export function calculate(p: SpoolParams) {
   const density = MATERIALS[p.material] ?? 1.24;
   const filamentMass = Math.max(0, p.currentWeight - p.emptyWeight); // grams
   const fullFilamentMass = Math.max(0, p.fullWeight - p.emptyWeight);
@@ -104,7 +152,9 @@ function calculate(p: SpoolParams) {
   );
   const fullOuterRadius = fullOuterRadiusCm * 10; // mm
 
-  const percentRemaining = fullFilamentMass > 0 ? (filamentMass / fullFilamentMass) * 100 : 0;
+  // A spool weighed above "full" is still 100%, never more.
+  const percentRemaining =
+    fullFilamentMass > 0 ? Math.min(100, (filamentMass / fullFilamentMass) * 100) : 0;
 
   return {
     filamentMass,
@@ -345,15 +395,30 @@ export function renderSpoolCalc(): void {
     ['sc-current-weight', 'currentWeight'],
   ];
 
+  // One inline message slot per validated input, a static sibling of the input row.
+  for (const [elemId, key] of [...ids, ['sc-outer-dia', 'currentOuterDiameter'] as const]) {
+    const el = document.getElementById(elemId);
+    const row = el?.closest('.input-with-unit');
+    if (!el || !row) continue;
+    const msg = document.createElement('span');
+    msg.className = 'settings-hint spool-calc-error';
+    msg.id = `sc-err-${key}`;
+    msg.hidden = true;
+    el.setAttribute('aria-describedby', msg.id);
+    row.after(msg);
+  }
+
   for (const [elemId, key] of ids) {
     const el = document.getElementById(elemId) as HTMLInputElement | null;
     if (el) {
       el.addEventListener('input', () => {
-        const val = parseFloat(el.value);
-        if (!isNaN(val) && val >= 0) {
-          (p as unknown as Record<string, number>)[key] = val;
-          updateCalc(p);
-        }
+        // An empty or non-numeric field is NaN, which validateSpool rejects.
+        (p as unknown as Record<string, number>)[key] =
+          el.value.trim() === '' ? NaN : Number(el.value);
+        // The outer-diameter input is re-derived from these values, so an earlier
+        // measurement is stale the moment any of them changes.
+        p.currentOuterDiameter = 0;
+        updateCalc(p);
       });
     }
   }
@@ -362,6 +427,7 @@ export function renderSpoolCalc(): void {
   if (matEl) {
     matEl.addEventListener('change', () => {
       p.material = matEl.value;
+      p.currentOuterDiameter = 0;
       updateCalc(p);
     });
   }
@@ -370,6 +436,7 @@ export function renderSpoolCalc(): void {
   if (diaEl) {
     diaEl.addEventListener('change', () => {
       p.filamentDiameter = parseFloat(diaEl.value);
+      p.currentOuterDiameter = 0;
       updateCalc(p);
     });
   }
@@ -378,37 +445,71 @@ export function renderSpoolCalc(): void {
   const outerDiaEl = document.getElementById('sc-outer-dia') as HTMLInputElement | null;
   if (outerDiaEl) {
     outerDiaEl.addEventListener('input', () => {
-      const val = parseFloat(outerDiaEl.value);
-      if (!isNaN(val) && val > 0 && val >= p.hubDiameter) {
-        p.currentOuterDiameter = val;
+      // Empty means "not measured" (0); anything else non-numeric is NaN and rejected.
+      const val = outerDiaEl.value.trim() === '' ? 0 : Number(outerDiaEl.value);
+      p.currentOuterDiameter = val;
+      // Only derive the weight from a diameter that passes validation.
+      if (validateSpool(p).currentOuterDiameter === undefined && val > 0) {
         const mass = outerDiameterToMass(val, p.hubDiameter, p.spoolWidth, p.material);
         p.currentWeight = Math.round(mass + p.emptyWeight);
         const weightEl = document.getElementById('sc-current-weight') as HTMLInputElement | null;
         if (weightEl) weightEl.value = String(p.currentWeight);
-        updateCalc(p);
       }
+      updateCalc(p);
     });
   }
 }
 
+const INPUT_IDS: Partial<Record<keyof SpoolParams, string>> = {
+  hubDiameter: 'sc-hub-dia',
+  flangeDiameter: 'sc-flange-dia',
+  spoolWidth: 'sc-width',
+  emptyWeight: 'sc-empty-weight',
+  fullWeight: 'sc-full-weight',
+  currentWeight: 'sc-current-weight',
+  currentOuterDiameter: 'sc-outer-dia',
+};
+
 function updateCalc(p: SpoolParams): void {
+  const errors = validateSpool(p);
+  const valid = Object.keys(errors).length === 0;
+
+  for (const [key, elemId] of Object.entries(INPUT_IDS)) {
+    const msg = errors[key as keyof SpoolParams];
+    const input = document.getElementById(elemId);
+    const slot = document.getElementById(`sc-err-${key}`);
+    if (input) {
+      if (msg) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
+    }
+    if (slot) {
+      slot.textContent = msg ?? '';
+      slot.hidden = !msg;
+    }
+  }
+
+  const setText = (id: string, text: string) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+
+  const svgContainer = document.getElementById('spool-svg-container');
+  if (!valid) {
+    // Never persist or draw impossible input; the last valid values stay in storage.
+    if (svgContainer) svgContainer.innerHTML = '';
+    for (const id of ['sc-meters', 'sc-full-meters', 'sc-grams', 'sc-percent']) setText(id, '—');
+    return;
+  }
+
   saveParams(p);
   const calc = calculate(p);
 
-  const svgContainer = document.getElementById('spool-svg-container');
   if (svgContainer) svgContainer.innerHTML = renderSVG(p, calc);
 
-  const metersEl = document.getElementById('sc-meters');
-  if (metersEl) metersEl.textContent = calc.lengthM.toFixed(1);
-
-  const fullMetersEl = document.getElementById('sc-full-meters');
-  if (fullMetersEl) fullMetersEl.textContent = calc.fullLengthM.toFixed(1);
-
-  const gramsEl = document.getElementById('sc-grams');
-  if (gramsEl) gramsEl.textContent = calc.filamentMass.toFixed(0);
-
-  const percentEl = document.getElementById('sc-percent');
-  if (percentEl) percentEl.textContent = `${calc.percentRemaining.toFixed(0)}%`;
+  setText('sc-meters', calc.lengthM.toFixed(1));
+  setText('sc-full-meters', calc.fullLengthM.toFixed(1));
+  setText('sc-grams', calc.filamentMass.toFixed(0));
+  setText('sc-percent', `${calc.percentRemaining.toFixed(0)}%`);
 
   // Update density line
   const densityEl = document.querySelector('.spool-calc-density');
