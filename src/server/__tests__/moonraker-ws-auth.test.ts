@@ -38,7 +38,8 @@ const bridge = Object.assign(new EventEmitter(), {
 });
 
 const store = Object.assign(new EventEmitter(), {
-  status: null,
+  // `unknown`, not `null`: the print-guard cases below set a job status per test.
+  status: null as unknown,
   attributes: null,
   files: [],
   fileTotalLayers: null,
@@ -89,6 +90,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   setKey(KEY);
+  store.status = null; // no job: the auth cases rely on the print guard failing open
 });
 
 // ── a JSON-RPC client ──────────────────────────────────────────────────────
@@ -420,5 +422,86 @@ describe('the RPC tables', () => {
       expect(r.error, `${method} on ${path}`).toEqual(UNAUTHORIZED);
     }
     expect(bridge.sendCommand).not.toHaveBeenCalled();
+  });
+});
+
+// ── the print guard (ELEG-176) ─────────────────────────────────────────────
+
+describe('the print guard on printer.gcode.script', () => {
+  const job = (code: number) => ({ machine_status: { status: code } });
+
+  async function identified(): Promise<Client> {
+    const c = await connect('/websocket');
+    await c.call('server.connection.identify', { client_name: 'x', api_key: KEY });
+    return c;
+  }
+
+  /** The console lines a Mainsail/Fluidd would print, in order. */
+  const consoleLines = (c: Client) =>
+    c.wire
+      .map((t) => JSON.parse(t) as { method?: string; params?: string[] })
+      .filter((m) => m.method === 'notify_gcode_response')
+      .map((m) => m.params?.[0]);
+
+  it.each([
+    ['G28', 'homing'],
+    ['SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0', 'turning a heater off'],
+    ['TURN_OFF_HEATERS', 'turning a heater off'],
+  ])(
+    'while printing, %s is an rpc 409 with a "!!" console line, and sends nothing',
+    async (gcode, what) => {
+      store.status = job(2);
+      const c = await identified();
+      const r = await c.call('printer.gcode.script', { script: gcode });
+      expect(r.result).toBeUndefined();
+      expect(r.error?.code).toBe(409);
+      expect(r.error?.message).toContain('busy printing');
+      expect(r.error?.message).toContain(what);
+      const lines = consoleLines(c);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toBe(`!! ${r.error?.message}`);
+      expect(bridge.sendCommand).not.toHaveBeenCalled();
+    },
+  );
+
+  it('idle control: G28 and TURN_OFF_HEATERS are forwarded and answered ok', async () => {
+    store.status = job(1);
+    const c = await identified();
+    expect((await c.call('printer.gcode.script', { script: 'G28' })).result).toBe('ok');
+    expect((await c.call('printer.gcode.script', { script: 'TURN_OFF_HEATERS' })).result).toBe(
+      'ok',
+    );
+    expect(bridge.sendCommand.mock.calls).toEqual([
+      [1026, { axes: ['x', 'y', 'z'] }],
+      [1028, { extruder: 0 }],
+      [1028, { heater_bed: 0 }],
+    ]);
+  });
+
+  it('mid-print allow: M140 S60 and SET_HEATER_TEMPERATURE to 215 are forwarded', async () => {
+    store.status = job(2);
+    const c = await identified();
+    expect((await c.call('printer.gcode.script', { script: 'M140 S60' })).result).toBe('ok');
+    const set = await c.call('printer.gcode.script', {
+      script: 'SET_HEATER_TEMPERATURE HEATER=extruder TARGET=215',
+    });
+    expect(set.result).toBe('ok');
+    expect(bridge.sendCommand.mock.calls).toEqual([
+      [1028, { heater_bed: 60 }],
+      [1028, { extruder: 215 }],
+    ]);
+  });
+
+  it('idle control: SET_HEATER_TEMPERATURE bed to 0 is forwarded, with an ok console line', async () => {
+    store.status = job(1);
+    const c = await identified();
+    const r = await c.call('printer.gcode.script', {
+      script: 'SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0',
+    });
+    expect(r.result).toBe('ok');
+    expect(bridge.sendCommand.mock.calls).toEqual([[1028, { heater_bed: 0 }]]);
+    // The ok line follows the result on the wire; one more call orders it.
+    await c.call('printer.gcode.help');
+    expect(consoleLines(c)).toEqual(['// SET_HEATER_TEMPERATURE HEATER=HEATER_BED TARGET=0: ok']);
   });
 });

@@ -60,6 +60,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import { STATUS_NAMES, SUB_STATUS_NAMES, SPEED_MODE_NAMES, EXCEPTION_NAMES } from '../types.js';
 import { getLogger } from './logger.js';
 import { authorize, extractKey, guardHttp, UNAUTHORIZED_MESSAGE } from './write-auth.js';
+import { printBusyRefusal } from './print-guard.js';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
@@ -143,6 +144,16 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
       return (cb as (...b: unknown[]) => unknown)(...a);
     }) as typeof cb;
     return mcp.registerTool(name, config, gated);
+  };
+
+  /**
+   * The print guard (ELEG-176), as a tool error: `null` when the command may be sent. Every
+   * tool that can move the head, drop a heater or change filament asks this before it
+   * sends, so it never answers success for a command the guard would have dropped.
+   */
+  const refuseWhilePrinting = (tool: string, method: number, params: unknown) => {
+    const refusal = printBusyRefusal(method, params, store.status);
+    return refusal ? err(`"${tool}" refused: ${refusal}`) : null;
   };
 
   // ── Resources ──────────────────────────────────────────────
@@ -405,6 +416,9 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
         p.heater_bed = args.bed;
       }
       if (!Object.keys(p).length) return err('Specify nozzle and/or bed');
+      // One frame carries both targets, so a mixed request is all or nothing.
+      const busy = refuseWhilePrinting('set_temperature', 1028, p);
+      if (busy) return busy;
       bridge.sendCommand(1028, p);
       return txt(`Temperature set: ${JSON.stringify(p)}`);
     },
@@ -472,7 +486,10 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async (args) => {
       const c = needConn(bridge);
       if (c) return c;
-      bridge.sendCommand(1026, { homed_axes: args.axes ?? 'xyz' });
+      const p = { homed_axes: args.axes ?? 'xyz' };
+      const busy = refuseWhilePrinting('home', 1026, p);
+      if (busy) return busy;
+      bridge.sendCommand(1026, p);
       return txt(`Homing ${args.axes ?? 'xyz'}`);
     },
   );
@@ -489,7 +506,10 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async (args) => {
       const c = needConn(bridge);
       if (c) return c;
-      bridge.sendCommand(1027, { axes: args.axis, distance: args.distance });
+      const p = { axes: args.axis, distance: args.distance };
+      const busy = refuseWhilePrinting('move', 1027, p);
+      if (busy) return busy;
+      bridge.sendCommand(1027, p);
       return txt(`Moving ${args.axis} ${args.distance}mm`);
     },
   );
@@ -546,6 +566,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
   writeTool('auto_level', { description: 'Start auto bed leveling' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
+    const busy = refuseWhilePrinting('auto_level', 1032, {});
+    if (busy) return busy;
     bridge.sendCommand(1032, {});
     return txt('Auto-leveling started');
   });
@@ -553,6 +575,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
   writeTool('pid_calibrate', { description: 'Start PID auto-tune' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
+    const busy = refuseWhilePrinting('pid_calibrate', 1034, {});
+    if (busy) return busy;
     bridge.sendCommand(1034, {});
     return txt('PID calibration started');
   });
@@ -560,6 +584,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
   writeTool('vibration_calibrate', { description: 'Start resonance optimization' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
+    const busy = refuseWhilePrinting('vibration_calibrate', 1033, {});
+    if (busy) return busy;
     bridge.sendCommand(1033, {});
     return txt('Vibration calibration started');
   });
@@ -577,11 +603,14 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async (args) => {
       const c = needConn(bridge);
       if (c) return c;
-      bridge.sendCommand(1035, {
+      const p = {
         ringing_optimize: args.ringing ?? true,
         pid_check: args.pid ?? true,
         auto_bed_leveling: args.leveling ?? true,
-      });
+      };
+      const busy = refuseWhilePrinting('self_check', 1035, p);
+      if (busy) return busy;
+      bridge.sendCommand(1035, p);
       return txt('Self-check started');
     },
   );
@@ -606,6 +635,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
   writeTool('load_filament', { description: 'Feed/load filament into extruder' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
+    const busy = refuseWhilePrinting('load_filament', 1024, {});
+    if (busy) return busy;
     bridge.sendCommand(1024, {});
     return txt('Loading filament');
   });
@@ -616,6 +647,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async () => {
       const c = needConn(bridge);
       if (c) return c;
+      const busy = refuseWhilePrinting('unload_filament', 1025, {});
+      if (busy) return busy;
       bridge.sendCommand(1025, {});
       return txt('Unloading filament');
     },
@@ -676,6 +709,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
       } catch {
         return err('Invalid JSON');
       }
+      const busy = refuseWhilePrinting('send_command', args.method, p);
+      if (busy) return busy;
       bridge.sendCommand(args.method, p);
       return txt(`Sent method=${args.method} params=${JSON.stringify(p)}`);
     },

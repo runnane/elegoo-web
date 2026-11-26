@@ -9,7 +9,8 @@
  * `{type:'auth', key}` frame on every (re)connect, and again before the next command if
  * the stored key has changed since — so a key saved mid-session takes effect without a
  * reconnect. A gated command sent without it comes back as `command_refused` and is
- * explained with the same message as a REST 401.
+ * explained with the same message as a REST 401. A `command_refused` with `code: 'busy'`
+ * is the print guard instead (ELEG-176) and toasts the server's reason.
  */
 
 import { NEEDS_API_KEY_MESSAGE, getApiKey } from './ui/api-key';
@@ -268,12 +269,18 @@ export class WsClient {
 
       case 'command_refused': {
         const method = msg.method as number;
-        if (SILENT_REFUSALS.has(method)) break;
+        // ELEG-176: refused because a print is running, not because of the key. Telling
+        // a printing user to enter an API key would send them the wrong way, so the
+        // server's own reason is shown. Any other (or absent) code keeps the key message,
+        // which is what an older server that sends no `code` means.
+        const busy = msg.code === 'busy';
+        if (!busy && SILENT_REFUSALS.has(method)) break;
         // One toast for a burst (a card firing several gated commands at once).
         const now = Date.now();
         if (now - this.lastRefusalToast > 3000) {
           this.lastRefusalToast = now;
-          toast(NEEDS_API_KEY_MESSAGE, 'error');
+          const reason = typeof msg.reason === 'string' && msg.reason ? msg.reason : null;
+          toast(busy && reason ? reason : NEEDS_API_KEY_MESSAGE, 'error');
         }
         break;
       }

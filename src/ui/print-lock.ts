@@ -13,15 +13,12 @@
  *
  * The lock is marked with `data-print-lock` so `guardedSend`'s re-enable path (response
  * or timeout) cannot hand a locked button back to the user mid-print.
+ *
+ * Which statuses count as a job is `isJobActive` in `src/types.ts`, shared with the
+ * server's print guard (ELEG-176, `src/server/print-guard.ts`). The server is deliberately
+ * more permissive on 1028 than this lock: it refuses only heater-off and a nozzle below
+ * extrusion temperature, while the UI locks Set and the presets too, against a mis-tap.
  */
-
-import type { PrinterStatus } from '../types';
-
-/** `machine_status.status` values during which a job owns the machine. */
-const JOB_STATUSES = new Set([
-  2, // Printing (paused is a sub-status of this)
-  15, // Power Loss Recovery — an interrupted job awaiting resume/cancel
-]);
 
 /** Elements locked while a job is active. */
 export const PRINT_LOCK_SELECTOR = [
@@ -38,12 +35,6 @@ export const PRINT_LOCK_SELECTOR = [
 ].join(', ');
 
 export const PRINT_LOCK_REASON = 'Disabled while printing';
-
-/** True while the printer has a job that a motion or heater command could ruin. */
-export function isJobActive(status: PrinterStatus | null | undefined): boolean {
-  const s = status?.machine_status?.status;
-  return s != null && JOB_STATUSES.has(s);
-}
 
 /** True when an element is currently held disabled by the print lock. */
 export function isPrintLocked(el: Element): boolean {

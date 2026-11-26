@@ -18,6 +18,7 @@ import type { FanInfo } from '../types.js';
 import { getLogger } from './logger.js';
 import { otaDisplayMessage } from './ota-status.js';
 import { authorize, extractKey } from './write-auth.js';
+import { printBusyRefusalAll } from './print-guard.js';
 import { isMoonrakerHttpWrite, MOONRAKER_UNAUTHORIZED } from './moonraker-auth.js';
 import { loadavg, freemem } from 'os';
 
@@ -432,25 +433,33 @@ export function createMoonrakerRouter(
         .then((body) => {
           const parsed = JSON.parse(body);
           const script = (parsed.script || '').trim().toUpperCase();
-          // Handle common gcodes
+          // Translate first, send after: the print guard (ELEG-176) decides the whole
+          // script up front, so TURN_OFF_HEATERS mid-print sends neither half.
+          const sends: Array<[number, Record<string, unknown>]> = [];
           if (script === 'G28' || script.startsWith('G28 ')) {
-            bridge.sendCommand(1026, { axes: ['x', 'y', 'z'] });
+            sends.push([1026, { axes: ['x', 'y', 'z'] }]);
           } else if (script.startsWith('M104 ')) {
             const match = script.match(/S(\d+)/);
             if (match) {
-              bridge.sendCommand(1028, { target: 'extruder', temperature: parseInt(match[1]) });
+              sends.push([1028, { target: 'extruder', temperature: parseInt(match[1]) }]);
             }
           } else if (script.startsWith('M140 ')) {
             const match = script.match(/S(\d+)/);
             if (match) {
-              bridge.sendCommand(1028, { target: 'heater_bed', temperature: parseInt(match[1]) });
+              sends.push([1028, { target: 'heater_bed', temperature: parseInt(match[1]) }]);
             }
           } else if (script === 'M112') {
-            bridge.sendCommand(1022, {});
+            sends.push([1022, {}]);
           } else if (script === 'TURN_OFF_HEATERS') {
-            bridge.sendCommand(1028, { target: 'extruder', temperature: 0 });
-            bridge.sendCommand(1028, { target: 'heater_bed', temperature: 0 });
+            sends.push([1028, { target: 'extruder', temperature: 0 }]);
+            sends.push([1028, { target: 'heater_bed', temperature: 0 }]);
           }
+          const busy = printBusyRefusalAll(sends, store.status);
+          if (busy) {
+            errorResponse(res, busy, 409);
+            return;
+          }
+          for (const [m, p] of sends) bridge.sendCommand(m, p);
           json(res, 'ok');
         })
         .catch(() => errorResponse(res, 'Invalid JSON'));

@@ -52,6 +52,7 @@ import { createOctoPrintRouter } from './octoprint-compat.js';
 import { getLogger } from './logger.js';
 import { cacheGcodeBuffer } from './rest-api.js';
 import { authorize, checkKey, extractKey } from './write-auth.js';
+import { printBusyRefusalAll } from './print-guard.js';
 import {
   classifyRpc,
   isMoonrakerHttpWrite,
@@ -245,6 +246,41 @@ function rpcError(id: number | string | null | undefined, code: number, message:
 
 function rpcNotify(method: string, params: unknown[]): string {
   return JSON.stringify({ jsonrpc: '2.0', method, params });
+}
+
+/**
+ * The printer commands a Klipper gcode script maps to on this server, in order. Shared by
+ * the HTTP `/printer/gcode/script` route and the `printer.gcode.script` RPC, which were two
+ * copies of the same translation. Translating before sending lets the print guard
+ * (ELEG-176) decide the whole script up front: `TURN_OFF_HEATERS` mid-print sends neither
+ * half. Anything unrecognised maps to nothing. (`moonraker-compat.ts` has its own copy in a
+ * different 1028 param shape; reconciling the two is ELEG-180.)
+ */
+function translateGcode(script: string): Array<[number, Record<string, unknown>]> {
+  if (script === 'G28' || script.startsWith('G28 ')) return [[1026, { axes: ['x', 'y', 'z'] }]];
+  if (script.startsWith('M104 ')) {
+    const m = script.match(/S(\d+)/);
+    return m ? [[1028, { extruder: parseInt(m[1]) }]] : [];
+  }
+  if (script.startsWith('M140 ')) {
+    const m = script.match(/S(\d+)/);
+    return m ? [[1028, { heater_bed: parseInt(m[1]) }]] : [];
+  }
+  if (script === 'M112') return [[1022, {}]];
+  if (script.startsWith('SET_HEATER_TEMPERATURE')) {
+    const heater = script.match(/HEATER=(\S+)/)?.[1]?.toLowerCase();
+    const target = script.match(/TARGET=(\d+)/)?.[1];
+    if (!heater || target === undefined) return [];
+    const temp = parseInt(target);
+    return [[1028, heater === 'heater_bed' ? { heater_bed: temp } : { extruder: temp }]];
+  }
+  if (script === 'TURN_OFF_HEATERS') {
+    return [
+      [1028, { extruder: 0 }],
+      [1028, { heater_bed: 0 }],
+    ];
+  }
+  return [];
 }
 
 // ── Per-client subscription state ────────────────────────────────
@@ -722,31 +758,17 @@ export class MoonrakerServer {
       case 'printer.gcode.script': {
         const script = ((params.script as string) || '').trim().toUpperCase();
         log.info(`GCode script: ${script}`);
-        if (script === 'G28' || script.startsWith('G28 ')) {
-          this.bridge.sendCommand(1026, { axes: ['x', 'y', 'z'] });
-        } else if (script.startsWith('M104 ')) {
-          const m = script.match(/S(\d+)/);
-          if (m) this.bridge.sendCommand(1028, { extruder: parseInt(m[1]) });
-        } else if (script.startsWith('M140 ')) {
-          const m = script.match(/S(\d+)/);
-          if (m) this.bridge.sendCommand(1028, { heater_bed: parseInt(m[1]) });
-        } else if (script === 'M112') {
-          this.bridge.sendCommand(1022, {});
-        } else if (script.startsWith('SET_HEATER_TEMPERATURE')) {
-          const heater = script.match(/HEATER=(\S+)/)?.[1]?.toLowerCase();
-          const target = script.match(/TARGET=(\d+)/)?.[1];
-          if (heater && target !== undefined) {
-            const temp = parseInt(target);
-            if (heater === 'heater_bed') {
-              this.bridge.sendCommand(1028, { heater_bed: temp });
-            } else {
-              this.bridge.sendCommand(1028, { extruder: temp });
-            }
+        const sends = translateGcode(script);
+        const busy = printBusyRefusalAll(sends, this.store.status);
+        if (busy) {
+          // The console line first, Klipper-style, then the error that resolves the call.
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(rpcNotify('notify_gcode_response', [`!! ${busy}`]));
           }
-        } else if (script === 'TURN_OFF_HEATERS') {
-          this.bridge.sendCommand(1028, { extruder: 0 });
-          this.bridge.sendCommand(1028, { heater_bed: 0 });
+          client.ws.send(rpcError(msg.id, 409, busy));
+          break;
         }
+        for (const [m, p] of sends) this.bridge.sendCommand(m, p);
         client.ws.send(rpcResult(msg.id, 'ok'));
         // Also notify gcode response
         if (client.ws.readyState === WebSocket.OPEN) {
@@ -1463,31 +1485,13 @@ export class MoonrakerServer {
         .then((body) => {
           const parsed = JSON.parse(body);
           const script = ((parsed.script as string) || '').trim().toUpperCase();
-          if (script === 'G28' || script.startsWith('G28 ')) {
-            this.bridge.sendCommand(1026, { axes: ['x', 'y', 'z'] });
-          } else if (script.startsWith('M104 ')) {
-            const m = script.match(/S(\d+)/);
-            if (m) this.bridge.sendCommand(1028, { extruder: parseInt(m[1]) });
-          } else if (script.startsWith('M140 ')) {
-            const m = script.match(/S(\d+)/);
-            if (m) this.bridge.sendCommand(1028, { heater_bed: parseInt(m[1]) });
-          } else if (script === 'M112') {
-            this.bridge.sendCommand(1022, {});
-          } else if (script.startsWith('SET_HEATER_TEMPERATURE')) {
-            const heater = script.match(/HEATER=(\S+)/)?.[1]?.toLowerCase();
-            const target = script.match(/TARGET=(\d+)/)?.[1];
-            if (heater && target !== undefined) {
-              const temp = parseInt(target);
-              if (heater === 'heater_bed') {
-                this.bridge.sendCommand(1028, { heater_bed: temp });
-              } else {
-                this.bridge.sendCommand(1028, { extruder: temp });
-              }
-            }
-          } else if (script === 'TURN_OFF_HEATERS') {
-            this.bridge.sendCommand(1028, { extruder: 0 });
-            this.bridge.sendCommand(1028, { heater_bed: 0 });
+          const sends = translateGcode(script);
+          const busy = printBusyRefusalAll(sends, this.store.status);
+          if (busy) {
+            jsonError(res, busy, 409);
+            return;
           }
+          for (const [m, p] of sends) this.bridge.sendCommand(m, p);
           jsonResult(res, 'ok');
         })
         .catch(() => jsonError(res, 'Invalid JSON'));
