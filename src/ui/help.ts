@@ -65,7 +65,7 @@ ${renderShortcutsTable()}
   <table class="help-api">
     <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
     <tbody>
-      <tr><td>GET</td><td>/api/health</td><td>Service health check (MQTT status + deployed build)</td></tr>
+      <tr><td>GET</td><td>/api/health</td><td>Service health check (MQTT status, camera state with its reason, deployed build)</td></tr>
       <tr><td>GET</td><td>/api/status</td><td>Full printer state (attributes, status, canvas, files)</td></tr>
       <tr><td>GET</td><td>/api/snapshot</td><td>JPEG camera snapshot</td></tr>
       <tr><td>GET</td><td>/api/stream</td><td>MJPEG camera stream proxy</td></tr>

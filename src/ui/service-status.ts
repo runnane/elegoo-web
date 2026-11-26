@@ -3,6 +3,8 @@
 import { $, escapeHtml } from './helpers';
 import type { PrinterState } from '../printer-state';
 import {
+  CAMERA_OK_STATES,
+  type CameraHealth,
   type MqttPhase,
   type VersionStampish,
   UNKNOWN_VERSION_LABEL,
@@ -31,7 +33,25 @@ export interface ServiceStatus {
   wsClients: number;
   telegram: string;
   ai: string;
+  /** A `CameraState` since ELEG-178; `available`/`unavailable` from an older server. */
   camera: string;
+  /**
+   * The reason and timestamps behind `camera` (ELEG-178). Optional for the same reason as
+   * `mqttPhase`: a browser can be holding a `service_status` from before this shipped.
+   */
+  cameraHealth?: CameraHealth;
+}
+
+/** Healthy camera readings: the evidence-derived ones, plus the pre-ELEG-178 value. */
+const CAMERA_OK: string[] = [...CAMERA_OK_STATES, 'available'];
+
+/** The Camera row's value: the state, and the reason when the server sent one. */
+export function cameraRowValue(s: Pick<ServiceStatus, 'camera' | 'cameraHealth'>): string {
+  const state = escapeHtml(s.camera);
+  const reason = s.cameraHealth?.reason;
+  return reason
+    ? `${state}<span class="svc-detail" title="${escapeHtml(reason)}"> — ${escapeHtml(reason)}</span>`
+    : state;
 }
 
 interface ServiceCheck {
@@ -171,7 +191,7 @@ export function renderServiceStatus(): void {
     { label: 'MQTT', state: s.mqtt, okValues: ['connected'] },
     { label: 'Telegram', state: s.telegram, okValues: ['running'] },
     { label: 'AI', state: s.ai, okValues: ['monitoring', 'idle'] },
-    { label: 'Camera', state: s.camera, okValues: ['available'] },
+    { label: 'Camera', state: s.camera, okValues: CAMERA_OK },
     { label: 'Printer', state: s.printerSn ? 'ok' : 'err', okValues: ['ok'] },
   ];
 
@@ -217,7 +237,7 @@ export function renderServiceStatus(): void {
       ${rowHtml(indicatorState(s.mqtt, ['connected']), 'MQTT', mqttLabel)}
       ${rowHtml(indicatorState(s.telegram, ['running']), 'Telegram', s.telegram)}
       ${rowHtml(indicatorState(s.ai, ['monitoring', 'idle']), 'AI', s.ai)}
-      ${rowHtml(indicatorState(s.camera, ['available']), 'Camera', s.camera)}
+      ${rowHtml(indicatorState(s.camera, CAMERA_OK), 'Camera', cameraRowValue(s))}
       ${rowHtml(s.printerSn ? 'ok' : 'err', 'Printer', escapeHtml(s.printerSn || 'unknown'))}
       ${rowHtml('ok', 'WS Clients', String(s.wsClients))}
       ${rowHtml('ok', 'Uptime', formatUptime(s.uptime))}

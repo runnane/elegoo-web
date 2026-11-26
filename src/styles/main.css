@@ -2896,6 +2896,13 @@ body {
   color: var(--text-primary);
   margin-left: auto;
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The camera's reason (ELEG-178): secondary to the state it explains. */
+.svc-detail {
+  color: var(--text-muted);
+  font-weight: 400;
 }
 .status-dot {
   display: inline-flex;

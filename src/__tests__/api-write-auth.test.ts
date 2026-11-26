@@ -47,6 +47,8 @@ const bridge = {
   serialNumber: 'TESTSN',
   ip: '192.0.2.10',
   sendCommand: vi.fn(),
+  // The router subscribes to `connected` (ELEG-178: a reconnect clears a stale camera failure).
+  on: vi.fn(),
   enableVideoStreamSDCP: vi.fn(async () => ({ success: true })),
   enableVideoStreamMQTT: vi.fn(),
 };
