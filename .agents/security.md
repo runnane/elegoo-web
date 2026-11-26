@@ -197,6 +197,17 @@ get this right.
   `logger.ts` writes to `${DATA_DIR}/logs`; an `AI_VLM_API_KEY` in a debug line is a
   credential on disk and, given the above, a credential behind an unauthenticated
   endpoint.
+- **The printer's own auth token is redacted from the raw MQTT stream** (ELEG-186). Every
+  raw request and reply is broadcast to every `/ws` client and written to
+  `/api/debug/capture` files, and both are open. The firmware enum names three methods
+  about the token: 1049 `UPDATE_TOKEN`, 1050 `GET_TOKEN`, 1053 `SET_TOKEN_SWITCH`.
+  `StateStore` passes every forwarded payload through `redactSecretPayload`
+  (`src/server/secret-payload.ts`): for those methods only `id`, `method` and
+  `error_code` survive. Nothing in the repo sends them, but another broker client, a `/ws`
+  command frame or MCP `send_command` can. A new consumer of raw payloads reads them from
+  `StateStore`'s events, never from the bridge directly, or it bypasses the redaction.
+  Until ELEG-186 the store also copied a 1050 reply's `url` into a field sent to every
+  browser (`videoUrl`, now `timelapseUrl` and fed by 1051 only).
 - **Committed files carry placeholders only** — `.env.example`,
   `docker-compose.example.yml`, `contrib/install.sh`'s generated default `.env`, any
   fixture. This repo is **public**: a committed secret is published, and rotating it is

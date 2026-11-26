@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { PrinterAttributes, PrinterStatus, CanvasInfo, FileEntry } from '../types.js';
 import { getLogger, getEventLogger } from './logger.js';
+import { methodOf, redactSecretPayload } from './secret-payload.js';
 
 const log = getLogger('State');
 import {
@@ -201,7 +202,8 @@ export class StateStore extends EventEmitter {
   thumbnailFailed = false;
   fileTotalLayers: number | null = null;
   timelapseList: Record<string, unknown>[] = [];
-  videoUrl: string | null = null;
+  /** URL of the last exported timelapse video (method 1051's reply). Not a camera URL. */
+  timelapseUrl: string | null = null;
   // Toolhead zone tracking
   zones: ZoneState = {
     current: 'outside',
@@ -282,8 +284,8 @@ export class StateStore extends EventEmitter {
 
     bridge.on('response', (method: number, data: Record<string, unknown>) => {
       this.handleResponse(method, data);
-      // Forward raw response to WS clients
-      this.emit('response', method, data);
+      // Forward raw response to WS clients — minus any auth token (ELEG-186)
+      this.emit('response', method, redactSecretPayload(method, data));
     });
 
     bridge.on('status', (data: Record<string, unknown>) => {
@@ -292,8 +294,15 @@ export class StateStore extends EventEmitter {
       this.emit('status', data);
     });
 
+    // Feeds the raw log, every `/ws` client and `/api/debug/capture`, so the auth token is
+    // redacted here, once, before any of them sees it (ELEG-186).
     bridge.on('raw', (direction: string, topic: string, data: unknown) => {
-      const entry = { direction, topic, data, ts: Date.now() };
+      const entry = {
+        direction,
+        topic,
+        data: redactSecretPayload(methodOf(data), data),
+        ts: Date.now(),
+      };
       this.rawLog.push(entry);
       if (this.rawLog.length > this.maxLogEntries) this.rawLog.shift();
       this.emit('raw', entry);
@@ -569,7 +578,7 @@ export class StateStore extends EventEmitter {
     this.thumbnailFailed = false;
     this.fileTotalLayers = null;
     this.timelapseList = [];
-    this.videoUrl = null;
+    this.timelapseUrl = null;
     this.zones = { current: 'outside', previous: 'outside', enteredAt: 0, history: [] };
 
     this.layerTimes = [];
@@ -683,16 +692,12 @@ export class StateStore extends EventEmitter {
         }
         break;
       }
-      case 1050: {
-        const errorCode = result.error_code as number | undefined;
-        const url = result.url as string | undefined;
-        if (errorCode === 0 && url) this.videoUrl = url;
-        break;
-      }
+      // No 1050 case: 1050 is GET_TOKEN in the firmware enum, and its reply is redacted
+      // before anything else sees it (ELEG-186, `secret-payload.ts`).
       case 1051: {
         const errorCode = result.error_code as number | undefined;
         const url = result.url as string | undefined;
-        if (errorCode === 0 && url) this.videoUrl = url;
+        if (errorCode === 0 && url) this.timelapseUrl = url;
         break;
       }
     }
