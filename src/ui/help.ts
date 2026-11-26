@@ -1,6 +1,7 @@
 import { REST_ROUTES } from './api-routes';
 import { $, escapeHtml } from './helpers';
 import { BINDINGS, isDestructiveAction } from './keymap';
+import { MQTT_METHODS } from './mqtt-methods';
 
 let helpRendered = false;
 
@@ -40,6 +41,14 @@ function renderRestRows(): string {
   return REST_ROUTES.map(
     (rt) =>
       `<tr><td>${rt.method}</td><td>${escapeHtml(rt.path)}</td><td>${escapeHtml(rt.description)}</td><td>${rt.auth ? 'Yes' : 'No'}</td></tr>`,
+  ).join('');
+}
+
+/** The MQTT method rows, from `mqtt-methods.ts` so a test can pin each to its sending code. */
+function renderMqttRows(): string {
+  return MQTT_METHODS.map(
+    (m) =>
+      `<tr><td>${m.method}</td><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.description)}</td></tr>`,
   ).join('');
 }
 
@@ -253,23 +262,7 @@ ${renderShortcutsTable()}
   <table class="help-api">
     <thead><tr><th>Method</th><th>Name</th><th>Description</th></tr></thead>
     <tbody>
-      <tr><td>1001</td><td>Get Attributes</td><td>Printer hostname, model, SN, firmware versions</td></tr>
-      <tr><td>1002</td><td>Get Status</td><td>Full status snapshot (temps, fans, position, print state)</td></tr>
-      <tr><td>1020</td><td>Print Control</td><td>Start print (filename, storage_media)</td></tr>
-      <tr><td>1021</td><td>Pause Print</td><td>Pause current job</td></tr>
-      <tr><td>1022</td><td>Resume Print</td><td>Resume paused job</td></tr>
-      <tr><td>1023</td><td>Stop Print</td><td>Cancel/stop current job</td></tr>
-      <tr><td>1026</td><td>Set Temperature</td><td>Set nozzle/bed/chamber target temps</td></tr>
-      <tr><td>1027</td><td>Move Axis</td><td>Jog axes (X/Y/Z, distance, speed)</td></tr>
-      <tr><td>1028</td><td>Home Axes</td><td>Home specified axes</td></tr>
-      <tr><td>1029</td><td>Set Fan Speed</td><td>Set part/aux/case fan speed</td></tr>
-      <tr><td>1030</td><td>Set LED</td><td>Toggle LED on/off</td></tr>
-      <tr><td>1031</td><td>Set Speed Mode</td><td>Speed profile (silent/balanced/sport/ludicrous)</td></tr>
-      <tr><td>1044</td><td>List Files</td><td>Get file list from storage</td></tr>
-      <tr><td>1045</td><td>Get Thumbnail</td><td>Base64 PNG thumbnail (uses <code>file_name</code>)</td></tr>
-      <tr><td>1046</td><td>Get File Detail</td><td>File metadata (uses <code>filename</code>)</td></tr>
-      <tr><td>2005</td><td>Canvas Status</td><td>AMS/spool slot status</td></tr>
-      <tr><td>6000</td><td>Status Event</td><td>Async status update push from printer</td></tr>
+      ${renderMqttRows()}
     </tbody>
   </table>
 
