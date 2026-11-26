@@ -70,9 +70,11 @@ function busyMessage(what: string): string {
 type Heater = 'extruder' | 'heater_bed';
 
 /**
- * Whether a mid-print 1028 is a safe target change. Both shapes in the tree are read:
- * `{extruder: n}` / `{heater_bed: n}` (SPA, MCP, :7125) and `{target, temperature}`
- * (`/moonraker`, OctoPrint). Which one the firmware honours is ELEG-180, not this.
+ * Whether a mid-print 1028 is a safe target change. Every surface in the tree now sends
+ * `{extruder: n}` / `{heater_bed: n}` (ELEG-180, `printer-commands.ts`), but `/ws` frames
+ * and MCP `send_command` pass whatever a client wrote, so the older `{target, temperature}`
+ * shape is still read here: whether the firmware also accepts it is unverified, and the
+ * guard must not let it through on that uncertainty.
  */
 function temperatureAllowed(params: unknown): boolean {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return false;

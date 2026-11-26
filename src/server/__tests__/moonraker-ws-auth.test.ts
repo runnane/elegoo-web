@@ -472,7 +472,7 @@ describe('the print guard on printer.gcode.script', () => {
       'ok',
     );
     expect(bridge.sendCommand.mock.calls).toEqual([
-      [1026, { axes: ['x', 'y', 'z'] }],
+      [1026, { homed_axes: 'xyz' }],
       [1028, { extruder: 0 }],
       [1028, { heater_bed: 0 }],
     ]);

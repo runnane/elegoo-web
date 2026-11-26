@@ -144,7 +144,7 @@ const WRITES = [
     name: 'POST /api/printer/bed {command:"target"}',
     path: '/api/printer/bed',
     body: JSON.stringify({ command: 'target', target: 60 }),
-    command: [1028, { target: 'heater_bed', temperature: 60 }],
+    command: [1028, { heater_bed: 60 }],
   },
 ] as const;
 
@@ -369,13 +369,41 @@ describe.each(MOUNTS)('OctoPrint compat through $mount', (m) => {
 const job = (code: number) => ({ machine_status: { status: code } }) as unknown as PrinterStatus;
 const KEYED = { ...JSON_HEADERS, 'X-Api-Key': KEY };
 
-/** [path, body, what the refusal names] — each refused while printing. */
-const REFUSED_MID_PRINT: Array<[string, object, string]> = [
-  ['/api/printer/printhead', { command: 'jog', z: 0.1 }, 'moving the toolhead'],
-  ['/api/printer/printhead', { command: 'home', axes: ['x', 'y'] }, 'homing'],
-  ['/api/printer/bed', { command: 'target', target: 0 }, 'turning a heater off'],
-  ['/api/printer/tool', { command: 'target', targets: { tool0: 0 } }, 'turning a heater off'],
-  ['/api/printer/tool', { command: 'target', targets: { tool0: 150 } }, 'below 170'],
+/**
+ * [path, body, what the refusal names, the exact command sent when idle] — each refused
+ * while printing. The idle command pins the SPA's param shape (ELEG-180).
+ */
+const REFUSED_MID_PRINT: Array<[string, object, string, [number, object]]> = [
+  [
+    '/api/printer/printhead',
+    { command: 'jog', z: 0.1 },
+    'moving the toolhead',
+    [1027, { axes: 'z', distance: 0.1 }],
+  ],
+  [
+    '/api/printer/printhead',
+    { command: 'home', axes: ['x', 'y'] },
+    'homing',
+    [1026, { homed_axes: 'xy' }],
+  ],
+  [
+    '/api/printer/bed',
+    { command: 'target', target: 0 },
+    'turning a heater off',
+    [1028, { heater_bed: 0 }],
+  ],
+  [
+    '/api/printer/tool',
+    { command: 'target', targets: { tool0: 0 } },
+    'turning a heater off',
+    [1028, { extruder: 0 }],
+  ],
+  [
+    '/api/printer/tool',
+    { command: 'target', targets: { tool0: 150 } },
+    'below 170',
+    [1028, { extruder: 150 }],
+  ],
 ];
 
 describe.each(MOUNTS)('the print guard through $mount', (m) => {
@@ -393,25 +421,118 @@ describe.each(MOUNTS)('the print guard through $mount', (m) => {
   );
 
   it.each(REFUSED_MID_PRINT)(
-    'idle control: POST %s %j is 204 and sent once',
-    async (path, body) => {
+    'idle control: POST %s %j is 204 and sent once, in the SPA shape',
+    async (path, body, _what, command) => {
       store.status = job(1);
       const r = await send(m.port(), 'POST', m.prefix + path, KEYED, JSON.stringify(body));
       expect(r.status).toBe(204);
-      expect(bridge.sendCommand).toHaveBeenCalledTimes(1);
+      expect(bridge.sendCommand.mock.calls).toEqual([command]);
     },
   );
 
+  it('idle: a multi-axis jog is one 1027 per non-zero axis, in x/y/z order, speed dropped', async () => {
+    store.status = job(1);
+    const body = { command: 'jog', z: -2, x: 10, y: 0, speed: 1200 };
+    const r = await send(
+      m.port(),
+      'POST',
+      `${m.prefix}/api/printer/printhead`,
+      KEYED,
+      JSON.stringify(body),
+    );
+    expect(r.status).toBe(204);
+    expect(bridge.sendCommand.mock.calls).toEqual([
+      [1027, { axes: 'x', distance: 10 }],
+      [1027, { axes: 'z', distance: -2 }],
+    ]);
+  });
+
+  it('while printing, a multi-axis jog is 409 and sends no axis at all', async () => {
+    store.status = job(2);
+    const body = { command: 'jog', x: 10, y: 5 };
+    const r = await send(
+      m.port(),
+      'POST',
+      `${m.prefix}/api/printer/printhead`,
+      KEYED,
+      JSON.stringify(body),
+    );
+    expect(r.status).toBe(409);
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('an absolute jog is 400 and sends nothing (coordinates are not distances)', async () => {
+    store.status = job(1);
+    const body = { command: 'jog', x: 100, absolute: true };
+    const r = await send(
+      m.port(),
+      'POST',
+      `${m.prefix}/api/printer/printhead`,
+      KEYED,
+      JSON.stringify(body),
+    );
+    expect(r.status).toBe(400);
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('idle: home with no axes homes xyz', async () => {
+    store.status = job(1);
+    const body = { command: 'home' };
+    const r = await send(
+      m.port(),
+      'POST',
+      `${m.prefix}/api/printer/printhead`,
+      KEYED,
+      JSON.stringify(body),
+    );
+    expect(r.status).toBe(204);
+    expect(bridge.sendCommand.mock.calls).toEqual([[1026, { homed_axes: 'xyz' }]]);
+  });
+
+  it('idle: home axes are lower-cased, de-duplicated and put in x/y/z order', async () => {
+    store.status = job(1);
+    const body = { command: 'home', axes: ['Z', 'x', 'z'] };
+    const r = await send(
+      m.port(),
+      'POST',
+      `${m.prefix}/api/printer/printhead`,
+      KEYED,
+      JSON.stringify(body),
+    );
+    expect(r.status).toBe(204);
+    expect(bridge.sendCommand.mock.calls).toEqual([[1026, { homed_axes: 'xz' }]]);
+  });
+
+  it('home naming no real axis is 400 and homes nothing', async () => {
+    store.status = job(1);
+    const body = { command: 'home', axes: ['e'] };
+    const r = await send(
+      m.port(),
+      'POST',
+      `${m.prefix}/api/printer/printhead`,
+      KEYED,
+      JSON.stringify(body),
+    );
+    expect(r.status).toBe(400);
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+  });
+
   it.each([
-    [
-      '/api/printer/bed',
-      { command: 'target', target: 60 },
-      [1028, { target: 'heater_bed', temperature: 60 }],
-    ],
+    ['/api/printer/bed', { command: 'target', target: '60' }],
+    ['/api/printer/tool', { command: 'target', targets: { tool0: 'hot' } }],
+  ])('idle: POST %s %j with a non-number target is 400 and sends nothing', async (path, body) => {
+    store.status = job(1);
+    const r = await send(m.port(), 'POST', m.prefix + path, KEYED, JSON.stringify(body));
+    expect(r.status).toBe(400);
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['/api/printer/bed', { command: 'target', target: 60 }, [1028, { heater_bed: 60 }]],
     [
       '/api/printer/tool',
       { command: 'target', targets: { tool0: 215 } },
-      [1028, { target: 'extruder', temperature: 215 }],
+      [1028, { extruder: 215 }],
     ],
   ])('mid-print allow: POST %s %j is 204 and sent', async (path, body, command) => {
     store.status = job(2);

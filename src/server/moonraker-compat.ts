@@ -19,6 +19,7 @@ import { getLogger } from './logger.js';
 import { otaDisplayMessage } from './ota-status.js';
 import { authorize, extractKey } from './write-auth.js';
 import { printBusyRefusalAll } from './print-guard.js';
+import { translateGcode } from './printer-commands.js';
 import { isMoonrakerHttpWrite, MOONRAKER_UNAUTHORIZED } from './moonraker-auth.js';
 import { loadavg, freemem } from 'os';
 
@@ -432,28 +433,10 @@ export function createMoonrakerRouter(
       readBody(req)
         .then((body) => {
           const parsed = JSON.parse(body);
-          const script = (parsed.script || '').trim().toUpperCase();
           // Translate first, send after: the print guard (ELEG-176) decides the whole
-          // script up front, so TURN_OFF_HEATERS mid-print sends neither half.
-          const sends: Array<[number, Record<string, unknown>]> = [];
-          if (script === 'G28' || script.startsWith('G28 ')) {
-            sends.push([1026, { axes: ['x', 'y', 'z'] }]);
-          } else if (script.startsWith('M104 ')) {
-            const match = script.match(/S(\d+)/);
-            if (match) {
-              sends.push([1028, { target: 'extruder', temperature: parseInt(match[1]) }]);
-            }
-          } else if (script.startsWith('M140 ')) {
-            const match = script.match(/S(\d+)/);
-            if (match) {
-              sends.push([1028, { target: 'heater_bed', temperature: parseInt(match[1]) }]);
-            }
-          } else if (script === 'M112') {
-            sends.push([1022, {}]);
-          } else if (script === 'TURN_OFF_HEATERS') {
-            sends.push([1028, { target: 'extruder', temperature: 0 }]);
-            sends.push([1028, { target: 'heater_bed', temperature: 0 }]);
-          }
+          // script up front, so TURN_OFF_HEATERS mid-print sends neither half. The
+          // translator is the :7125 server's too (ELEG-180), so the two cannot drift.
+          const sends = translateGcode(String(parsed.script || ''));
           const busy = printBusyRefusalAll(sends, store.status);
           if (busy) {
             errorResponse(res, busy, 409);
