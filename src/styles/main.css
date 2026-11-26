@@ -531,6 +531,14 @@ body {
   bottom: 0;
 }
 
+/* A grid item's min-width defaults to its min-content, so one wide card (a long log
+   line, a filename) widened the whole track. Long content scrolls or wraps inside its
+   own card instead (ELEG-164). */
+.dashboard-main > *,
+.dashboard-sidebar > * {
+  min-width: 0;
+}
+
 .dashboard-main {
   flex: 1;
   overflow-y: auto;
@@ -2025,9 +2033,22 @@ body {
 
 /* Responsive: mobile */
 @media (max-width: 800px) {
+  /* minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), so the one column could
+     never be narrower than its widest card's min-content. The MQTT log's rows held it at
+     ~1556px on a 390px phone, clipping every main-area card (ELEG-164). */
   .dashboard-sidebar,
   .dashboard-main {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .slog-row-header {
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 0;
+  }
+  .slog-time,
+  .slog-method,
+  .slog-topic {
+    min-width: 0;
   }
   .print-status-top {
     flex-direction: column;
@@ -2206,6 +2227,15 @@ body {
 
 /* Responsive: narrow mobile */
 @media (max-width: 480px) {
+  /* All five tabs share the row instead of scrolling Help off-screen (ELEG-164). */
+  .main-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 2px;
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: normal;
+  }
   .dashboard-sidebar,
   .dashboard-main {
     padding: 6px;

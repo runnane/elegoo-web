@@ -343,6 +343,35 @@ with nothing of it committed:
   with and without slicer `;LAYER_CHANGE` comments. Use `page.screenshot`, not
   `toDataURL` — `preserveDrawingBuffer` is off. Run it on `main` and on the branch.
 
+## Measuring layout against production's real content (ELEG-164)
+
+Layout bugs here are driven by *content*: ELEG-164's 1556px phone column came from the
+MQTT log's live rows, which an isolated service with no printer never renders. jsdom
+has no layout engine. So measure in a real engine, against production's DOM, without
+deploying anything:
+
+- **The engine.** Playwright's cached `chrome-headless-shell` is on the workstation even
+  where no `chromium` is on `PATH`
+  (`~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/`).
+  Start it with `--remote-debugging-port` and drive it over CDP from a throwaway Node
+  script: Node 22 has `fetch` and `WebSocket` built in, so nothing is installed.
+- **Read-only first.** Register a guard with `Page.addScriptToEvaluateOnNewDocument`
+  *before* navigating. It wraps `WebSocket.prototype.send`, `fetch` and `XMLHttpRequest`,
+  drops every non-GET request and every `{type:'command'}` frame whose method is not a
+  known read, and records what it dropped. The page's own connect-time reads
+  (1002/1044/1048/2006) are reads; anything the guard records is a finding.
+- **Test the build, not a snippet.** Run `pnpm build`, then in the page remove every
+  `link[rel=stylesheet]` and `<style>` and inject `dist/assets/index-*.css`. That is
+  exactly the new CSS on production's markup, which is valid as long as the change
+  touches no markup.
+- **Measure, don't eyeball.** `Emulation.setDeviceMetricsOverride` at 360/390/768/1440,
+  then count elements under `#dashboard` whose `getBoundingClientRect().right` exceeds
+  `innerWidth` (`getBoundingClientRect` ignores clipping, so clipped-off content counts),
+  and read `getComputedStyle(#dashboard-main).gridTemplateColumns`. Measure before and
+  after in the same run. `Page.captureScreenshot` gives the picture for the issue.
+
+Keep the script out of the tree, in the job's tmp directory.
+
 ## What nothing checks — say so instead of implying otherwise
 
 - **Layout and appearance.** No browser test, no screenshot, no playwright. jsdom (above)
