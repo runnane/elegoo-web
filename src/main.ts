@@ -68,6 +68,7 @@ import { maybeAlertForEvent } from './ui/alert-sound';
 import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
+import { initTabRoute } from './ui/tab-route';
 import { isCameraUnavailable } from './ui/camera-card';
 import { confirmDialog } from './ui/confirm-dialog';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
@@ -788,6 +789,7 @@ document.querySelectorAll('.main-tab').forEach((btn) => {
     switchToTab(tab);
   });
 });
+initTabRoute(switchToTab);
 
 // Apply saved card layout
 applyCardLayout();

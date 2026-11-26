@@ -12,6 +12,7 @@ import { notifySupport, requestNotifyPermission } from './notify-desktop';
 import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { mountPrinterPresets } from './printer-presets';
+import { syncTabHash } from './tab-route';
 import { API_KEY_SECTION, apiWrite, getApiKey, setApiKey } from './api-key';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
@@ -120,6 +121,8 @@ export function switchToTab(tab: 'dashboard' | 'settings' | 'tools' | 'help' | '
   const tabs = document.querySelectorAll('.main-tab');
 
   if (!dashboard || !settingsPage) return;
+
+  syncTabHash(tab);
 
   tabs.forEach((t) => {
     const el = t as HTMLElement;
