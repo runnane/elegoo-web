@@ -403,6 +403,16 @@ body {
 .btn:active {
   transform: scale(0.97);
 }
+/* There was no disabled look at all, so a disabled button — the calibration actions
+   while printing, a command in flight, the print lock (ELEG-163) — looked live. */
+.btn:disabled,
+.btn:disabled:hover,
+.btn:disabled:active {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
 .btn-primary {
   background: var(--accent);
   color: #fff;

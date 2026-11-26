@@ -2,8 +2,12 @@ import type { CommandSender } from '../ws-client';
 import { $ } from './helpers';
 import { apiWrite } from './api-key';
 import { toast } from './toast';
+import { isPrintLocked } from './print-lock';
 
 let controlsBound = false;
+
+export const HOME_CONFIRM =
+  'Home all axes?\n\nThe toolhead will move — make sure the bed is clear.';
 
 /** Track in-flight commands by unique ID → method + elements to re-enable */
 let nextCmdId = 0;
@@ -21,11 +25,19 @@ export function onCommandResponse(method: number): void {
   for (const [id, entry] of inFlight) {
     if (entry.method !== method) continue;
     clearTimeout(entry.timer);
-    for (const el of entry.elements) {
-      (el as HTMLButtonElement).disabled = false;
-      el.classList.remove('cmd-pending');
-    }
+    releaseElements(entry.elements);
     inFlight.delete(id);
+  }
+}
+
+/**
+ * End a command's in-flight disable. An element the print lock holds (ELEG-163) stays
+ * disabled: a response or timeout arriving mid-print must not hand it back.
+ */
+function releaseElements(elements: HTMLElement[]): void {
+  for (const el of elements) {
+    el.classList.remove('cmd-pending');
+    if (!isPrintLocked(el)) (el as HTMLButtonElement).disabled = false;
   }
 }
 
@@ -36,6 +48,9 @@ function guardedSend(
   params: Record<string, unknown>,
   ...elements: HTMLElement[]
 ): void {
+  // A control the print lock holds never sends, however the click arrived (ELEG-163).
+  if (elements.some(isPrintLocked)) return;
+
   // Per-method throttle: drop if sent too recently
   const now = Date.now();
   if (now - (lastSentAt.get(method) ?? 0) < THROTTLE_MS) return;
@@ -66,10 +81,7 @@ function guardedSend(
   const timer = setTimeout(() => {
     const entry = inFlight.get(cmdId);
     if (!entry) return;
-    for (const el of entry.elements) {
-      (el as HTMLButtonElement).disabled = false;
-      el.classList.remove('cmd-pending');
-    }
+    releaseElements(entry.elements);
     inFlight.delete(cmdId);
   }, timeout);
 
@@ -147,7 +159,12 @@ export function bindControls(client: CommandSender): void {
   // so both buttons send 'xyz' and are disabled together
   const btnHomeAll = $('btn-home-all') as HTMLButtonElement;
   const btnHomeAllZ = $('btn-home-all-z') as HTMLButtonElement;
+  // Homing moves the toolhead, so the button confirms first — the same question Shift+H
+  // used to ask on its own, which left the on-screen button doing less checking than
+  // the shortcut (ELEG-163). The shortcut now clicks this button and inherits it.
   const homeAll = () => {
+    if (isPrintLocked(btnHomeAll)) return;
+    if (!confirm(HOME_CONFIRM)) return;
     guardedSend(client, 1026, { homed_axes: 'xyz' }, btnHomeAll, btnHomeAllZ);
   };
   btnHomeAll.addEventListener('click', homeAll);

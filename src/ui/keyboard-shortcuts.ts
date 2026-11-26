@@ -83,9 +83,8 @@ function dispatch(action: ShortcutAction): void {
       clickButton('btn-stop');
       return;
     case 'home':
-      if (!confirm('Home all axes?\n\nThe toolhead will move — make sure the bed is clear.')) {
-        return;
-      }
+      // btn-home-all's own click handler (controls.ts) confirms before sending, and is
+      // disabled while a job is active (ELEG-163) — so this, like Stop, only clicks it.
       clickButton('btn-home-all');
       return;
   }
