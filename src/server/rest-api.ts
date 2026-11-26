@@ -1839,6 +1839,15 @@ export function createRestRouter(
       return;
     }
 
+    // No /api/ route matched: a JSON 404, never the SPA shell with a 200 (ELEG-171) — a
+    // typo'd or version-skewed call must fail here, not later at JSON.parse, and a
+    // monitor probing an /api/ URL must not read the HTML shell as healthy.
+    if (url.startsWith('/api/')) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found', path: url.split('?')[0] }));
+      return;
+    }
+
     // Not an API route — serve static files from dist/
     serveStatic(url, res);
 
