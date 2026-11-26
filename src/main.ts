@@ -1,3 +1,4 @@
+import { applyPrintLock, isJobActive } from './ui/print-lock';
 import { WsClient } from './ws-client';
 import { PrinterState } from './printer-state';
 import { LogStore } from './log-store';
@@ -153,6 +154,9 @@ function scheduleRender(): void {
       renderHeader(state);
       renderDashboard(state, client);
       renderCanvas(state);
+      // After every card that (re)builds a lockable control, so freshly rendered tray
+      // buttons are locked in the same frame they appear (ELEG-163).
+      applyPrintLock(document, isJobActive(state.status));
       renderSystemInfo(state);
       renderTimelapse(state);
       renderGcodePreview(state);
