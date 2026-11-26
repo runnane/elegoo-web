@@ -137,7 +137,7 @@ function renderReportList(): void {
         <div class="report-actions">
           <a href="/api/reports/${encodeURIComponent(r.id)}/pdf" class="btn btn-sm btn-primary" title="Download PDF report" download>📄 PDF</a>
           <a href="/api/reports/${encodeURIComponent(r.id)}" class="btn btn-sm btn-ghost" title="View raw JSON data" target="_blank">{ }</a>
-          <button class="btn btn-sm btn-danger report-delete-btn" data-report-id="${escapeHtml(r.id)}" title="Delete report">🗑</button>
+          <button class="btn btn-sm btn-ghost report-delete-btn" data-report-id="${escapeHtml(r.id)}" title="Delete report">🗑</button>
         </div>
       </div>`;
   }
