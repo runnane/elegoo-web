@@ -336,13 +336,16 @@ describe('frames that are not commands', () => {
 
 const job = (code: number) => ({ machine_status: { status: code } });
 
+/** [method, params, what the refusal names] — each refused while printing. */
+const WS_REFUSED_MID_PRINT: Array<[number, Record<string, unknown>, string]> = [
+  [1026, { homed_axes: 'xyz' }, 'homing'],
+  [1027, { axes: 'z', distance: 1 }, 'moving the toolhead'],
+  [1028, { heater_bed: 0 }, 'turning a heater off'],
+  [2001, {}, 'loading a tray'],
+];
+
 describe('the print guard on an authorised connection', () => {
-  it.each([
-    [1026, { homed_axes: 'xyz' }, 'homing'],
-    [1027, { axes: 'z', distance: 1 }, 'moving the toolhead'],
-    [1028, { heater_bed: 0 }, 'turning a heater off'],
-    [2001, {}, 'loading a tray'],
-  ])(
+  it.each(WS_REFUSED_MID_PRINT)(
     'while printing, %i is refused with code "busy" and never reaches the bridge',
     async (method, params, what) => {
       store.status = job(2);
@@ -359,19 +362,18 @@ describe('the print guard on an authorised connection', () => {
     },
   );
 
-  it('idle control: the same frames are forwarded when no job is active', async () => {
-    store.status = job(1);
-    const c = await connectClient();
-    c.send({ type: 'auth', key: KEY });
-    c.send(command(1026, { homed_axes: 'xyz' }));
-    c.send(command(1028, { heater_bed: 0 }));
-    await c.fence();
-    expect(forwarded()).toEqual([
-      [1026, { homed_axes: 'xyz' }],
-      [1028, { heater_bed: 0 }],
-    ]);
-    expect(c.refusals()).toEqual([]);
-  });
+  it.each(WS_REFUSED_MID_PRINT)(
+    'idle control: %i is forwarded when no job is active',
+    async (method, params) => {
+      store.status = job(1);
+      const c = await connectClient();
+      c.send({ type: 'auth', key: KEY });
+      c.send(command(method, params));
+      await c.fence();
+      expect(forwarded()).toEqual([[method, params]]);
+      expect(c.refusals()).toEqual([]);
+    },
+  );
 
   it('mid-print allow: pause, a fan, and a safe temperature change still go through', async () => {
     store.status = job(2);

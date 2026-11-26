@@ -491,4 +491,17 @@ describe('the print guard on printer.gcode.script', () => {
       [1028, { extruder: 215 }],
     ]);
   });
+
+  it('idle control: SET_HEATER_TEMPERATURE bed to 0 is forwarded, with an ok console line', async () => {
+    store.status = job(1);
+    const c = await identified();
+    const r = await c.call('printer.gcode.script', {
+      script: 'SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0',
+    });
+    expect(r.result).toBe('ok');
+    expect(bridge.sendCommand.mock.calls).toEqual([[1028, { heater_bed: 0 }]]);
+    // The ok line follows the result on the wire; one more call orders it.
+    await c.call('printer.gcode.help');
+    expect(consoleLines(c)).toEqual(['// SET_HEATER_TEMPERATURE HEATER=HEATER_BED TARGET=0: ok']);
+  });
 });

@@ -411,4 +411,14 @@ describe.each([
     expect(r.status).toBe(200);
     expect(bridge.sendCommand).not.toHaveBeenCalled();
   });
+
+  it('idle control: M140 S0 and M104 S150 are forwarded', async () => {
+    store.status = job(1);
+    const bed = await call(base(), 'POST', '/printer/gcode/script', script('M140 S0'));
+    const nozzle = await call(base(), 'POST', '/printer/gcode/script', script('M104 S150'));
+    expect(bed.status).toBe(200);
+    expect(nozzle.status).toBe(200);
+    expect(bridge.sendCommand).toHaveBeenCalledTimes(2);
+    expect(bridge.sendCommand.mock.calls.map(([m]) => m)).toEqual([1028, 1028]);
+  });
 });
