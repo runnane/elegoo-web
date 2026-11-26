@@ -94,7 +94,8 @@ export class PrinterState {
     meters: number;
   }> = [];
   timelapseList: Record<string, unknown>[] = [];
-  videoUrl: string | null = null;
+  /** URL of the last exported timelapse video (method 1051's reply). Not a camera URL. */
+  timelapseUrl: string | null = null;
   /** Toolhead zone state (from server) */
   zones: ZoneState = { current: 'outside', previous: 'outside', enteredAt: 0, history: [] };
   /** Print history from method 1036 */
@@ -299,23 +300,14 @@ export class PrinterState {
         }
         break;
       }
-      case 1050: {
-        // GET_VIDEO_URL
-        const errorCode = result.error_code as number | undefined;
-        const url = result.url as string | undefined;
-        if (errorCode === 0 && url) {
-          this.videoUrl = url;
-          this.notify();
-        }
-        break;
-      }
+      // No 1050 case: 1050 is GET_TOKEN in the firmware enum, not a video URL (ELEG-186).
       case 1051: {
-        // EXPORT_TIMELAPSE
+        // EXPORT_TIMELAPSE_VIDEO
         const errorCode = result.error_code as number | undefined;
         const url = result.url as string | undefined;
         if (errorCode === 0) {
           if (url) {
-            this.videoUrl = url;
+            this.timelapseUrl = url;
           }
           this.notify();
         }

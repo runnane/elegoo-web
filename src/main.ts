@@ -580,8 +580,8 @@ function connectToService(): void {
           | undefined;
         const err1051 = r1051?.error_code as number | undefined;
         if (err1051 === 0) {
-          if (state.videoUrl) {
-            showTimelapsePlayer(state.videoUrl);
+          if (state.timelapseUrl) {
+            showTimelapsePlayer(state.timelapseUrl);
           } else {
             toast('Timelapse export started — video will be generated', 'info');
           }
@@ -592,9 +592,6 @@ function connectToService(): void {
           toast(`Timelapse export failed: ${describeCommandError(err1051)}`, 'error');
           requestAnimationFrame(() => renderTimelapse(state));
         }
-      }
-      if (method === 1050 && state.videoUrl) {
-        showTimelapsePlayer(state.videoUrl);
       }
       // Only on success. These used to toast "started" whatever came back, so a
       // calibration the printer had refused as busy still read as under way (ELEG-40).

@@ -8,11 +8,14 @@
  * table. `data/CC2_PROTOCOL_REFERENCE.md` is the citable source; ELEG-57 audits the
  * rest of this table against it.
  *
- * **But the reference is not the firmware either.** Where the two disagree, the running
- * code is the stronger evidence: this service sends 2006 for mono filament info and reads
- * a video URL out of 1050's reply, both of which the reference names differently. So a
- * row here only moves when the reference contradicts it *and* nothing in the code relies
- * on the old meaning (ELEG-85).
+ * **But the reference is not the firmware either.** The strongest local evidence is the
+ * firmware's own method enum (`method.h`, ELEG-100); after that, a method the service sends
+ * and the printer answers — it sends 2006 for mono filament info, which neither the
+ * reference nor the enum lists. Code that merely *reads* a reply is not evidence: until
+ * ELEG-186 this file kept 1050 as 'GetVideoUrl' because the code read a video URL out of
+ * 1050's reply, when nothing ever sent 1050 and the enum names it GET_TOKEN. So a row here
+ * moves when the enum or the reference contradicts it and no sent-and-answered behaviour
+ * supports the old name (ELEG-85, ELEG-186).
  */
 
 export const METHOD_NAMES: Record<number, string> = {
@@ -61,8 +64,18 @@ export const METHOD_NAMES: Record<number, string> = {
   // so one had to be wrong. Both protocol docs in `data/` say 1049 is UpdateToken, and
   // ELEG-38 nearly sent a history-delete payload to it (ELEG-38).
   1049: 'UpdateToken',
-  1050: 'GetVideoUrl',
-  1051: 'GetTimeLapse',
+  // The firmware enum (`method.h`) reads, in order: `XX(1049, UPDATE_TOKEN, update token)`,
+  // `XX(1050, GET_TOKEN, get token)`, `XX(1051, EXPORT_TIMELAPSE_VIDEO, export timelapse
+  // video)`, `XX(1053, SET_TOKEN_SWITCH, set token switch)`; the reference agrees on 1050
+  // (GetToken). 1050 was labelled 'GetVideoUrl' and 1051 'GetTimeLapse' (ELEG-186).
+  // Do NOT send 1050 — by its name it returns the printer's auth token (the reply shape is
+  // documented nowhere locally, so nobody has checked). Nothing here sends it, and
+  // the service redacts 1049/1050/1053 payloads from `/ws` and the debug capture
+  // (`src/server/secret-payload.ts`).
+  1050: 'GetToken',
+  1051: 'ExportTimelapseVideo',
+  // Turns the printer's token authentication on or off. Do NOT send 1053.
+  1053: 'SetTokenSwitch',
   // There is no 1060 in the reference. It was labelled 'SetDeviceName', which is 1043
   // above, and ELEG-39 was written against 1060 because of it (ELEG-85).
   //

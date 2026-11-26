@@ -233,7 +233,9 @@ export class WebSocketTransport {
       thumbnailFailed: this.store.thumbnailFailed,
       fileTotalLayers: this.store.fileTotalLayers,
       timelapseList: this.store.timelapseList,
-      videoUrl: this.store.videoUrl,
+      // Was `videoUrl` until ELEG-186. It is the 1051 timelapse export URL, never a camera
+      // URL; the SPA does not read this field today.
+      timelapseUrl: this.store.timelapseUrl,
       zones: this.store.zones,
       layerTimes: this.store.layerTimes,
       filamentUsage: this.store.getFilamentUsageArray(),

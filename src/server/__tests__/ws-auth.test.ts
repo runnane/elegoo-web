@@ -47,7 +47,7 @@ const store = Object.assign(new EventEmitter(), {
   thumbnailFailed: false,
   fileTotalLayers: 0,
   timelapseList: [],
-  videoUrl: null,
+  timelapseUrl: null,
   zones: null,
   layerTimes: [],
   getFilamentUsageArray: () => [],
