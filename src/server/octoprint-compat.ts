@@ -14,7 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
-import type { FanInfo } from '../types.js';
+import { type FanInfo, isPaused } from '../types.js';
 import { getLogger } from './logger.js';
 import {
   type OctoPrintAccess,
@@ -66,14 +66,14 @@ export function getOctoPrintState(store: StateStore) {
   const ms = store.status?.machine_status;
   const machineStatus = ms?.status ?? 0;
   const isPrinting = machineStatus === 2;
-  const isPaused = machineStatus === 3 || ms?.sub_status === 2502 || ms?.sub_status === 2505;
+  const paused = isPaused(machineStatus, ms?.sub_status);
   const isIdle = machineStatus === 1;
   const isError = (ms?.exception_status?.length ?? 0) > 0;
 
   let text = 'Offline';
   if (store.status) {
     if (isError) text = 'Error';
-    else if (isPaused) text = 'Paused';
+    else if (paused) text = 'Paused';
     else if (isPrinting) text = 'Printing';
     else if (isIdle) text = 'Operational';
     else text = 'Operational';
@@ -83,8 +83,8 @@ export function getOctoPrintState(store: StateStore) {
     text,
     flags: {
       operational: !!store.status,
-      paused: isPaused,
-      printing: isPrinting && !isPaused,
+      paused,
+      printing: isPrinting && !paused,
       pausing: ms?.sub_status === 2501,
       cancelling: ms?.sub_status === 2503,
       sdReady: true,
@@ -363,7 +363,7 @@ export function createOctoPrintRouter(
       const s = store.status;
       const ps = s?.print_status;
       const ms = s?.machine_status;
-      const isPrinting = ms?.status === 2 || ms?.status === 3;
+      const isPrinting = ms?.status === 2;
       json(res, {
         job: {
           file: {
@@ -412,8 +412,8 @@ export function createOctoPrintRouter(
               break;
             case 'pause':
               if (cmd.action === 'toggle') {
-                const isPaused = store.status?.machine_status?.status === 3;
-                bridge.sendCommand(isPaused ? 1023 : 1021, {});
+                const ms = store.status?.machine_status;
+                bridge.sendCommand(isPaused(ms?.status, ms?.sub_status) ? 1023 : 1021, {});
               } else if (cmd.action === 'resume') {
                 bridge.sendCommand(1023, {});
               } else {

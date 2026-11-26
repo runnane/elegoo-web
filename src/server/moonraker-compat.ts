@@ -14,7 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
-import type { FanInfo } from '../types.js';
+import { type FanInfo, isPaused } from '../types.js';
 import { getLogger } from './logger.js';
 import { otaDisplayMessage } from './ota-status.js';
 import { authorize, extractKey } from './write-auth.js';
@@ -159,9 +159,8 @@ export function queryObjects(
         const ms = s?.machine_status;
         const ps = s?.print_status;
         let state = 'standby';
-        if (ms?.status === 2) state = 'printing';
-        else if (ms?.status === 3 || ms?.sub_status === 2502 || ms?.sub_status === 2505)
-          state = 'paused';
+        if (isPaused(ms?.status, ms?.sub_status)) state = 'paused';
+        else if (ms?.status === 2) state = 'printing';
         else if (ms?.sub_status === 2077) state = 'complete';
         else if ((ms?.exception_status?.length ?? 0) > 0) state = 'error';
         result.print_stats = pick({
@@ -180,7 +179,7 @@ export function queryObjects(
 
       case 'virtual_sdcard': {
         const ms = s?.machine_status;
-        const isPrinting = ms?.status === 2 || ms?.status === 3;
+        const isPrinting = ms?.status === 2;
         result.virtual_sdcard = pick({
           file_path: s?.print_status?.filename ?? '',
           progress: isPrinting ? (ms?.progress ?? 0) / 100 : 0,

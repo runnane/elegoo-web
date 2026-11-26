@@ -568,6 +568,20 @@ export function isJobActive(status: PrinterStatus | null | undefined): boolean {
   return s != null && JOB_STATUSES.has(s);
 }
 
+/** Sub-statuses under status 2 that mean the job is paused: 2502 Paused, 2505 Filament Interruption. */
+const PAUSED_SUB_STATUSES = new Set([2502, 2505]);
+
+/**
+ * True when a job is paused: status 2 (Printing) with a paused sub-status. Status 3 is Loading
+ * Filament, never a pause, and a paused sub-status outside status 2 is not a paused job.
+ */
+export function isPaused(
+  status: number | null | undefined,
+  subStatus: number | null | undefined,
+): boolean {
+  return status === 2 && subStatus != null && PAUSED_SUB_STATUSES.has(subStatus);
+}
+
 // ─── Command result codes (`error_code` on a method response) ────────
 //
 // Distinct from EXCEPTION_NAMES below: an *exception* is a hardware fault the printer
