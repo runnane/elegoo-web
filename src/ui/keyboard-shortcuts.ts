@@ -4,20 +4,19 @@
  *
  * **Destructive actions are dispatched by clicking the real button**, not by sending a
  * command directly. `bindControls` in `controls.ts` is what puts the throttle, the
- * in-flight disable and (for Stop) the `confirm()` dialog on `btn-stop` — clicking it
+ * in-flight disable and (for Stop) the confirmation dialog on `btn-stop` — clicking it
  * is how a shortcut inherits every one of those for free, and it means a shortcut can
  * never do less checking than the button: whatever the button's handler does, the
  * shortcut gets exactly that, because it IS that handler running.
  *
  * Home is the one exception worth calling out: its buttons have never called
- * `confirm()` — the CC2 firmware homes all axes regardless of which button is
- * pressed, so the two buttons never needed to ask. The issue is explicit that Home is
- * destructive, so this module adds a confirmation in front of the click, using the
- * same `window.confirm` mechanism Stop already uses, rather than sending a raw
- * command or inventing a second dialog implementation.
+ * confirmation — the CC2 firmware homes all axes regardless of which button is
+ * pressed. Home is destructive (ELEG-163), so its click handler in `controls.ts` now
+ * asks through the same in-app dialog Stop uses; the shortcut only clicks it.
  */
 
 import { switchToTab } from './settings';
+import { CONFIRM_OVERLAY_ID } from './confirm-dialog';
 import { toggleCameraOverlay } from './print-status';
 import { resolveShortcut, type ShortcutAction, type ShortcutContext } from './keymap';
 
@@ -35,10 +34,12 @@ function isTextInputFocused(): boolean {
 /**
  * Any surface the issue calls "a modal/confirmation/overlay" — checked so a shortcut
  * typed while one of these is open does not also drive the dashboard behind it.
- * `window.confirm` itself needs no entry here: it is a blocking, synchronous native
- * dialog, so no `keydown` reaches this listener while one is open.
+ * The in-app confirmation (`confirm-dialog.ts`) needs an entry: unlike the native
+ * `window.confirm` it replaced, it does not block, so keydowns do reach this listener
+ * while it is open.
  */
 function isModalOpen(): boolean {
+  if (document.getElementById(CONFIRM_OVERLAY_ID)) return true;
   const cameraModal = document.getElementById('camera-modal');
   if (cameraModal && !cameraModal.classList.contains('hidden')) return true;
   if (document.getElementById('print-dialog-overlay')) return true;
@@ -78,7 +79,7 @@ function dispatch(action: ShortcutAction): void {
       clickButton('btn-resume');
       return;
     case 'stop':
-      // btn-stop's own click handler (controls.ts) calls confirm() before sending —
+      // btn-stop's own click handler (controls.ts) confirms before sending —
       // nothing here duplicates or bypasses that.
       clickButton('btn-stop');
       return;

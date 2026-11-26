@@ -3795,6 +3795,23 @@ body {
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
+/* In-app confirmation (ELEG-165): messages carry \n line breaks from the old confirm() text. */
+.confirm-dialog {
+  max-width: 400px;
+}
+.confirm-dialog-message {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.confirm-dialog-emergency {
+  border-color: var(--danger, #e5484d);
+  box-shadow: 0 8px 32px rgba(229, 72, 77, 0.45);
+}
+.confirm-dialog-emergency .print-dialog-header {
+  color: var(--danger, #e5484d);
+  border-bottom-color: var(--danger, #e5484d);
+}
 .print-dialog-header {
   display: flex;
   justify-content: space-between;

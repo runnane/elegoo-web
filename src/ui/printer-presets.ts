@@ -14,6 +14,7 @@
 
 import { CONNECTION_PRESETS_API_ENV } from '../types';
 import { apiWrite } from './api-key';
+import { confirmDialog } from './confirm-dialog';
 
 interface PresetView {
   id: string;
@@ -148,8 +149,9 @@ export function mountPrinterPresets(root: HTMLElement): void {
   }
 
   async function activate(p: PresetView): Promise<void> {
-    const confirmed = window.confirm(
+    const confirmed = await confirmDialog(
       `Switch the service to ${p.name} (${p.ip})?\n\nIt disconnects from the current printer and clears its charts, layer times and event log. Telegram, the AI monitor and Moonraker/OctoPrint clients all follow.`,
+      { title: 'Switch printer', confirmLabel: 'Switch', danger: true },
     );
     if (!confirmed) return;
     setStatus(`Switching to ${p.name}…`);
@@ -163,7 +165,12 @@ export function mountPrinterPresets(root: HTMLElement): void {
   }
 
   async function remove(p: PresetView): Promise<void> {
-    if (!window.confirm(`Remove the saved printer ${p.name} (${p.ip})?`)) return;
+    const confirmed = await confirmDialog(`Remove the saved printer ${p.name} (${p.ip})?`, {
+      title: 'Remove printer',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!confirmed) return;
     const { ok, data } = await request('DELETE', `/api/printers/${encodeURIComponent(p.id)}`);
     setStatus(ok ? `Removed ${p.name}.` : errorOf(data, 'Remove failed.'));
     void refresh();

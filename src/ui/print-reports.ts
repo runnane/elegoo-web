@@ -4,6 +4,7 @@
 
 import { $, escapeHtml, formatTime, fetchTimeout } from './helpers';
 import { apiWrite } from './api-key';
+import { confirmDialog } from './confirm-dialog';
 import { type ListControls, createListControls } from './list-controls';
 import { nonZero } from './list-sort';
 
@@ -147,7 +148,13 @@ function renderReportList(): void {
   container.querySelectorAll('.report-delete-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const id = (btn as HTMLElement).dataset.reportId;
-      if (!id || !confirm(`Delete report for this print?`)) return;
+      if (!id) return;
+      const ok = await confirmDialog('Delete report for this print?', {
+        title: 'Delete report',
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!ok) return;
       try {
         const res = await apiWrite(`/api/reports/${encodeURIComponent(id)}`, {
           method: 'DELETE',

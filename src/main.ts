@@ -68,6 +68,7 @@ import { maybeAlertForEvent } from './ui/alert-sound';
 import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
+import { confirmDialog } from './ui/confirm-dialog';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
@@ -223,7 +224,12 @@ function showDashboard(): void {
       $('timelapse-player-wrap').classList.add('hidden');
     });
     $('btn-reset-layer-data').addEventListener('click', async () => {
-      if (!confirm('Reset all layer duration data?')) return;
+      const ok = await confirmDialog('Reset all layer duration data?', {
+        title: 'Reset layer data',
+        confirmLabel: 'Reset',
+        danger: true,
+      });
+      if (!ok) return;
       try {
         const res = await apiWrite('/api/layer-data', { method: 'DELETE' });
         if (res.ok) {

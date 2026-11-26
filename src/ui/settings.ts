@@ -3,6 +3,7 @@
 import { $, fetchTimeout } from './helpers';
 import { type CardLayout, CARD_NAMES, defaultCardLayout, normaliseCardLayout } from './card-layout';
 import { toast } from './toast';
+import { confirmDialog } from './confirm-dialog';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
 import { getThemeChoice, setThemeChoice, isThemeChoice } from './theme';
@@ -490,20 +491,18 @@ function buildSettingsHTML(content: HTMLElement): void {
   }
   renderNotifyStatus();
 
-  content.querySelector('#settings-reset-layout')?.addEventListener('click', () => {
+  content.querySelector('#settings-reset-layout')?.addEventListener('click', async () => {
     // Confirmed because it discards arranging work and cannot be undone. Scoped to the
     // layout key alone: chart resolution, log filters and camera selection live in a
     // separate store (`ui-settings.ts`) and are untouched — which is the whole reason
     // to have this rather than telling people to clear site data (ELEG-44).
-    if (
-      !confirm(
-        'Reset the dashboard layout to its default?\n\n' +
-          'Card order, panel assignment, and hidden and collapsed cards are all restored. ' +
-          'Other settings — chart resolution, log filters, camera selection — are kept.',
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog(
+      'Reset the dashboard layout to its default?\n\n' +
+        'Card order, panel assignment, and hidden and collapsed cards are all restored. ' +
+        'Other settings — chart resolution, log filters, camera selection — are kept.',
+      { title: 'Reset layout', confirmLabel: 'Reset layout', danger: true },
+    );
+    if (!ok) return;
     currentLayout = defaultCardLayout();
     saveCardLayout(currentLayout);
     applyCardLayout();
@@ -745,7 +744,12 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
   });
 
   container.querySelector('#ai-labels-reset')?.addEventListener('click', async () => {
-    if (!confirm('Reset all AI label configs to defaults?')) return;
+    const ok = await confirmDialog('Reset all AI label configs to defaults?', {
+      title: 'Reset AI labels',
+      confirmLabel: 'Reset',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await apiWrite('/api/config/ai-labels', { method: 'DELETE' });
       if (res.ok) {

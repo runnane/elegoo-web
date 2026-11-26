@@ -18,6 +18,7 @@ import type { QueueSnapshot } from '../print-queue-shared';
 import { escapeAttr, escapeHtml, fetchTimeout } from './helpers';
 import { apiWrite } from './api-key';
 import { toast } from './toast';
+import { confirmDialog } from './confirm-dialog';
 import { requestPrintDialog } from './print-dialog';
 import { baseName, queueRows, startNextView } from './print-queue-view';
 
@@ -100,8 +101,13 @@ export function bindPrintQueue(client: CommandSender, state: PrinterState): void
 
   controls.start.addEventListener('click', startNext);
   controls.resume.addEventListener('click', () => void post('/api/queue/resume'));
-  controls.clear.addEventListener('click', () => {
-    if (confirm('Remove every job from the print queue?')) void post('/api/queue/clear');
+  controls.clear.addEventListener('click', async () => {
+    const ok = await confirmDialog('Remove every job from the print queue?', {
+      title: 'Clear queue',
+      confirmLabel: 'Clear queue',
+      danger: true,
+    });
+    if (ok) void post('/api/queue/clear');
   });
   list.addEventListener('click', onListClick);
 

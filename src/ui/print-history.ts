@@ -2,6 +2,7 @@ import type { CommandSender } from '../ws-client';
 import type { PrinterState } from '../printer-state';
 import { $, escapeHtml, escapeAttr, formatTime } from './helpers';
 import { toast } from './toast';
+import { confirmDialog } from './confirm-dialog';
 import { type ListControls, createListControls } from './list-controls';
 import { nonZero, spanSeconds } from './list-sort';
 
@@ -140,7 +141,7 @@ export function bindHistoryControls(): void {
 
   // Delegated, because the list is re-rendered on every 1036 response and per-row
   // listeners would be rebound each time.
-  $('print-history-entries').addEventListener('click', (e) => {
+  $('print-history-entries').addEventListener('click', async (e) => {
     const btn = (e.target as HTMLElement).closest('.history-delete-btn') as HTMLElement | null;
     if (!btn) return;
     const taskId = btn.dataset.taskId;
@@ -149,13 +150,11 @@ export function bindHistoryControls(): void {
     const name = btn.dataset.filename || 'this entry';
     // The record is destroyed on the printer, not hidden here — same shape as the file
     // delete in files.ts, and equally irreversible.
-    if (
-      !confirm(
-        `Delete the history entry for ${name}?\n\nThis removes it from the printer and cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog(
+      `Delete the history entry for ${name}?\n\nThis removes it from the printer and cannot be undone.`,
+      { title: 'Delete history entry', confirmLabel: 'Delete', danger: true },
+    );
+    if (!ok || !historyClient) return;
 
     // Method 1038 (HistoryDelete) takes a list of task ids. NOT 1049 — that is
     // UpdateToken, and sending it here would have written the printer's auth token
