@@ -557,7 +557,34 @@ let upstreamReq: ClientRequest | null = null;
  * a viewer waits without a frame before its response is ended with the reason, so a dead
  * camera is an answer, not a hang. Mutable only so tests need not wait 10 s.
  */
-const cameraTimeouts = { upstreamMs: 10_000, stallMs: 20_000 };
+const cameraTimeouts = { upstreamMs: 10_000, stallMs: 20_000, idleCloseMs: 5_000 };
+
+/** Stops the live upstream attempt quietly (no failure, no retry); null with none open. */
+let stopUpstream: (() => void) | null = null;
+let idleCloseTimer: NodeJS.Timeout | null = null;
+
+function cancelIdleClose(): void {
+  if (idleCloseTimer) clearTimeout(idleCloseTimer);
+  idleCloseTimer = null;
+}
+
+/**
+ * ELEG-184: when the last viewer leaves, close the upstream after a short grace period, so
+ * the printer's few MJPEG client slots are not held for frames nobody sees. The grace lets a
+ * page reload or a stream/overlay toggle reuse the connection; a viewer arriving in it
+ * cancels the close (see `addViewer`).
+ */
+function scheduleIdleClose(): void {
+  if (streamClients.size > 0 || overlayClients.size > 0) return;
+  if (!upstreamActive || idleCloseTimer) return;
+  idleCloseTimer = setTimeout(() => {
+    idleCloseTimer = null;
+    if (streamClients.size > 0 || overlayClients.size > 0) return;
+    log.info('No camera viewers left; closing the upstream MJPEG stream');
+    stopUpstream?.();
+  }, cameraTimeouts.idleCloseMs);
+  idleCloseTimer.unref();
+}
 
 /** Test seam: shorten the stream timeouts. Production never calls this. */
 export function setCameraTimeouts(t: Partial<typeof cameraTimeouts>): void {
@@ -590,6 +617,7 @@ function endViewer(client: ServerResponse, reason: string): void {
   viewerState.delete(client);
   streamClients.delete(client);
   overlayClients.delete(client);
+  scheduleIdleClose();
   if (client.writableEnded) return;
   try {
     const body = `Camera unavailable: ${reason}\r\n`;
@@ -629,13 +657,25 @@ function startMjpegUpstream(cameraUrl: string): void {
     cameraEvidence.failed(reason);
     upstreamActive = false;
     upstreamReq = null;
+    stopUpstream = null;
     failWaitingViewers(reason);
     // Retry only for a viewer still holding a response — no blind loop with nobody watching.
     if (streamClients.size > 0 || overlayClients.size > 0) {
       setTimeout(() => {
-        if (current()) startMjpegUpstream(cameraUrl);
+        if (current() && (streamClients.size > 0 || overlayClients.size > 0)) {
+          startMjpegUpstream(cameraUrl);
+        }
       }, retryMs);
     }
+  };
+  stopUpstream = () => {
+    if (settled || !current()) return;
+    settled = true; // silences fail() for the error the destroy raises
+    if (cameraEvidence.connectingSince !== null) cameraEvidence.attemptEnded();
+    upstreamActive = false;
+    upstreamReq = null;
+    stopUpstream = null;
+    req.destroy();
   };
 
   const url = new URL(cameraUrl);
@@ -745,8 +785,10 @@ export function resetCameraForPrinterSwitch(config: ServiceConfig): void {
   fetchInFlight = null;
   // Printer A's frames and failures say nothing about printer B's camera.
   cameraEvidence.reset();
+  cancelIdleClose();
   const old = upstreamReq;
   upstreamReq = null;
+  stopUpstream = null;
   upstreamActive = false;
   old?.destroy();
   if (config.cameraEnabled && (streamClients.size > 0 || overlayClients.size > 0)) {
@@ -789,8 +831,11 @@ function addViewer(
     viewerState.delete(res);
     set.delete(res);
     log.info(`${kind} client disconnected (total: ${set.size})`);
+    scheduleIdleClose();
   });
 
+  // A viewer inside the grace period keeps the upstream that is already open.
+  cancelIdleClose();
   // Start upstream if not already running
   startMjpegUpstream(config.cameraUrl);
 }

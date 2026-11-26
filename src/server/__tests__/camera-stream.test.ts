@@ -6,7 +6,14 @@
  * answers 503, accepts and never answers, streams one frame and goes quiet, streams one
  * frame and keeps the connection. No printer is involved and no request leaves the host.
  */
-import { createServer, get, type IncomingMessage, type Server, type ServerResponse } from 'http';
+import {
+  type ClientRequest,
+  createServer,
+  get,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'http';
 import { EventEmitter } from 'events';
 import type { AddressInfo, Socket } from 'net';
 import type { MqttBridge } from '../mqtt-bridge.js';
@@ -29,6 +36,8 @@ const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 
 let mood: Mood = '503';
 let camera: Server;
 const cameraSockets = new Set<Socket>();
+/** Connections the fake camera has accepted since the current test began. */
+let cameraConnections = 0;
 let service: Server;
 let servicePort: number;
 const config = {
@@ -56,6 +65,7 @@ function cameraHandler(_req: IncomingMessage, res: ServerResponse): void {
 beforeAll(async () => {
   camera = createServer(cameraHandler);
   camera.on('connection', (s) => {
+    cameraConnections++;
     cameraSockets.add(s);
     s.on('close', () => cameraSockets.delete(s));
   });
@@ -72,7 +82,8 @@ afterEach(() => {
   // Forget this test's evidence and drop the upstream, the way a printer switch does.
   resetCameraForPrinterSwitch(config);
   for (const s of cameraSockets) s.destroy();
-  setCameraTimeouts({ upstreamMs: 10_000, stallMs: 20_000 });
+  setCameraTimeouts({ upstreamMs: 10_000, stallMs: 20_000, idleCloseMs: 5_000 });
+  cameraConnections = 0;
 });
 
 afterAll(async () => {
@@ -164,6 +175,112 @@ describe('/api/stream against a live camera', () => {
     const r = await readStream('/api/stream');
     expect(r.body).toContain('Content-Type: image/jpeg');
     expect(r.body).toContain('Camera unavailable: No frame from the camera for 0.3 s');
+  });
+});
+
+/**
+ * Open a viewer and resolve once its response headers arrive (they are flushed on connect).
+ * The fake camera sends a single frame, so a later viewer never gets a body of its own.
+ */
+function openViewer(path = '/api/stream'): Promise<ClientRequest> {
+  return new Promise((resolve, reject) => {
+    const req = get({ host: '127.0.0.1', port: servicePort, path }, (res) => {
+      res.on('data', () => {});
+      res.on('error', () => {});
+      resolve(req);
+    });
+    req.on('error', () => {});
+    req.setTimeout(5_000, () => reject(new Error('no response within 5 s')));
+  });
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Poll until `cond` holds or `ms` passes; resolves true if it held. */
+async function waitFor(cond: () => boolean, ms: number): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (cond()) return true;
+    await sleep(10);
+  }
+  return cond();
+}
+
+describe('idle upstream close (ELEG-184)', () => {
+  it('closes the camera-side socket after the last viewer leaves, not before', async () => {
+    mood = 'one-frame';
+    setCameraTimeouts({ idleCloseMs: 150 });
+    const a = await openViewer();
+    const b = await openViewer();
+    expect(await waitFor(() => getCameraHealth(ON).state === 'streaming', 1_000)).toBe(true);
+    expect(cameraSockets.size).toBe(1);
+
+    a.destroy(); // one viewer remains
+    await sleep(400);
+    expect(cameraSockets.size).toBe(1);
+
+    b.destroy(); // last viewer gone
+    expect(await waitFor(() => cameraSockets.size === 0, 1_000)).toBe(true);
+    // A quiet close is not a failure, and the attempt is no longer open.
+    const h = getCameraHealth(ON);
+    expect(h.lastFailure).toBeNull();
+    expect(h.state).toBe('streaming'); // a frame arrived moments ago; nothing was recorded as failed
+  });
+
+  it('a viewer arriving inside the grace reuses the same upstream', async () => {
+    mood = 'one-frame';
+    setCameraTimeouts({ idleCloseMs: 400 });
+    const a = await openViewer();
+    expect(await waitFor(() => cameraSockets.size === 1, 1_000)).toBe(true);
+    a.destroy();
+    await sleep(100);
+    const b = await openViewer();
+    await sleep(700); // well past the original close deadline
+    expect(cameraConnections).toBe(1);
+    expect(cameraSockets.size).toBe(1);
+    b.destroy();
+  });
+
+  it('a viewer arriving in the grace restarts it: the next close counts from the last leave', async () => {
+    mood = 'one-frame';
+    setCameraTimeouts({ idleCloseMs: 600 });
+    const a = await openViewer();
+    expect(await waitFor(() => cameraSockets.size === 1, 1_000)).toBe(true);
+    a.destroy(); // grace would end at t=600
+    await sleep(100);
+    const b = await openViewer();
+    await sleep(100);
+    b.destroy(); // t=200: the close is now due at t=800, not t=600
+    await sleep(500); // t=700
+    expect(cameraSockets.size).toBe(1);
+    expect(await waitFor(() => cameraSockets.size === 0, 1_500)).toBe(true);
+    expect(cameraConnections).toBe(1);
+  });
+
+  it('after the close, the next viewer opens a fresh upstream', async () => {
+    mood = 'one-frame';
+    setCameraTimeouts({ idleCloseMs: 100 });
+    const a = await openViewer();
+    expect(await waitFor(() => cameraSockets.size === 1, 1_000)).toBe(true);
+    a.destroy();
+    expect(await waitFor(() => cameraSockets.size === 0, 1_000)).toBe(true);
+    const b = await openViewer();
+    expect(await waitFor(() => cameraConnections === 2, 1_000)).toBe(true);
+    b.destroy();
+  });
+
+  it('an attempt closed before any frame leaves no failure and no open attempt', async () => {
+    mood = 'hang';
+    setCameraTimeouts({ idleCloseMs: 100 });
+    const req = get({ host: '127.0.0.1', port: servicePort, path: '/api/stream' }, () => {});
+    req.on('error', () => {});
+    expect(await waitFor(() => cameraSockets.size === 1, 1_000)).toBe(true);
+    expect(getCameraHealth(ON).state).toBe('connecting');
+    req.destroy();
+    expect(await waitFor(() => cameraSockets.size === 0, 1_000)).toBe(true);
+    const h = getCameraHealth(ON);
+    expect(h.lastFailure).toBeNull();
+    expect(h.state).toBe('idle');
   });
 });
 
