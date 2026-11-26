@@ -150,7 +150,10 @@ export function queryObjects(
             s?.gcode_move?.z ?? 0,
             s?.gcode_move?.extruder ?? s?.gcode_move?.e ?? 0,
           ],
-          speed: (s?.gcode_move?.speed ?? 0) * 60, // mm/s → mm/min
+          // The CC2 already reports gcode_move.speed in mm/min (a live 12000 = F12000 =
+          // 200 mm/s; /api/metrics exports it as elegoo_speed_mm_per_min), and Moonraker's
+          // gcode_move.speed is mm/min too, so it passes through unconverted (ELEG-187).
+          speed: s?.gcode_move?.speed ?? 0,
           speed_factor: 1,
         });
         break;

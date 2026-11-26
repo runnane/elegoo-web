@@ -282,6 +282,12 @@ describe('queryObjects — Klipper-style printer object shapes', () => {
     });
   });
 
+  it('gcode_move.speed passes the printer value (already mm/min) through unconverted (ELEG-187)', () => {
+    const s = makeStore();
+    s.status = baseStatus({ gcode_move: { x: 1, y: 2, z: 3, e: 9, speed: 12000, speed_mode: 0 } });
+    expect(queryObjects(s, { gcode_move: null }).gcode_move.speed).toBe(12000);
+  });
+
   it('toolhead: falls back to gcode_move.e when .extruder is absent', () => {
     const s = makeStore();
     s.status = baseStatus({ gcode_move: { x: 1, y: 2, z: 3, e: 9, speed: 10, speed_mode: 0 } });
