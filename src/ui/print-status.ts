@@ -10,6 +10,7 @@ import {
   isOtaInProgressSubStatus,
 } from '../types';
 import { maybeShowPowerLossDialog } from './power-loss-dialog';
+import { computePrintTiming } from './print-timing';
 import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { setCameraStreamUrlSource, setPrinterReportsCamera } from './camera-card';
@@ -317,17 +318,20 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
     (isPrinting || isPaused) && remaining !== '--' ? `Remaining: ${remaining}` : '--';
 
   // Elapsed time
-  const printDur = ps?.print_duration;
-  if (printDur != null && (isPrinting || isPaused)) {
-    $('print-elapsed').textContent = `Elapsed: ${formatTime(printDur)}`;
+  const timing = computePrintTiming(ps, Date.now());
+  if (timing && (isPrinting || isPaused)) {
+    const printing =
+      timing.printingSec != null && timing.printingSec !== timing.elapsedSec
+        ? ` (printing ${formatTime(timing.printingSec)})`
+        : '';
+    $('print-elapsed').textContent = `Elapsed: ${formatTime(timing.elapsedSec)}${printing}`;
   } else {
     $('print-elapsed').textContent = '--';
   }
 
-  // Start time and ETA (calculated from elapsed / remaining)
-  if ((isPrinting || isPaused) && printDur != null) {
-    const startedAt = new Date(Date.now() - printDur * 1000);
-    $('print-started').textContent = `Started: ${formatClock(startedAt)}`;
+  // Start time and ETA (start from total_duration, which includes preheat — ELEG-169)
+  if ((isPrinting || isPaused) && timing) {
+    $('print-started').textContent = `Started: ${formatClock(timing.startedAt)}`;
   } else {
     $('print-started').textContent = '--';
   }
