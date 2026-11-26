@@ -394,6 +394,26 @@ export class TelegramIntegration {
     }
   }
 
+  /**
+   * One notice when the AI monitor stops getting frames during a print (ELEG-168). No
+   * photo: the camera is the thing that is failing. The reason is monitor-generated text
+   * (no secrets), escaped for MarkdownV2.
+   */
+  async sendAIDegraded(health: { reason: string | null; since: number | null }): Promise<void> {
+    const esc = (text: string) => text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+    const since = health.since ? new Date(health.since).toLocaleTimeString() : 'unknown';
+    const text = [
+      `🤖 *AI monitor is not analysing*`,
+      `⚠️ ${esc(health.reason ?? 'no frames')}`,
+      `\n_${esc(`No frames since ${since} — failure detection is off until the camera returns.`)}_`,
+    ].join('\n');
+    try {
+      await this.sendNew(text, null, true);
+    } catch (err) {
+      log.error(`AI degraded notice failed: ${(err as Error).message}`);
+    }
+  }
+
   stop(): void {
     this._running = false;
     this.bot.stop();
