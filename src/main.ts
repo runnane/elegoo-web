@@ -1,4 +1,4 @@
-import { applyPrintLock, isJobActive } from './ui/print-lock';
+import { applyPrintLock } from './ui/print-lock';
 import { WsClient } from './ws-client';
 import { PrinterState } from './printer-state';
 import { LogStore } from './log-store';
@@ -75,6 +75,7 @@ import {
   COMMAND_METHOD_NAMES,
   classifyCommandOutcome,
   describeCommandError,
+  isJobActive,
   type CommandOutcome,
 } from './types';
 

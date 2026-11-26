@@ -108,6 +108,8 @@ Open — no key needed.
 | `home` | `axes?` (xy\|z\|xyz, default xyz) | Home printer axes |
 | `move` | `axis` (x\|y\|z), `distance` (mm) | Jog a single axis (negative = reverse) |
 
+**Refused while a job is active** (status Printing or Power Loss Recovery; see the print guard under [Error Handling](#error-handling)): `home` and `move` always. `set_temperature` is refused when it would turn a heater off (`bed: 0`, `nozzle: 0`) or set the nozzle below 170 °C. Any other target change still goes through mid-print. A call with both targets is all or nothing: if either target is refused, nothing is sent. `fan`, `speed_mode` and `led` stay available.
+
 ### Print Management
 
 **Needs the key.**
@@ -131,6 +133,8 @@ Open — no key needed.
 | `vibration_calibrate` | — | Start resonance/vibration optimization |
 | `self_check` | `ringing?` (bool, default true), `pid?` (bool, default true), `leveling?` (bool, default true) | Run combined self-test |
 
+**All four are refused while a job is active.** They home and probe the bed.
+
 ### File & Filament
 
 **Needs the key.**
@@ -142,6 +146,8 @@ Open — no key needed.
 | `unload_filament` | — | Retract/unload filament from extruder |
 | `set_auto_refill` | `enabled` (boolean) | Enable/disable Canvas auto-refill |
 
+**`load_filament` and `unload_filament` are refused while a job is active**, because they would start a filament change under a print.
+
 ### Camera & Advanced
 
 **Needs the key** — `send_command` always, because it sends any raw method number.
@@ -151,9 +157,19 @@ Open — no key needed.
 | `enable_video_stream` | `method?` (sdcp\|mqtt, default sdcp) | Enable camera MJPEG stream |
 | `send_command` | `method` (number), `params?` (JSON string, default "{}") | Send raw MQTT command (advanced) |
 
+**`send_command` follows the same print guard**, by method number, so it is no way around it.
+
 ## Error Handling
 
 - A gated tool called without the key returns `isError: true` naming `SERVICE_API_KEY` (see [Authentication](#authentication)); a wrong key is an HTTP 401.
+- **The print guard.** While a job is active, a refused tool returns `isError: true` with `"<tool>" refused: Printer is busy printing — …`, and nothing is sent. Pause, resume, stop and emergency stop stay available. Retry once the printer is idle. The guard covers:
+  - `home`, `move`;
+  - heater-off and a nozzle below 170 °C via `set_temperature`;
+  - the four calibrations;
+  - `load_filament`, `unload_filament`;
+  - the matching raw methods through `send_command`: 1024–1028, 1032–1035, 2001 and 2002.
+
+  The policy is `src/server/print-guard.ts` (ELEG-176). `/ws`, Moonraker and OctoPrint apply the same rule.
 
 - Tools that require a printer connection return `isError: true` with "Printer not connected" if the MQTT bridge is disconnected.
 - Parameter validation is enforced via Zod schemas — invalid values return descriptive errors.

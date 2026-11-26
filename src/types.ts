@@ -550,6 +550,24 @@ export function powerLossState(
   return 'awaiting_decision';
 }
 
+// ─── Job active (ELEG-163 UI lock, ELEG-176 server guard) ─────────────
+
+/**
+ * `machine_status.status` values during which a job owns the machine. Shared by the SPA's
+ * print lock and the server's print guard, so the two cannot disagree on what "printing"
+ * means. Paused is a sub-status of 2, not a status of its own (3 is Loading Filament).
+ */
+const JOB_STATUSES = new Set([
+  2, // Printing (paused is a sub-status of this)
+  STATUS_POWER_LOSS_RECOVERY, // 15 — an interrupted job awaiting resume/cancel
+]);
+
+/** True while the printer has a job that a motion or heater command could ruin. */
+export function isJobActive(status: PrinterStatus | null | undefined): boolean {
+  const s = status?.machine_status?.status;
+  return s != null && JOB_STATUSES.has(s);
+}
+
 // ─── Command result codes (`error_code` on a method response) ────────
 //
 // Distinct from EXCEPTION_NAMES below: an *exception* is a hardware fault the printer

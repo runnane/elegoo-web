@@ -25,6 +25,12 @@ export interface MqttBridgeEvents {
 /** How the bridge opens its client. Injectable so a test can count connections. */
 export type MqttConnectFn = (url: string, opts: mqtt.IClientOptions) => mqtt.MqttClient;
 
+/**
+ * Decides whether a command may be published: `null` to send it, or the reason it is
+ * dropped. See `MqttBridge.setCommandGuard`.
+ */
+export type CommandGuard = (method: number, params: Record<string, unknown>) => string | null;
+
 /** A printer to (re)connect to — see `MqttBridge.retarget`. */
 export interface BridgeTarget {
   ip: string;
@@ -51,6 +57,7 @@ export class MqttBridge extends EventEmitter {
   /** The delayed connect() scheduled by a heartbeat-forced reconnect. */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private sawPrinterMessage = false;
+  private commandGuard: CommandGuard | null = null;
 
   /**
    * How long to wait after the broker connects before saying out loud that the printer
@@ -379,7 +386,22 @@ export class MqttBridge extends EventEmitter {
     }
   }
 
+  /**
+   * Install the last-line check every `sendCommand` passes through (ELEG-176). `index.ts`
+   * wires the print guard here. It is a **backstop**: each surface consults the same
+   * policy itself before sending, so it can answer its caller truthfully; this only catches
+   * a surface that forgot to. A dropped command is logged and never published.
+   */
+  setCommandGuard(guard: CommandGuard | null): void {
+    this.commandGuard = guard;
+  }
+
   sendCommand(method: number, params: Record<string, unknown>): void {
+    const refusal = this.commandGuard?.(method, params) ?? null;
+    if (refusal !== null) {
+      log.warn(`Dropped method ${method} at the bridge: ${refusal}`);
+      return;
+    }
     if (!this.client || !this.sn) return;
     this.commandId++;
     const topic = `elegoo/${this.sn}/${this.clientId}/api_request`;

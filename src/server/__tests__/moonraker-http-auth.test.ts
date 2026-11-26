@@ -36,7 +36,8 @@ const bridge = Object.assign(new EventEmitter(), {
 });
 
 const store = Object.assign(new EventEmitter(), {
-  status: null,
+  // `unknown`, not `null`: the print-guard cases below set a job status per test.
+  status: null as unknown,
   attributes: null,
   files: [],
   fileTotalLayers: null,
@@ -103,6 +104,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   setKey(KEY);
+  store.status = null; // no job: the auth cases rely on the print guard failing open
 });
 
 type Mount = { name: string; base: () => string };
@@ -328,5 +330,85 @@ describe('the compat answers stay truthful on :7125', () => {
     expect(r.status).toBe(404);
     expect(JSON.parse(r.text).error.message).toBe(NO_API_KEY_MESSAGE);
     expect(r.text).not.toContain(KEY);
+  });
+});
+
+// ── the print guard (ELEG-176) ─────────────────────────────────────────────
+
+const job = (code: number) => ({ machine_status: { status: code } });
+const WITH_KEY = { headers: { 'X-Api-Key': KEY } };
+const script = (s: string) => ({ ...WITH_KEY, body: { script: s } });
+
+/**
+ * The two mounts translate 1028 into different param shapes (ELEG-180), so each row pins
+ * what that mount sends. Both shapes are recognised by the guard.
+ */
+describe.each([
+  {
+    name: '/moonraker/* on the main port',
+    base: () => compatBase,
+    bedOff: [
+      [1028, { target: 'extruder', temperature: 0 }],
+      [1028, { target: 'heater_bed', temperature: 0 }],
+    ],
+    m140: [1028, { target: 'heater_bed', temperature: 60 }],
+    m104: [1028, { target: 'extruder', temperature: 215 }],
+  },
+  {
+    name: 'the :7125 server',
+    base: () => serverBase,
+    bedOff: [
+      [1028, { extruder: 0 }],
+      [1028, { heater_bed: 0 }],
+    ],
+    m140: [1028, { heater_bed: 60 }],
+    m104: [1028, { extruder: 215 }],
+  },
+])('the print guard on POST /printer/gcode/script, $name', ({ base, bedOff, m140, m104 }) => {
+  it.each([
+    ['G28', 'homing'],
+    ['M140 S0', 'turning a heater off'],
+    ['M104 S150', 'below 170'],
+    ['TURN_OFF_HEATERS', 'turning a heater off'],
+  ])('while printing, %s is 409 and sends nothing', async (gcode, what) => {
+    store.status = job(2);
+    const r = await call(base(), 'POST', '/printer/gcode/script', script(gcode));
+    expect(r.status).toBe(409);
+    const body = JSON.parse(r.text);
+    expect(body.error.code).toBe(409);
+    expect(body.error.message).toContain('busy printing');
+    expect(body.error.message).toContain(what);
+    // TURN_OFF_HEATERS is two sends; decided up front, so neither half goes.
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('idle control: G28 and TURN_OFF_HEATERS are forwarded', async () => {
+    store.status = job(1);
+    const home = await call(base(), 'POST', '/printer/gcode/script', script('G28'));
+    const off = await call(base(), 'POST', '/printer/gcode/script', script('TURN_OFF_HEATERS'));
+    expect(home.status).toBe(200);
+    expect(off.status).toBe(200);
+    expect(bridge.sendCommand.mock.calls).toEqual([[1026, { axes: ['x', 'y', 'z'] }], ...bedOff]);
+  });
+
+  it('mid-print allow: M140 S60 and M104 S215 are forwarded', async () => {
+    store.status = job(2);
+    const bed = await call(base(), 'POST', '/printer/gcode/script', script('M140 S60'));
+    const nozzle = await call(base(), 'POST', '/printer/gcode/script', script('M104 S215'));
+    expect(bed.status).toBe(200);
+    expect(nozzle.status).toBe(200);
+    expect(bridge.sendCommand.mock.calls).toEqual([m140, m104]);
+  });
+
+  it('mid-print: unrecognised gcode (a babystep) is still answered ok and sends nothing', async () => {
+    store.status = job(2);
+    const r = await call(
+      base(),
+      'POST',
+      '/printer/gcode/script',
+      script('SET_GCODE_OFFSET Z_ADJUST=0.01'),
+    );
+    expect(r.status).toBe(200);
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
   });
 });

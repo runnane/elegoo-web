@@ -28,6 +28,7 @@ import { MoonrakerServer } from '../moonraker-server.js';
 import type { MqttBridge } from '../mqtt-bridge.js';
 import { createOctoPrintRouter } from '../octoprint-compat.js';
 import { StateStore } from '../state-store.js';
+import type { PrinterStatus } from '../../types.js';
 
 const KEY = 'k'.repeat(16) + '0123456789abcdef0123'; // 36 chars, generated, not a real key
 const WRONG = 'x'.repeat(36);
@@ -85,6 +86,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   setKey(KEY);
+  store.status = null; // no job: the auth cases rely on the print guard failing open
 });
 
 // ── a raw HTTP client ──────────────────────────────────────────────────────
@@ -359,5 +361,62 @@ describe.each(MOUNTS)('OctoPrint compat through $mount', (m) => {
       );
       expect(r.status).not.toBe(403);
     });
+  });
+});
+
+// ── the print guard (ELEG-176) ─────────────────────────────────────────────
+
+const job = (code: number) => ({ machine_status: { status: code } }) as unknown as PrinterStatus;
+const KEYED = { ...JSON_HEADERS, 'X-Api-Key': KEY };
+
+/** [path, body, what the refusal names] — each refused while printing. */
+const REFUSED_MID_PRINT: Array<[string, object, string]> = [
+  ['/api/printer/printhead', { command: 'jog', z: 0.1 }, 'moving the toolhead'],
+  ['/api/printer/printhead', { command: 'home', axes: ['x', 'y'] }, 'homing'],
+  ['/api/printer/bed', { command: 'target', target: 0 }, 'turning a heater off'],
+  ['/api/printer/tool', { command: 'target', targets: { tool0: 0 } }, 'turning a heater off'],
+  ['/api/printer/tool', { command: 'target', targets: { tool0: 150 } }, 'below 170'],
+];
+
+describe.each(MOUNTS)('the print guard through $mount', (m) => {
+  it.each(REFUSED_MID_PRINT)(
+    'while printing, POST %s %j is 409 and sends nothing',
+    async (path, body, what) => {
+      store.status = job(2);
+      const r = await send(m.port(), 'POST', m.prefix + path, KEYED, JSON.stringify(body));
+      expect(r.status).toBe(409);
+      const error: string = JSON.parse(r.body).error;
+      expect(error).toContain('busy printing');
+      expect(error).toContain(what);
+      expect(bridge.sendCommand).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(REFUSED_MID_PRINT)(
+    'idle control: POST %s %j is 204 and sent once',
+    async (path, body) => {
+      store.status = job(1);
+      const r = await send(m.port(), 'POST', m.prefix + path, KEYED, JSON.stringify(body));
+      expect(r.status).toBe(204);
+      expect(bridge.sendCommand).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    [
+      '/api/printer/bed',
+      { command: 'target', target: 60 },
+      [1028, { target: 'heater_bed', temperature: 60 }],
+    ],
+    [
+      '/api/printer/tool',
+      { command: 'target', targets: { tool0: 215 } },
+      [1028, { target: 'extruder', temperature: 215 }],
+    ],
+  ])('mid-print allow: POST %s %j is 204 and sent', async (path, body, command) => {
+    store.status = job(2);
+    const r = await send(m.port(), 'POST', m.prefix + path, KEYED, JSON.stringify(body));
+    expect(r.status).toBe(204);
+    expect(bridge.sendCommand.mock.calls).toEqual([command]);
   });
 });

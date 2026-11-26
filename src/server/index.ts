@@ -28,6 +28,7 @@ import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
 import { connectionPresetsPath, initDataPaths, printQueueFile } from './data-paths.js';
 import { PrintQueue } from './print-queue.js';
+import { printBusyRefusal } from './print-guard.js';
 import { readCachedSn, writeCachedSn } from './sn-cache.js';
 import {
   ConnectionPresets,
@@ -111,6 +112,9 @@ if (config.serviceApiKey) {
 
 // --- State Store (shared state for all consumers) ---
 const store = new StateStore(bridge, config.progressInterval);
+
+// --- Print guard backstop (ELEG-176) — every surface checks first; this catches any that forget ---
+bridge.setCommandGuard((method, params) => printBusyRefusal(method, params, store.status));
 
 // --- Print Queue (ELEG-35) — holds the list; every start is a human's explicit request ---
 const printQueue = new PrintQueue(store, bridge, printQueueFile());

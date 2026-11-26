@@ -11,7 +11,8 @@
  *   { type: "connection", connected }       // printer connection state
  *   { type: "service_status", ... }         // periodic service health
  *   { type: "auth_result", ok }             // answer to an auth frame (or upgrade header)
- *   { type: "command_refused", method, reason } // a gated command, never forwarded
+ *   { type: "command_refused", method, code, reason } // never forwarded; code is
+ *                                           // 'auth' (needs the key) or 'busy' (ELEG-176)
  *
  * Client → Server:
  *   { type: "auth", key }                   // authorise this connection (ELEG-140)
@@ -24,6 +25,10 @@
  * WebSocket headers, and a `?key=` would land in proxy logs) or by `Authorization:
  * Bearer` / `X-Api-Key` on the upgrade request. With the key unset, every frame is
  * forwarded as before. The key is never logged or echoed.
+ *
+ * Print guard (ELEG-176). A command that passes auth is then checked against
+ * `print-guard.ts`: while a job is active, motion, homing, heater-off and filament changes
+ * are refused with `code: 'busy'` and the guard's message as `reason`.
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -40,6 +45,7 @@ import { getLogger } from './logger.js';
 import { getBuildInfo } from './build-info.js';
 import { authorize, checkKey, extractKey } from './write-auth.js';
 import { isReadMethod } from './method-policy.js';
+import { printBusyRefusal } from './print-guard.js';
 
 const log = getLogger('WS');
 
@@ -287,9 +293,16 @@ export class WebSocketTransport {
             JSON.stringify({
               type: 'command_refused',
               method,
+              code: 'auth',
               reason: verdict === 'invalid' ? 'Invalid API key' : 'API key required',
             }),
           );
+          return;
+        }
+        // The print guard (ELEG-176): motion, heater-off and filament changes mid-print.
+        const busy = printBusyRefusal(method, params, this.store.status);
+        if (busy !== null) {
+          ws.send(JSON.stringify({ type: 'command_refused', method, code: 'busy', reason: busy }));
           return;
         }
         this.bridge.sendCommand(method, params);
