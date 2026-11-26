@@ -1175,6 +1175,28 @@ body {
   color: var(--text-muted);
   font-style: italic;
 }
+/* Unavailable / connecting state (ELEG-166): sits over the feed, built once by camera-card.ts */
+.camera-unavailable {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  background: #000;
+  color: var(--text-muted);
+}
+.camera-unavailable-title {
+  color: var(--text-primary, #fff);
+}
+.camera-unavailable-note .camera-unavailable-title {
+  font-weight: normal;
+  font-style: italic;
+  color: var(--text-muted);
+}
 
 /* Camera fullscreen overlay */
 .camera-modal {

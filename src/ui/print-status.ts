@@ -12,6 +12,7 @@ import {
 import { maybeShowPowerLossDialog } from './power-loss-dialog';
 import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
 import { loadUISettings, saveUISettings } from './ui-settings';
+import { setCameraStreamUrlSource, setPrinterReportsCamera } from './camera-card';
 
 let lastThumbnailFile = '';
 
@@ -103,6 +104,7 @@ let overlayEnabled = loadUISettings().cameraOverlay;
 function getCameraStreamUrl(): string {
   return overlayEnabled ? '/api/stream/overlay' : '/api/stream';
 }
+setCameraStreamUrlSource(getCameraStreamUrl);
 
 export function toggleCameraOverlay(): void {
   overlayEnabled = !overlayEnabled;
@@ -139,6 +141,7 @@ function updateCamera(hasCamera: boolean, _printerIp: string): void {
     overlay.classList.remove('hidden');
     overlay.textContent = 'Camera not connected';
   }
+  setPrinterReportsCamera(hasCamera);
 }
 
 export function renderDashboard(state: PrinterState, client: CommandSender): void {
