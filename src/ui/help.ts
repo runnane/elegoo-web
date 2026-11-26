@@ -1,3 +1,4 @@
+import { REST_ROUTES } from './api-routes';
 import { $, escapeHtml } from './helpers';
 import { BINDINGS, isDestructiveAction } from './keymap';
 
@@ -34,6 +35,14 @@ function renderShortcutsTable(): string {
 </div>`;
 }
 
+/** The native REST rows, from `api-routes.ts` so a test can hold them to the server's routes. */
+function renderRestRows(): string {
+  return REST_ROUTES.map(
+    (rt) =>
+      `<tr><td>${rt.method}</td><td>${escapeHtml(rt.path)}</td><td>${escapeHtml(rt.description)}</td><td>${rt.auth ? 'Yes' : 'No'}</td></tr>`,
+  ).join('');
+}
+
 export function renderHelp(): void {
   const container = $('help-content');
   if (!container || helpRendered) return;
@@ -43,7 +52,8 @@ export function renderHelp(): void {
 <div class="help-section">
   <h3>Overview</h3>
   <p>This is a browser-based web frontend for Elegoo Centauri Carbon 2 (CC2) FDM printers.
-  It connects to the printer via MQTT over WebSocket. A companion Node.js server provides
+  The browser talks to the service over a WebSocket (<code>/ws</code>) and REST; only the
+  service holds the single MQTT connection to the printer. The Node.js service provides
   REST APIs, compatibility layers for Fluidd/Mainsail (Moonraker), OctoPrint, MCP, and Prometheus metrics.</p>
 
   <table class="help-ports">
@@ -61,30 +71,15 @@ ${renderShortcutsTable()}
 
 <div class="help-section">
   <h3>Native REST API <code>/api/*</code></h3>
-  <p>Primary API on port 8088.</p>
+  <p>Primary API on port 8088. When the service has a <code>SERVICE_API_KEY</code>, every
+  write (anything but GET) needs it, sent as <code>Authorization: Bearer</code> or
+  <code>X-Api-Key</code> — except <code>POST /api/client-error</code>. Reads stay open.</p>
   <table class="help-api">
-    <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+    <thead><tr><th>Method</th><th>Path</th><th>Description</th><th>Key</th></tr></thead>
     <tbody>
-      <tr><td>GET</td><td>/api/health</td><td>Service health check (MQTT status, camera state with its reason, deployed build)</td></tr>
-      <tr><td>GET</td><td>/api/status</td><td>Full printer state (attributes, status, canvas, files)</td></tr>
-      <tr><td>GET</td><td>/api/snapshot</td><td>JPEG camera snapshot</td></tr>
-      <tr><td>GET</td><td>/api/stream</td><td>MJPEG camera stream proxy</td></tr>
-      <tr><td>GET</td><td>/api/stream/overlay</td><td>MJPEG stream with status overlay</td></tr>
-      <tr><td>GET</td><td>/webcam</td><td>Snapshot (mjpegstreamer-compatible)</td></tr>
-      <tr><td>GET</td><td>/webcam/?action=stream</td><td>Stream (mjpegstreamer-compatible)</td></tr>
-      <tr><td>GET</td><td>/api/metrics</td><td>Structured metrics as JSON</td></tr>
-      <tr><td>GET</td><td>/api/metrics/prometheus</td><td>Prometheus text exposition format</td></tr>
-      <tr><td>GET</td><td>/api/files/download</td><td>Download file from printer (?file=&amp;source=local|u-disk)</td></tr>
-      <tr><td>POST</td><td>/api/files/upload</td><td>Upload file to printer (multipart, ?source=local|u-disk)</td></tr>
-      <tr><td>GET</td><td>/api/config/telegram</td><td>Telegram bot config</td></tr>
-      <tr><td>POST</td><td>/api/config/telegram</td><td>Update Telegram progress interval</td></tr>
-      <tr><td>GET</td><td>/api/config/ai-labels</td><td>AI label configurations</td></tr>
-      <tr><td>POST</td><td>/api/config/ai-labels</td><td>Update AI label configs</td></tr>
-      <tr><td>DELETE</td><td>/api/config/ai-labels</td><td>Reset AI labels to defaults</td></tr>
-      <tr><td>POST</td><td>/api/debug/capture</td><td>Start MQTT capture ({duration: 10-60})</td></tr>
-      <tr><td>GET</td><td>/api/debug/captures</td><td>List MQTT capture files</td></tr>
-      <tr><td>GET</td><td>/api/debug/captures/:file</td><td>Download capture file</td></tr>
-      <tr><td>DELETE</td><td>/api/layer-data</td><td>Clear layer duration history</td></tr>
+      ${renderRestRows()}
+      <tr><td>GET</td><td>/webcam</td><td>Snapshot (mjpegstreamer-compatible)</td><td>No</td></tr>
+      <tr><td>GET</td><td>/webcam/?action=stream</td><td>Stream (mjpegstreamer-compatible)</td><td>No</td></tr>
     </tbody>
   </table>
 </div>
