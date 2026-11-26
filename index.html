@@ -150,7 +150,7 @@
                   </div>
                 </div>
                 <div class="temp-control">
-                  <input type="number" id="set-nozzle-temp" placeholder="210" min="0" max="300" step="5">
+                  <input type="number" id="set-nozzle-temp" placeholder="210" min="0" max="300" step="5" aria-label="Nozzle target temperature (°C)">
                   <button class="btn btn-sm" id="btn-set-nozzle">Set</button>
                   <button class="btn btn-sm btn-ghost" id="btn-off-nozzle">Off</button>
                 </div>
@@ -169,7 +169,7 @@
                   </div>
                 </div>
                 <div class="temp-control">
-                  <input type="number" id="set-bed-temp" placeholder="60" min="0" max="120" step="5">
+                  <input type="number" id="set-bed-temp" placeholder="60" min="0" max="120" step="5" aria-label="Bed target temperature (°C)">
                   <button class="btn btn-sm" id="btn-set-bed">Set</button>
                   <button class="btn btn-sm btn-ghost" id="btn-off-bed">Off</button>
                 </div>
@@ -271,7 +271,7 @@
         <!-- Gcode Preview -->
         <div class="card" id="gcode-preview-card">
           <div class="card-header">
-            <h3>📐 Gcode Preview</h3>
+            <h3>📐 G-code Preview</h3>
             <div class="gcode-preview-actions">
               <button id="btn-gcode-follow" class="btn btn-sm btn-ghost active" title="Follow print progress">📍 Follow</button>
               <button id="btn-gcode-single-layer" class="btn btn-sm btn-ghost active" title="Show only current layer">🔍 Single Layer</button>
@@ -285,7 +285,7 @@
             <div id="gcode-preview-status" class="gcode-preview-status"></div>
           </div>
           <div class="gcode-preview-controls">
-            <input type="range" id="gcode-layer-slider" min="1" max="1" value="1" class="gcode-layer-slider">
+            <input type="range" id="gcode-layer-slider" min="1" max="1" value="1" class="gcode-layer-slider" aria-label="Preview layer">
             <div id="gcode-preview-info" class="gcode-preview-info"></div>
           </div>
           <div class="chart-wrap">
@@ -295,7 +295,7 @@
 
         <!-- Control -->
         <div class="card" id="toolhead-card">
-          <h3>Control</h3>
+          <h3>🎯 Control</h3>
           <div class="control-layout">
             <div class="move-section">
               <div class="move-xy-grid">
@@ -366,7 +366,7 @@
 
         <!-- Fans -->
         <div class="card" id="fans-card">
-          <h3>Fans & Light</h3>
+          <h3>🌀 Fans &amp; Light</h3>
           <div class="fan-grid">
             <div class="fan-item">
               <div class="fan-header">
@@ -385,7 +385,7 @@
             <div class="fan-item">
               <div class="fan-header">
                 <span class="fan-icon">❄️</span>
-                <span class="fan-label">Assistance</span>
+                <span class="fan-label">Auxiliary</span>
                 <label class="toggle"><input type="checkbox" id="fan-aux-toggle"><span class="toggle-slider"></span></label>
               </div>
               <div class="fan-adjust">
@@ -424,11 +424,11 @@
 
         <!-- Speed & Flow -->
         <div class="card" id="speed-flow-card">
-          <h3>Speed &amp; Flow</h3>
+          <h3>⚡ Speed &amp; Flow</h3>
           <div class="speed-flow-live">
             <div class="speed-flow-item">
               <span class="speed-flow-label">Speed</span>
-              <span class="speed-flow-value" id="live-speed">-- mm/min</span>
+              <span class="speed-flow-value" id="live-speed">-- mm/s</span>
             </div>
             <div class="speed-flow-item">
               <span class="speed-flow-label">Extrusion</span>
@@ -554,20 +554,20 @@
           <!-- Structured tab -->
           <div id="log-tab-structured" class="log-tab-content">
             <div class="log-controls">
-              <input type="text" id="slog-search" placeholder="Search..." class="log-filter-input">
-              <select id="slog-direction-filter" class="log-select">
+              <input type="text" id="slog-search" placeholder="Search..." class="log-filter-input" aria-label="Search the MQTT log">
+              <select id="slog-direction-filter" class="log-select" aria-label="Filter by direction">
                 <option value="all">All</option>
                 <option value="sent">Sent →</option>
                 <option value="received">Received ←</option>
               </select>
-              <select id="slog-type-filter" class="log-select">
+              <select id="slog-type-filter" class="log-select" aria-label="Filter by message type">
                 <option value="all">All types</option>
                 <option value="status">Status (6000)</option>
                 <option value="command">Commands</option>
                 <option value="response">Responses</option>
                 <option value="heartbeat">Heartbeat</option>
               </select>
-              <select id="slog-method-filter" class="log-select">
+              <select id="slog-method-filter" class="log-select" aria-label="Filter by method">
                 <option value="all">All methods</option>
               </select>
               <label class="log-autoscroll-label">

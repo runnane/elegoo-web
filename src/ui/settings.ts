@@ -1,6 +1,6 @@
 /** Settings panel — persistent card layout + Telegram config */
 
-import { $, fetchTimeout } from './helpers';
+import { $, escapeHtml, fetchTimeout } from './helpers';
 import { type CardLayout, CARD_NAMES, defaultCardLayout, normaliseCardLayout } from './card-layout';
 import { toast } from './toast';
 import { confirmDialog } from './confirm-dialog';
@@ -182,7 +182,7 @@ function buildSettingsHTML(content: HTMLElement): void {
           <span class="settings-drag-handle" title="Drag to reorder">⠿</span>
           <label class="settings-card-label">
             <input type="checkbox" class="settings-card-visible" data-card-id="${id}" ${isHidden ? '' : 'checked'}>
-            <span>${name}</span>
+            <span>${escapeHtml(name)}</span>
           </label>
           <select class="settings-card-panel log-select" data-card-id="${id}">
             <option value="sidebar" ${panel === 'sidebar' ? 'selected' : ''}>Sidebar</option>
@@ -651,7 +651,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
       <div class="ai-label-config-row" data-idx="${idx}">
         <div class="ai-label-config-field ai-label-config-label">
           <label>Label</label>
-          <textarea class="settings-input ai-lc-label" rows="2" data-idx="${idx}" title="${lc.label}">${lc.label}</textarea>
+          <textarea class="settings-input ai-lc-label" rows="3" data-idx="${idx}" title="${lc.label}">${lc.label}</textarea>
         </div>
         <div class="ai-label-config-field">
           <label>Issue Type</label>
@@ -665,11 +665,11 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
           <label>Severity</label>
           <select class="settings-input ai-lc-severity" data-idx="${idx}">${sevOpts}</select>
         </div>
-        <div class="ai-label-config-field">
+        <div class="ai-label-config-field ai-label-config-num">
           <label>Warn @</label>
           <input type="number" class="settings-input ai-lc-warn" value="${lc.warnThreshold}" data-idx="${idx}" min="0" max="1" step="0.05">
         </div>
-        <div class="ai-label-config-field">
+        <div class="ai-label-config-field ai-label-config-num">
           <label>Crit @</label>
           <input type="number" class="settings-input ai-lc-crit" value="${lc.critThreshold}" data-idx="${idx}" min="0" max="1" step="0.05">
         </div>
