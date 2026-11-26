@@ -1,6 +1,7 @@
 /** Service status — compact header badge with click-to-expand dropdown + system info */
 
 import { $, escapeHtml } from './helpers';
+import { applyCameraStatus } from './camera-card';
 import type { PrinterState } from '../printer-state';
 import {
   CAMERA_OK_STATES,
@@ -87,6 +88,7 @@ let dropdownBound = false;
 export function updateServiceStatus(data: Record<string, unknown>): void {
   lastStatus = data as unknown as ServiceStatus;
   renderServiceStatus();
+  applyCameraStatus(lastStatus);
 }
 
 function formatUptime(seconds: number): string {

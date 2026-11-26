@@ -68,6 +68,7 @@ import { maybeAlertForEvent } from './ui/alert-sound';
 import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
+import { isCameraUnavailable } from './ui/camera-card';
 import { confirmDialog } from './ui/confirm-dialog';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
@@ -265,7 +266,7 @@ function showDashboard(): void {
     };
 
     cameraWrap.addEventListener('click', () => {
-      if (!cameraFeed.src || cameraFeed.alt === 'Camera off') return;
+      if (!cameraFeed.src || cameraFeed.alt === 'Camera off' || isCameraUnavailable()) return;
       cameraModalImg.src = cameraFeed.src;
       cameraModal.classList.remove('hidden');
       // Created after `.hidden` is removed: the trap reads the focusable children, and
@@ -332,7 +333,7 @@ function showDashboard(): void {
       } catch {
         toast('Snapshot failed', 'error');
       } finally {
-        snapshotBtn.disabled = false;
+        snapshotBtn.disabled = snapshotBtn.dataset.cameraLock === '1';
         snapshotBtn.textContent = '📸 Snapshot';
       }
     });
