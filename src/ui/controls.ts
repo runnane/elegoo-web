@@ -3,6 +3,7 @@ import { $ } from './helpers';
 import { apiWrite } from './api-key';
 import { toast } from './toast';
 import { isPrintLocked } from './print-lock';
+import { confirmDialog } from './confirm-dialog';
 
 let controlsBound = false;
 
@@ -100,16 +101,29 @@ export function bindControls(client: CommandSender): void {
   const btnStop = $('btn-stop') as HTMLButtonElement;
   btnPause.addEventListener('click', () => guardedSend(client, 1021, {}, btnPause));
   btnResume.addEventListener('click', () => guardedSend(client, 1023, {}, btnResume));
-  btnStop.addEventListener('click', () => {
-    if (confirm('Stop the current print?')) {
+  btnStop.addEventListener('click', async () => {
+    if (
+      await confirmDialog('Stop the current print?', {
+        title: 'Stop print',
+        confirmLabel: 'Stop print',
+        danger: true,
+      })
+    ) {
       guardedSend(client, 1022, {}, btnStop);
     }
   });
 
   // Emergency Stop
   const btnEStop = $('btn-estop') as HTMLButtonElement;
-  btnEStop.addEventListener('click', () => {
-    if (confirm('⚠️ EMERGENCY STOP\nThis immediately halts all motion and heaters.\nContinue?')) {
+  btnEStop.addEventListener('click', async () => {
+    if (
+      await confirmDialog('This immediately halts all motion and heaters.\nContinue?', {
+        title: '⚠️ EMERGENCY STOP',
+        confirmLabel: 'Emergency stop',
+        danger: true,
+        className: 'confirm-dialog-emergency',
+      })
+    ) {
       guardedSend(client, 1007, {}, btnEStop);
     }
   });
@@ -162,9 +176,16 @@ export function bindControls(client: CommandSender): void {
   // Homing moves the toolhead, so the button confirms first — the same question Shift+H
   // used to ask on its own, which left the on-screen button doing less checking than
   // the shortcut (ELEG-163). The shortcut now clicks this button and inherits it.
-  const homeAll = () => {
+  const homeAll = async () => {
     if (isPrintLocked(btnHomeAll)) return;
-    if (!confirm(HOME_CONFIRM)) return;
+    const ok = await confirmDialog(HOME_CONFIRM, {
+      title: 'Home axes',
+      confirmLabel: 'Home',
+      danger: true,
+    });
+    // guardedSend re-checks the print lock, so a print that started while the dialog was
+    // open still cannot be homed under.
+    if (!ok) return;
     guardedSend(client, 1026, { homed_axes: 'xyz' }, btnHomeAll, btnHomeAllZ);
   };
   btnHomeAll.addEventListener('click', homeAll);

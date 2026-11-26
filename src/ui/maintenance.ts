@@ -2,6 +2,7 @@ import type { CommandSender } from '../ws-client';
 import type { PrinterState } from '../printer-state';
 import { $, escapeHtml } from './helpers';
 import { toast } from './toast';
+import { confirmDialog } from './confirm-dialog';
 
 let maintenanceClient: CommandSender | null = null;
 
@@ -32,14 +33,13 @@ export function bindMaintenanceControls(): void {
   const btnVibration = $('btn-maintenance-vibration') as HTMLButtonElement;
   const btnPID = $('btn-maintenance-pid') as HTMLButtonElement;
 
-  btnSelfCheck.addEventListener('click', () => {
+  btnSelfCheck.addEventListener('click', async () => {
     if (!maintenanceClient) return;
-    if (
-      !confirm(
-        'Run full self-check?\nThis performs auto-level, vibration optimization, and PID calibration sequentially.\nThe printer must be idle (not printing).',
-      )
-    )
-      return;
+    const ok = await confirmDialog(
+      'Run full self-check?\nThis performs auto-level, vibration optimization, and PID calibration sequentially.\nThe printer must be idle (not printing).',
+      { title: 'Self-check', confirmLabel: 'Run self-check', danger: true },
+    );
+    if (!ok || !maintenanceClient) return;
     toast('Starting self-check...', 'info');
     maintenanceClient.sendCommand(1035, {
       ringing_optimize: true,
@@ -48,28 +48,40 @@ export function bindMaintenanceControls(): void {
     });
   });
 
-  btnAutoLevel.addEventListener('click', () => {
+  btnAutoLevel.addEventListener('click', async () => {
     if (!maintenanceClient) return;
-    if (!confirm('Run auto-level?\nThe printer must be idle (not printing).')) return;
+    const ok = await confirmDialog('Run auto-level?\nThe printer must be idle (not printing).', {
+      title: 'Auto-level',
+      confirmLabel: 'Run auto-level',
+      danger: true,
+    });
+    if (!ok || !maintenanceClient) return;
     toast('Starting auto-level...', 'info');
     maintenanceClient.sendCommand(1032, {});
   });
 
-  btnVibration.addEventListener('click', () => {
+  btnVibration.addEventListener('click', async () => {
     if (!maintenanceClient) return;
-    if (
-      !confirm(
-        'Run vibration optimization (input shaper calibration)?\nThe printer must be idle (not printing).',
-      )
-    )
-      return;
+    const ok = await confirmDialog(
+      'Run vibration optimization (input shaper calibration)?\nThe printer must be idle (not printing).',
+      { title: 'Vibration optimization', confirmLabel: 'Run optimization', danger: true },
+    );
+    if (!ok || !maintenanceClient) return;
     toast('Starting vibration optimization...', 'info');
     maintenanceClient.sendCommand(1033, {});
   });
 
-  btnPID.addEventListener('click', () => {
+  btnPID.addEventListener('click', async () => {
     if (!maintenanceClient) return;
-    if (!confirm('Run PID calibration?\nThe printer must be idle (not printing).')) return;
+    const ok = await confirmDialog(
+      'Run PID calibration?\nThe printer must be idle (not printing).',
+      {
+        title: 'PID calibration',
+        confirmLabel: 'Run PID calibration',
+        danger: true,
+      },
+    );
+    if (!ok || !maintenanceClient) return;
     toast('Starting PID calibration...', 'info');
     maintenanceClient.sendCommand(1034, {});
   });

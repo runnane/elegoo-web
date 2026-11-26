@@ -139,14 +139,21 @@ describe('applyPrintLock', () => {
 });
 
 describe('Home button', () => {
-  it('asks before homing, and sends nothing when the question is declined', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('asks before homing, and sends nothing when the question is declined', async () => {
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const answer = (which: 'confirm' | 'cancel') =>
+      document.getElementById(`confirm-dialog-${which}`)!.click();
+
     btn('btn-home-all').click();
-    expect(confirmSpy).toHaveBeenCalledWith(HOME_CONFIRM);
+    expect(document.getElementById('confirm-dialog-message')?.textContent).toBe(HOME_CONFIRM);
+    expect(sendCommand).not.toHaveBeenCalled();
+    answer('cancel');
+    await flush();
     expect(sendCommand).not.toHaveBeenCalled();
 
-    confirmSpy.mockReturnValue(true);
     btn('btn-home-all-z').click();
+    answer('confirm');
+    await flush();
     expect(sendCommand).toHaveBeenCalledWith(1026, { homed_axes: 'xyz' });
   });
 });

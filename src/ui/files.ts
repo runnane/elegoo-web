@@ -13,6 +13,7 @@ import {
 } from './helpers';
 import { requestPrintDialog } from './print-dialog';
 import { addToPrintQueue } from './print-queue';
+import { confirmDialog } from './confirm-dialog';
 import { NEEDS_API_KEY_MESSAGE, applyApiKey, notifyIfUnauthorized } from './api-key';
 import { type ListControls, createListControls } from './list-controls';
 
@@ -247,9 +248,14 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
     a.click();
     a.remove();
   });
-  el.querySelector('.file-popover-delete')?.addEventListener('click', () => {
+  el.querySelector('.file-popover-delete')?.addEventListener('click', async () => {
     closeFilePopover();
-    if (confirm(`Delete ${file.filename}?`)) {
+    const ok = await confirmDialog(`Delete ${file.filename}?`, {
+      title: 'Delete file',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (ok) {
       _popoverClient?.sendCommand(1047, { storage_media: currentSource, file_path: [fullPath] });
       setTimeout(() => {
         _popoverClient?.sendCommand(1044, {

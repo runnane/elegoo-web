@@ -58,6 +58,7 @@
     "rules": {
       "preset": "recommended",
       "suspicious": {
+        "noAlert": "error",
         "noExplicitAny": "warn",
         "noGlobalIsNan": "off",
         "useIterableCallbackReturn": "off",
