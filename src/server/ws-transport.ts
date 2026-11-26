@@ -30,6 +30,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import type { StateStore, EventLogEntry } from './state-store.js';
 import { getCameraHealth } from './rest-api.js';
+import { printerCameraReport } from './camera-health.js';
+import type { CameraHealth, CameraState } from '../types.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { TelegramIntegration } from './telegram.js';
 import type { AIMonitor } from './ai-monitor.js';
@@ -59,8 +61,11 @@ export class WebSocketTransport {
     server: Server,
     private store: StateStore,
     private bridge: MqttBridge,
-    /** Read per frame, never cached: `serviceApiKey` is `''` when unset. */
-    private auth: Pick<ServiceConfig, 'serviceApiKey'>,
+    /**
+     * Read per frame, never cached: `serviceApiKey` is `''` when unset. `cameraEnabled`
+     * feeds the camera's `disabled` state in `service_status`.
+     */
+    private config: Pick<ServiceConfig, 'serviceApiKey' | 'cameraEnabled'>,
   ) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
 
@@ -198,8 +203,18 @@ export class WebSocketTransport {
             : 'stopped'
         : 'disabled',
       aiConfig: this.services.aiMonitor?.getConfigSummary() ?? null,
-      camera: getCameraHealth(),
+      // `camera` stays a string so the panel's ok/err check is a lookup; `cameraHealth`
+      // carries the reason and timestamps (ELEG-178). See `CameraState` in src/types.ts.
+      ...this.cameraStatus(),
     };
+  }
+
+  private cameraStatus(): { camera: CameraState; cameraHealth: CameraHealth } {
+    const health = getCameraHealth({
+      enabled: this.config.cameraEnabled,
+      printerReportsCamera: printerCameraReport(this.bridge.isConnected, this.store.status),
+    });
+    return { camera: health.state, cameraHealth: health };
   }
 
   private sendInit(ws: WebSocket): void {
@@ -234,7 +249,7 @@ export class WebSocketTransport {
    * refused. Replies `{type:'auth_result', ok}`; never echoes the key.
    */
   private authenticate(ws: WebSocket, presented: unknown): void {
-    const expected = this.auth.serviceApiKey;
+    const expected = this.config.serviceApiKey;
     const key = typeof presented === 'string' ? presented : null;
     // Unset: nothing to prove, everything is forwarded anyway.
     const ok = !expected || (key !== null && checkKey(key, expected));
@@ -263,7 +278,7 @@ export class WebSocketTransport {
         // The verified key (or none) goes through the same decision as every HTTP
         // surface; re-checked per frame, so it follows the configured key.
         const verdict = authorize(
-          this.auth.serviceApiKey,
+          this.config.serviceApiKey,
           verifiedKeys.get(ws) ?? null,
           !isReadMethod(method),
         );

@@ -55,7 +55,7 @@ const store = Object.assign(new EventEmitter(), {
   getEventLog: () => [],
 });
 
-const auth = { serviceApiKey: KEY };
+const auth = { serviceApiKey: KEY, cameraEnabled: false };
 
 // ── the server ─────────────────────────────────────────────────────────────
 

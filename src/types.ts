@@ -88,6 +88,47 @@ export interface ExternalDevice {
   type: string;
 }
 
+/**
+ * The camera's health, derived from evidence rather than from a frame cache (ELEG-178).
+ * Computed by `deriveCameraHealth` in `src/server/camera-health.ts`, in this precedence:
+ *
+ * - `disabled` — `CAMERA_ENABLED` is false; nothing is attempted.
+ * - `streaming` — a real frame arrived within the last `STREAMING_WINDOW_MS`.
+ * - `unreachable` — the most recent attempt (stream or snapshot) failed after the last
+ *   frame; `reason` says how (`HTTP 503`, a timeout, a refused connection).
+ * - `connecting` — an attempt is open and no frame has arrived yet. Deliberately **not**
+ *   streaming: a connection that never delivers must not read as a working camera.
+ * - `idle` — the connected printer reports `external_device.camera: true` and nothing is
+ *   pulling frames. Not an error: the upstream is opened only on demand.
+ * - `absent` — the connected printer reports no camera.
+ * - `unknown` — no frame, no failure, and no printer report (MQTT not connected, so the
+ *   store's `external_device` is a stale replay and is not trusted).
+ */
+export type CameraState =
+  | 'disabled'
+  | 'streaming'
+  | 'unreachable'
+  | 'connecting'
+  | 'idle'
+  | 'absent'
+  | 'unknown';
+
+/** The states the service-status panel counts as healthy. */
+export const CAMERA_OK_STATES: readonly CameraState[] = ['streaming', 'idle'];
+
+export interface CameraHealth {
+  state: CameraState;
+  /** One sentence a human can read: why the camera is in this state. */
+  reason: string;
+  /** Epoch ms of the last real frame, from the stream or a snapshot. */
+  lastFrameAt: number | null;
+  /** Epoch ms and text of the last failed attempt. */
+  lastFailureAt: number | null;
+  lastFailure: string | null;
+  /** `external_device.camera` from a connected printer; null when not connected. */
+  printerReportsCamera: boolean | null;
+}
+
 export interface CanvasTray {
   tray_id: number;
   brand: string;

@@ -83,6 +83,36 @@ describe('service status card markup', () => {
     expect(new Set([ok, err, off]).size).toBe(3);
   });
 
+  it('camera (ELEG-178): idle is healthy, unreachable is not, and the reason is shown escaped', () => {
+    const cameraDot = () =>
+      document
+        .querySelector('#svc-header-dots .status-dot[aria-label^="Camera:"]')
+        ?.getAttribute('aria-label');
+    const health = (state: string, reason: string) => ({
+      state,
+      reason,
+      lastFrameAt: null,
+      lastFailureAt: null,
+      lastFailure: null,
+      printerReportsCamera: true,
+    });
+
+    updateServiceStatus({ ...BASE, camera: 'idle', cameraHealth: health('idle', 'no viewer') });
+    expect(cameraDot()).toBe('Camera: OK');
+
+    updateServiceStatus({
+      ...BASE,
+      camera: 'unreachable',
+      cameraHealth: health('unreachable', 'Camera answered HTTP 503 <b>x</b> (3s ago)'),
+    });
+    expect(cameraDot()).toBe('Camera: Unavailable');
+    const row = [...document.querySelectorAll('#service-status .svc-item')].find((el) =>
+      el.textContent?.includes('Camera'),
+    );
+    expect(row?.textContent).toContain('unreachable — Camera answered HTTP 503 <b>x</b> (3s ago)');
+    expect(row?.querySelector('b')).toBeNull();
+  });
+
   it('dropdown rows show the state as text', () => {
     updateServiceStatus(BASE);
     const text = document.querySelector('#service-status')?.textContent ?? '';
