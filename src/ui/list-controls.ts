@@ -81,7 +81,12 @@ export function createListControls<T>(options: ListControlsOptions<T>): ListCont
   let query = '';
   const selectValues = new Map<string, string>();
   for (const select of options.selects ?? []) {
-    selectValues.set(select.id, getListSelect(`${id}.${select.id}`) ?? 'all');
+    // A saved value the view no longer offers (an option renamed or dropped, as
+    // History's 'failed' was in ELEG-162) would filter out every row behind a select
+    // showing nothing — so it falls back to 'all'.
+    const saved = getListSelect(`${id}.${select.id}`);
+    const offered = saved != null && select.options.some((opt) => opt.value === saved);
+    selectValues.set(select.id, offered ? saved : 'all');
   }
 
   container.classList.add('list-controls');
