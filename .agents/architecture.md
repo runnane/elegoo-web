@@ -58,6 +58,14 @@ the first match wins, and the static/SPA fallback is last.
   sending it itself, or a recorded reference finding — never from a `METHOD_NAMES`
   label; until then an anonymous viewer just goes without it. The stream itself
   (`init`, broadcasts) stays open.
+- **A command that can ruin a running job**, on any surface (`/ws`, `/mcp`, the
+  Moonraker and OctoPrint layers): motion, homing, heater-off, filament or calibration.
+  It must ask `src/server/print-guard.ts` before it sends and before it answers. A new
+  method of that kind goes into that module's table. `MqttBridge.setCommandGuard`,
+  wired in `index.ts`, runs the same verdict on every `sendCommand` as a backstop
+  (ELEG-176). It drops a refused command with a warning. It does not tell the caller,
+  so a surface that relies on the backstop alone reports success for a command that
+  never left.
 - **A new agent-facing capability** → `mcp-server.ts` **and** `MCP.md` in the same
   commit (see [mcp.md](mcp.md)).
 - **A new notification** → `src/server/telegram.ts`, driven off a `state-store` event,

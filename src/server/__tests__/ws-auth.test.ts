@@ -39,7 +39,8 @@ const bridge = Object.assign(new EventEmitter(), {
 
 const store = Object.assign(new EventEmitter(), {
   attributes: {},
-  status: {},
+  // `unknown`, not `{}`: the print-guard cases below set a job status per test.
+  status: {} as unknown,
   canvas: {},
   files: [],
   thumbnail: null,
@@ -85,6 +86,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   auth.serviceApiKey = KEY;
+  store.status = {}; // no job: every case above relies on the guard staying out of the way
 });
 
 // ── a client ───────────────────────────────────────────────────────────────
@@ -170,7 +172,9 @@ describe('an unauthorised connection', () => {
     c.send(command(method));
     await c.fence();
     expect(bridge.sendCommand).not.toHaveBeenCalled();
-    expect(c.refusals()).toEqual([{ type: 'command_refused', method, reason: 'API key required' }]);
+    expect(c.refusals()).toEqual([
+      { type: 'command_refused', method, code: 'auth', reason: 'API key required' },
+    ]);
   });
 
   it('an allowlisted read (1002) is forwarded without auth', async () => {
@@ -189,7 +193,7 @@ describe('an unauthorised connection', () => {
     expect(c.authResults()).toEqual([{ type: 'auth_result', ok: false }]);
     expect(bridge.sendCommand).not.toHaveBeenCalled();
     expect(c.refusals()).toEqual([
-      { type: 'command_refused', method: 1007, reason: 'API key required' },
+      { type: 'command_refused', method: 1007, code: 'auth', reason: 'API key required' },
     ]);
   });
 
@@ -328,6 +332,86 @@ describe('frames that are not commands', () => {
   });
 });
 
+// ── the print guard (ELEG-176) ─────────────────────────────────────────────
+
+const job = (code: number) => ({ machine_status: { status: code } });
+
+/** [method, params, what the refusal names] — each refused while printing. */
+const WS_REFUSED_MID_PRINT: Array<[number, Record<string, unknown>, string]> = [
+  [1026, { homed_axes: 'xyz' }, 'homing'],
+  [1027, { axes: 'z', distance: 1 }, 'moving the toolhead'],
+  [1028, { heater_bed: 0 }, 'turning a heater off'],
+  [2001, {}, 'loading a tray'],
+];
+
+describe('the print guard on an authorised connection', () => {
+  it.each(WS_REFUSED_MID_PRINT)(
+    'while printing, %i is refused with code "busy" and never reaches the bridge',
+    async (method, params, what) => {
+      store.status = job(2);
+      const c = await connectClient();
+      c.send({ type: 'auth', key: KEY });
+      c.send(command(method, params));
+      await c.fence();
+      expect(bridge.sendCommand).not.toHaveBeenCalled();
+      const refusals = c.refusals();
+      expect(refusals).toHaveLength(1);
+      expect(refusals[0]).toMatchObject({ type: 'command_refused', method, code: 'busy' });
+      expect(refusals[0].reason).toContain(what);
+      expect(refusals[0].reason).toContain('busy printing');
+    },
+  );
+
+  it.each(WS_REFUSED_MID_PRINT)(
+    'idle control: %i is forwarded when no job is active',
+    async (method, params) => {
+      store.status = job(1);
+      const c = await connectClient();
+      c.send({ type: 'auth', key: KEY });
+      c.send(command(method, params));
+      await c.fence();
+      expect(forwarded()).toEqual([[method, params]]);
+      expect(c.refusals()).toEqual([]);
+    },
+  );
+
+  it('mid-print allow: pause, a fan, and a safe temperature change still go through', async () => {
+    store.status = job(2);
+    const c = await connectClient();
+    c.send({ type: 'auth', key: KEY });
+    c.send(command(1021));
+    c.send(command(1030, { fan: 128 }));
+    c.send(command(1028, { extruder: 215, heater_bed: 60 }));
+    await c.fence();
+    expect(forwarded()).toEqual([
+      [1021, {}],
+      [1030, { fan: 128 }],
+      [1028, { extruder: 215, heater_bed: 60 }],
+    ]);
+    expect(c.refusals()).toEqual([]);
+  });
+
+  it('power-loss recovery (15) counts as a job', async () => {
+    store.status = job(15);
+    const c = await connectClient();
+    c.send({ type: 'auth', key: KEY });
+    c.send(command(1026));
+    await c.fence();
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+    expect(c.refusals()).toMatchObject([{ code: 'busy', method: 1026 }]);
+  });
+
+  it('auth is decided first: an unauthorised connection mid-print gets code "auth"', async () => {
+    store.status = job(2);
+    const c = await connectClient();
+    c.send(command(1026));
+    await c.fence();
+    expect(c.refusals()).toEqual([
+      { type: 'command_refused', method: 1026, code: 'auth', reason: 'API key required' },
+    ]);
+  });
+});
+
 // ── the allowlist, pinned ──────────────────────────────────────────────────
 
 /**
@@ -371,7 +455,7 @@ describe('the read allowlist', () => {
     await c.fence();
     expect(bridge.sendCommand).not.toHaveBeenCalled();
     expect(c.refusals()).toEqual([
-      { type: 'command_refused', method: 2006, reason: 'API key required' },
+      { type: 'command_refused', method: 2006, code: 'auth', reason: 'API key required' },
     ]);
   });
 });

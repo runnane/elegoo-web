@@ -42,7 +42,8 @@ const bridgeSpies = [
 const callsToPrinter = () => bridgeSpies.reduce((n, s) => n + s.mock.calls.length, 0);
 
 const store = {
-  status: null,
+  // `unknown`, not `null`: the print-guard cases below set a job status per test.
+  status: null as unknown,
   attributes: {},
   canvas: null,
   files: [],
@@ -82,6 +83,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   config.serviceApiKey = KEY;
+  store.status = null; // no job: the auth cases rely on the print guard failing open
 });
 
 // ── a minimal StreamableHTTP client ────────────────────────────────────────
@@ -349,5 +351,66 @@ describe('transport level', () => {
       expect(r.status).toBe(401);
       await r.body?.cancel();
     }
+  });
+});
+
+// ── the print guard (ELEG-176) ─────────────────────────────────────────────
+
+const job = (code: number) => ({ machine_status: { status: code } });
+
+/** Tools the guard refuses while printing, with arguments it refuses. */
+const REFUSED_MID_PRINT: Array<[string, object, string]> = [
+  ['home', {}, 'homing'],
+  ['move', { axis: 'z', distance: 0.1 }, 'moving the toolhead'],
+  ['set_temperature', { nozzle: 0 }, 'turning a heater off'],
+  ['set_temperature', { bed: 0 }, 'turning a heater off'],
+  ['set_temperature', { nozzle: 150 }, 'below 170'],
+  ['set_temperature', { nozzle: 210, bed: 0 }, 'turning a heater off'], // mixed: all or nothing
+  ['load_filament', {}, 'loading filament'],
+  ['unload_filament', {}, 'unloading filament'],
+  ['auto_level', {}, 'auto-levelling'],
+  ['vibration_calibrate', {}, 'vibration calibration'],
+  ['pid_calibrate', {}, 'PID calibration'],
+  ['self_check', {}, 'self-check'],
+  ['send_command', { method: 1027, params: '{"axes":"x","distance":1}' }, 'moving the toolhead'],
+  ['send_command', { method: 1028, params: '{"heater_bed":0}' }, 'turning a heater off'],
+];
+
+describe('the print guard', () => {
+  it.each(REFUSED_MID_PRINT)(
+    'while printing, %s %j is a tool error and never reaches the printer',
+    async (tool, args, what) => {
+      store.status = job(2);
+      const sid = await openSession(bearer(KEY));
+      const r = await call(sid, tool, args, bearer(KEY));
+      expect(callsToPrinter()).toBe(0);
+      expect(r.msg.result.isError).toBe(true);
+      const text: string = r.msg.result.content[0].text;
+      expect(text).toContain(`"${tool}" refused: Printer is busy printing`);
+      expect(text).toContain(what);
+    },
+  );
+
+  it.each(REFUSED_MID_PRINT)('idle control: %s %j reaches the printer once', async (tool, args) => {
+    store.status = job(1);
+    const sid = await openSession(bearer(KEY));
+    const r = await call(sid, tool, args, bearer(KEY));
+    expect(callsToPrinter()).toBe(1);
+    expect(r.msg.result.isError).toBeFalsy();
+  });
+
+  it.each([
+    ['set_temperature', { nozzle: 215, bed: 60 }, 1028, { extruder: 215, heater_bed: 60 }],
+    ['pause_print', {}, 1021, {}],
+    ['stop_print', {}, 1022, {}],
+    ['emergency_stop', {}, 1007, {}],
+    ['fan', { name: 'part', speed: 50 }, 1030, { fan: 128 }],
+    ['send_command', { method: 1021 }, 1021, {}],
+  ])('mid-print allow: %s %j is sent', async (tool, args, method, params) => {
+    store.status = job(2);
+    const sid = await openSession(bearer(KEY));
+    const r = await call(sid, tool, args, bearer(KEY));
+    expect(r.msg.result.isError).toBeFalsy();
+    expect(bridge.sendCommand.mock.calls).toEqual([[method, params]]);
   });
 });

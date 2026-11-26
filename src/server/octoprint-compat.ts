@@ -23,6 +23,7 @@ import {
   octoprintLoginPayload,
 } from './compat-auth.js';
 import { authorize, extractKey } from './write-auth.js';
+import { printBusyRefusal } from './print-guard.js';
 
 const _log = getLogger('OctoPrint');
 
@@ -170,6 +171,20 @@ export function createOctoPrintRouter(
     }
     const access: OctoPrintAccess = !expected ? 'open' : presented !== null ? 'apikey' : 'guest';
 
+    /**
+     * Send one command unless the print guard (ELEG-176) refuses it, in which case answer
+     * 409 — what OctoPrint itself answers for a jog while printing. True when it was sent.
+     */
+    const sendUnlessBusy = (m: number, params: Record<string, unknown>): boolean => {
+      const busy = printBusyRefusal(m, params, store.status);
+      if (busy) {
+        json(res, { error: busy }, 409);
+        return false;
+      }
+      bridge.sendCommand(m, params);
+      return true;
+    };
+
     // --- GET /api/version ---
     if (path === '/api/version' && method === 'GET') {
       json(res, {
@@ -238,10 +253,11 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'target' && cmd.targets?.tool0 != null) {
-            bridge.sendCommand(1028, {
+            const sent = sendUnlessBusy(1028, {
               target: 'extruder',
               temperature: cmd.targets.tool0,
             });
+            if (!sent) return;
           }
           noContent(res);
         })
@@ -268,10 +284,11 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'target' && cmd.target != null) {
-            bridge.sendCommand(1028, {
+            const sent = sendUnlessBusy(1028, {
               target: 'heater_bed',
               temperature: cmd.target,
             });
+            if (!sent) return;
           }
           noContent(res);
         })
@@ -302,14 +319,15 @@ export function createOctoPrintRouter(
             if (cmd.x != null) axes.x = cmd.x;
             if (cmd.y != null) axes.y = cmd.y;
             if (cmd.z != null) axes.z = cmd.z;
-            bridge.sendCommand(1027, {
+            const sent = sendUnlessBusy(1027, {
               direction: 'relative',
               ...axes,
               speed: cmd.speed ?? 3000,
             });
+            if (!sent) return;
           } else if (cmd.command === 'home') {
             const homeAxes = cmd.axes?.length ? cmd.axes : ['x', 'y', 'z'];
-            bridge.sendCommand(1026, { axes: homeAxes });
+            if (!sendUnlessBusy(1026, { axes: homeAxes })) return;
           }
           noContent(res);
         })

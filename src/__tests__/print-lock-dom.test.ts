@@ -9,8 +9,8 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { bindControls, HOME_CONFIRM, onCommandResponse } from '../ui/controls';
-import { applyPrintLock, isJobActive, PRINT_LOCK_REASON } from '../ui/print-lock';
-import type { PrinterStatus } from '../types';
+import { applyPrintLock, PRINT_LOCK_REASON } from '../ui/print-lock';
+import { isJobActive, type PrinterStatus } from '../types';
 import type { CommandSender } from '../ws-client';
 
 const sendCommand = vi.fn();

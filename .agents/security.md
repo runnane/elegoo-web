@@ -60,8 +60,41 @@ Not just read. The control surface is complete:
 | OctoPrint reads | yes, by design | version, server, connection, printer/tool/bed/chamber, job, files, settings, printer profiles, current user — a **wrong** key is still a 403, so a slicer's "Test connection" is honest. `/api/settings` reports `api.enabled: true` with the key set and never the key; `/api/currentuser` answers a guest unless the key was presented |
 | Moonraker writes: `/moonraker/*` on 8088, `:7125` HTTP, and **both** `:7125` WebSockets (`/websocket` and the catch-all `/`, `/klippy`, …) | **no, when `SERVICE_API_KEY` is set** (ELEG-142); yes when unset | print start/pause/resume/cancel, **emergency stop**, `gcode.script`, file upload/move/copy/delete and directories, history deletes, job-queue changes, webcam items, `machine.*` and `*restart`, announcements and log rollover. One table, `src/server/moonraker-auth.ts`: HTTP is default-deny on any non-GET; JSON-RPC is default-deny by name (an unclassified method runs nothing). The key arrives as `X-Api-Key` / Bearer, or over the WebSocket as `server.connection.identify {api_key}` (KlipperScreen's `moonraker_api_key`) or on the upgrade; refusals are Moonraker's `{code: 401, message: "Unauthorized"}`. A wrong key is a 401 on any HTTP route, reads included, and over the WebSocket a 401 on identify that leaves the connection read-only. Mainsail and Fluidd cannot send a static key, so they are read-only clients (ELEG-145) |
 | Moonraker reads and the open groups | yes, by design | state, objects query/subscribe, file lists, history/queue status; `server.connection.identify`; `access.*` (which still hand out no key and no token — `access.info` keeps `login_required: false`); `server.database.*` (the clients' UI preferences), **except writes to the `webcams` namespace**, which gated `server.webcams.post_item` also writes |
-| `/ws` command frames | **no, when `SERVICE_API_KEY` is set** (ELEG-140), except proven reads; yes when unset | every `{type:'command'}` method not on the default-deny read allowlist in `src/server/method-policy.ts` (`1002, 1036, 1044, 1045, 1046, 1048, 2005`, each with its evidence) — temperature, motion, print control, emergency stop, deletes, calibration, filament, and every method nobody has proven to be a read (2006 included). The key arrives as an `{type:'auth', key}` frame (browsers cannot set WebSocket headers; a `?key=` would land in proxy logs) or as `Authorization: Bearer` / `X-Api-Key` on the upgrade; a refused frame is answered `command_refused` and never forwarded. A wrong key leaves the connection unauthorised but still able to read |
+| `/ws` command frames | **no, when `SERVICE_API_KEY` is set** (ELEG-140), except proven reads; yes when unset | every `{type:'command'}` method not on the default-deny read allowlist in `src/server/method-policy.ts` (`1002, 1036, 1044, 1045, 1046, 1048, 2005`, each with its evidence) — temperature, motion, print control, emergency stop, deletes, calibration, filament, and every method nobody has proven to be a read (2006 included). The key arrives as an `{type:'auth', key}` frame (browsers cannot set WebSocket headers; a `?key=` would land in proxy logs) or as `Authorization: Bearer` / `X-Api-Key` on the upgrade; a refused frame is answered `command_refused` (`code: 'auth'`) and never forwarded. A wrong key leaves the connection unauthorised but still able to read. **And, while a job is active, the print guard** (ELEG-176, below): an authorised frame can still be refused, as `command_refused` with `code: 'busy'` |
 | `/ws` stream | yes, by design | connecting, the `init` snapshot and every broadcast: the same state `/api/status` serves |
+
+**The print guard (ELEG-176) is a second check, independent of the key.** While
+`machine_status.status` is 2 (printing, paused included) or 15 (power-loss recovery), the
+following are refused, **with the key too**:
+
+- home and move;
+- feed/retract and the Canvas tray load/unload;
+- the four calibrations;
+- a 1028 that would turn a heater off, set the nozzle below 170 °C, or that carries no
+  recognised target at all.
+
+A safe target change still goes through. So do pause, resume, stop, emergency stop, fans,
+light and speed. The rule protects a job from a mis-click or a misbehaving client; it does
+not stand in for the key.
+
+**`src/server/print-guard.ts` is the single policy.** Every surface asks it before sending
+and answers in its own convention:
+
+| Surface | Refusal |
+| --- | --- |
+| `/ws` | `command_refused`, `code: 'busy'` |
+| `/mcp` | `isError` |
+| Moonraker HTTP | 409 |
+| Moonraker JSON-RPC | an rpc 409 plus a `!!` console line |
+| OctoPrint | 409 |
+
+`MqttBridge.setCommandGuard`, wired in `index.ts`, drops anything a surface forgot to ask
+about. It logs a warning when it does. The UI lock (ELEG-163) is stricter on purpose: it
+also locks Set and the presets. "Printing" comes from one predicate, `isJobActive` in
+`src/types.ts`, which the UI lock and the server share. A new surface that sends one of
+these methods must call `printBusyRefusal` (or `printBusyRefusalAll` for a compound
+request) before it answers success. Without that call the bridge still refuses, but the
+caller is told it worked.
 
 **Connection presets (ELEG-95) are the one write that is off by default.** `POST
 /api/printers`, `DELETE /api/printers/:id` and `POST /api/printers/:id/activate` refuse
