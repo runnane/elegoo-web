@@ -272,6 +272,18 @@ if (aiMonitor) {
     }
   });
 
+  // The monitor emits `degraded` once per episode (on the transition), and only runs
+  // during a print, so this is one notice per episode during a print (ELEG-168).
+  // A flapping camera starts a new episode each time it recovers, so the same alert
+  // cooldown as AI alerts also bounds this notice.
+  let lastDegradedNotice = 0;
+  aiMonitor.on('degraded', (health: { reason: string | null; since: number | null }) => {
+    const now = Date.now();
+    if (!telegram || now - lastDegradedNotice < config.aiAlertCooldownSec * 1000) return;
+    lastDegradedNotice = now;
+    void telegram.sendAIDegraded(health);
+  });
+
   aiMonitor.on(
     'ai_chart_data',
     (data: { t: number; motion: number; scores: Record<string, number> }) => {

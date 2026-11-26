@@ -201,13 +201,9 @@ export class WebSocketTransport {
           ? 'running'
           : 'stopped'
         : 'disabled',
-      ai: this.services.aiMonitor
-        ? this.services.aiMonitor.monitoring
-          ? 'monitoring'
-          : this.services.aiMonitor.isRunning
-            ? 'idle'
-            : 'stopped'
-        : 'disabled',
+      // `degraded` (ELEG-168): monitoring a print but not getting frames. The panel's
+      // config summary carries the reason and timestamps under `aiConfig.health`.
+      ai: this.services.aiMonitor ? this.services.aiMonitor.statusValue : 'disabled',
       aiConfig: this.services.aiMonitor?.getConfigSummary() ?? null,
       // `camera` stays a string so the panel's ok/err check is a lookup; `cameraHealth`
       // carries the reason and timestamps (ELEG-178). See `CameraState` in src/types.ts.
