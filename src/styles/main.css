@@ -3270,6 +3270,7 @@ body {
 }
 
 /* ─── Print History ──────────────────────────── */
+/* Shared with #print-reports-entries (ELEG-173) so both lists scroll inside their card. */
 .print-history-entries {
   max-height: 400px;
   overflow-y: auto;
