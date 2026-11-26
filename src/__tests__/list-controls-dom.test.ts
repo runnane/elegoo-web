@@ -30,6 +30,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createListControls } from '../ui/list-controls';
+import { saveListSelect } from '../ui/ui-settings';
 
 interface Row {
   name: string;
@@ -271,5 +272,24 @@ describe('the two empty states', () => {
     // The caller's message must NOT leak into the filtered state — they are different
     // facts and that is the whole point of having two.
     expect(filtered).not.toContain('No files on the printer.');
+  });
+});
+
+describe('a saved filter value the view no longer offers (ELEG-162)', () => {
+  it('falls back to "all" instead of hiding every row', () => {
+    const id = nextId();
+    saveListSelect(`${id}.state`, 'retired-option'); // e.g. History's dropped 'failed'
+    const { controls } = mountSiblingLayout();
+    const api = makeControls(controls, id);
+    expect(api.apply(ROWS)).toHaveLength(ROWS.length);
+    expect((controls.querySelector('select') as HTMLSelectElement).value).toBe('all');
+  });
+
+  it('still restores a saved value that is offered', () => {
+    const id = nextId();
+    saveListSelect(`${id}.state`, 'failed');
+    const { controls } = mountSiblingLayout();
+    const api = makeControls(controls, id);
+    expect(api.apply(ROWS).map((r) => r.name)).toEqual(['calibration-cube.gcode']);
   });
 });

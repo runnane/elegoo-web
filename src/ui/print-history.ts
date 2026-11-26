@@ -19,6 +19,15 @@ export function requestHistory(): void {
 
 type HistoryItem = PrinterState['printHistory'][number];
 
+/** How each value of `mapTaskStatus` (printer-state.ts) is shown and filtered. */
+export const HISTORY_STATUS: Record<string, { label: string; icon: string; cls: string }> = {
+  completed: { label: 'completed', icon: '✅', cls: 'success' },
+  stopped: { label: 'cancelled', icon: '⏹', cls: 'warning' },
+  printing: { label: 'printing', icon: '🖨️', cls: '' },
+  paused: { label: 'paused', icon: '⏸', cls: '' },
+  unknown: { label: 'other', icon: '❔', cls: '' },
+};
+
 /** Kept outside the render function — see `list-controls.ts` on why that matters. */
 let historyControls: ListControls<HistoryItem> | null = null;
 let lastHistoryState: PrinterState | null = null;
@@ -55,11 +64,9 @@ function ensureHistoryControls(): ListControls<HistoryItem> {
       {
         id: 'status',
         label: 'Status',
-        options: [
-          { value: 'completed', label: 'completed' },
-          { value: 'failed', label: 'failed' },
-          { value: 'stopped', label: 'stopped' },
-        ],
+        // One option per status mapTaskStatus can produce (ELEG-162). 'stopped' keeps its
+        // value so a saved filter still matches, but reads as the vendor's "cancelled".
+        options: Object.entries(HISTORY_STATUS).map(([value, d]) => ({ value, label: d.label })),
         match: (item, value) => item.status === value,
       },
     ],
@@ -89,22 +96,7 @@ export function renderPrintHistory(state: PrinterState): void {
 
   const html = items
     .map((item) => {
-      const statusClass =
-        item.status === 'completed'
-          ? 'success'
-          : item.status === 'failed'
-            ? 'danger'
-            : item.status === 'stopped'
-              ? 'warning'
-              : '';
-      const statusIcon =
-        item.status === 'completed'
-          ? '✅'
-          : item.status === 'failed'
-            ? '❌'
-            : item.status === 'stopped'
-              ? '⏹'
-              : '❓';
+      const display = HISTORY_STATUS[item.status] ?? HISTORY_STATUS.unknown;
 
       const begin = item.begin_time ? new Date(item.begin_time * 1000).toLocaleString() : '--';
       const _end = item.end_time ? new Date(item.end_time * 1000).toLocaleString() : '--';
@@ -119,7 +111,7 @@ export function renderPrintHistory(state: PrinterState): void {
 
       return `<div class="history-entry">
       <div class="history-entry-main">
-        <span class="history-status ${statusClass}" title="${escapeHtml(item.status)}">${statusIcon}</span>
+        <span class="history-status ${display.cls}" title="${escapeAttr(display.label)}">${display.icon}</span>
         <span class="history-filename" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
         ${deleteBtn}
       </div>
