@@ -15,6 +15,54 @@ The MCP server uses [StreamableHTTP](https://modelcontextprotocol.io/specificati
 
 Each session gets its own MCP server instance with access to the shared printer state and MQTT bridge.
 
+## Authentication
+
+When the service runs with `SERVICE_API_KEY` set, **every tool that changes the machine
+needs the key**: all 21 tools under Control, Print Management, Maintenance, File & Filament
+and Camera & Advanced below, `send_command` included. The 10 Read-Only tools, all
+`printer://*` resources, `initialize` and `tools/list` stay open.
+
+Send the key as a Bearer token on **every** request (`X-Api-Key: <key>` is accepted too):
+
+```
+Authorization: Bearer <SERVICE_API_KEY>
+```
+
+- **Checked per HTTP request, not per session.** A session opened with the key grants
+  nothing to a later request on the same `Mcp-Session-Id` that does not carry it, so set the
+  header in the client config rather than only on `initialize`.
+- **No key presented** → reads work; a gated tool returns an MCP tool error (HTTP 200, the
+  JSON-RPC call succeeds) and nothing is sent to the printer:
+
+  ```json
+  { "content": [{ "type": "text", "text": "\"emergency_stop\" needs SERVICE_API_KEY. This action needs the service API key. Send it as \"Authorization: Bearer <key>\" or \"X-Api-Key: <key>\"." }], "isError": true }
+  ```
+
+- **A wrong key presented** → **HTTP 401** on any request, reads and `initialize` included.
+- **`SERVICE_API_KEY` unset** → every tool is open, as before the key existed.
+
+Client config, e.g. for Claude Code (the key comes from your environment, never a file in a
+repo):
+
+```bash
+claude mcp add --transport http elegoo http://localhost:8088/mcp \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+or in a JSON MCP config:
+
+```json
+{
+  "mcpServers": {
+    "elegoo": {
+      "type": "http",
+      "url": "http://localhost:8088/mcp",
+      "headers": { "Authorization": "Bearer ${SERVICE_API_KEY}" }
+    }
+  }
+}
+```
+
 ## Resources
 
 Read-only data exposed as MCP resources for context retrieval.
@@ -32,6 +80,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Read-Only
 
+Open — no key needed.
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `status` | — | Printer status summary (text) |
@@ -47,6 +97,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Control
 
+**Needs the key** when `SERVICE_API_KEY` is set (see [Authentication](#authentication)) — as does every tool below this point.
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `set_temperature` | `nozzle?` (0-300°C), `bed?` (0-120°C) | Set nozzle and/or bed temperature |
@@ -56,7 +108,11 @@ Read-only data exposed as MCP resources for context retrieval.
 | `home` | `axes?` (xy\|z\|xyz, default xyz) | Home printer axes |
 | `move` | `axis` (x\|y\|z), `distance` (mm) | Jog a single axis (negative = reverse) |
 
+**Refused while a job is active** (status Printing or Power Loss Recovery; see the print guard under [Error Handling](#error-handling)): `home` and `move` always. `set_temperature` is refused when it would turn a heater off (`bed: 0`, `nozzle: 0`) or set the nozzle below 170 °C. Any other target change still goes through mid-print. A call with both targets is all or nothing: if either target is refused, nothing is sent. `fan`, `speed_mode` and `led` stay available.
+
 ### Print Management
+
+**Needs the key.**
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
@@ -68,6 +124,8 @@ Read-only data exposed as MCP resources for context retrieval.
 
 ### Maintenance
 
+**Needs the key.**
+
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `auto_level` | — | Start auto bed leveling |
@@ -75,7 +133,11 @@ Read-only data exposed as MCP resources for context retrieval.
 | `vibration_calibrate` | — | Start resonance/vibration optimization |
 | `self_check` | `ringing?` (bool, default true), `pid?` (bool, default true), `leveling?` (bool, default true) | Run combined self-test |
 
+**All four are refused while a job is active.** They home and probe the bed.
+
 ### File & Filament
+
+**Needs the key.**
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
@@ -84,14 +146,30 @@ Read-only data exposed as MCP resources for context retrieval.
 | `unload_filament` | — | Retract/unload filament from extruder |
 | `set_auto_refill` | `enabled` (boolean) | Enable/disable Canvas auto-refill |
 
+**`load_filament` and `unload_filament` are refused while a job is active**, because they would start a filament change under a print.
+
 ### Camera & Advanced
+
+**Needs the key** — `send_command` always, because it sends any raw method number.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `enable_video_stream` | `method?` (sdcp\|mqtt, default sdcp) | Enable camera MJPEG stream |
 | `send_command` | `method` (number), `params?` (JSON string, default "{}") | Send raw MQTT command (advanced) |
 
+**`send_command` follows the same print guard**, by method number, so it is no way around it.
+
 ## Error Handling
+
+- A gated tool called without the key returns `isError: true` naming `SERVICE_API_KEY` (see [Authentication](#authentication)); a wrong key is an HTTP 401.
+- **The print guard.** While a job is active, a refused tool returns `isError: true` with `"<tool>" refused: Printer is busy printing — …`, and nothing is sent. Pause, resume, stop and emergency stop stay available. Retry once the printer is idle. The guard covers:
+  - `home`, `move`;
+  - heater-off and a nozzle below 170 °C via `set_temperature`;
+  - the four calibrations;
+  - `load_filament`, `unload_filament`;
+  - the matching raw methods through `send_command`: 1024–1028, 1032–1035, 2001 and 2002.
+
+  The policy is `src/server/print-guard.ts` (ELEG-176). `/ws`, Moonraker and OctoPrint apply the same rule.
 
 - Tools that require a printer connection return `isError: true` with "Printer not connected" if the MQTT bridge is disconnected.
 - Parameter validation is enforced via Zod schemas — invalid values return descriptive errors.

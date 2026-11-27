@@ -2,6 +2,7 @@ import type { CommandSender } from '../ws-client';
 import type { PrinterState } from '../printer-state';
 import { $, escapeHtml, escapeAttr, formatTime } from './helpers';
 import { toast } from './toast';
+import { confirmDialog } from './confirm-dialog';
 import { type ListControls, createListControls } from './list-controls';
 import { nonZero, spanSeconds } from './list-sort';
 
@@ -18,6 +19,15 @@ export function requestHistory(): void {
 }
 
 type HistoryItem = PrinterState['printHistory'][number];
+
+/** How each value of `mapTaskStatus` (printer-state.ts) is shown and filtered. */
+export const HISTORY_STATUS: Record<string, { label: string; icon: string; cls: string }> = {
+  completed: { label: 'completed', icon: '✅', cls: 'success' },
+  stopped: { label: 'cancelled', icon: '⏹', cls: 'warning' },
+  printing: { label: 'printing', icon: '🖨️', cls: '' },
+  paused: { label: 'paused', icon: '⏸', cls: '' },
+  unknown: { label: 'other', icon: '❔', cls: '' },
+};
 
 /** Kept outside the render function — see `list-controls.ts` on why that matters. */
 let historyControls: ListControls<HistoryItem> | null = null;
@@ -55,11 +65,9 @@ function ensureHistoryControls(): ListControls<HistoryItem> {
       {
         id: 'status',
         label: 'Status',
-        options: [
-          { value: 'completed', label: 'completed' },
-          { value: 'failed', label: 'failed' },
-          { value: 'stopped', label: 'stopped' },
-        ],
+        // One option per status mapTaskStatus can produce (ELEG-162). 'stopped' keeps its
+        // value so a saved filter still matches, but reads as the vendor's "cancelled".
+        options: Object.entries(HISTORY_STATUS).map(([value, d]) => ({ value, label: d.label })),
         match: (item, value) => item.status === value,
       },
     ],
@@ -89,22 +97,7 @@ export function renderPrintHistory(state: PrinterState): void {
 
   const html = items
     .map((item) => {
-      const statusClass =
-        item.status === 'completed'
-          ? 'success'
-          : item.status === 'failed'
-            ? 'danger'
-            : item.status === 'stopped'
-              ? 'warning'
-              : '';
-      const statusIcon =
-        item.status === 'completed'
-          ? '✅'
-          : item.status === 'failed'
-            ? '❌'
-            : item.status === 'stopped'
-              ? '⏹'
-              : '❓';
+      const display = HISTORY_STATUS[item.status] ?? HISTORY_STATUS.unknown;
 
       const begin = item.begin_time ? new Date(item.begin_time * 1000).toLocaleString() : '--';
       const _end = item.end_time ? new Date(item.end_time * 1000).toLocaleString() : '--';
@@ -119,7 +112,7 @@ export function renderPrintHistory(state: PrinterState): void {
 
       return `<div class="history-entry">
       <div class="history-entry-main">
-        <span class="history-status ${statusClass}" title="${escapeHtml(item.status)}">${statusIcon}</span>
+        <span class="history-status ${display.cls}" title="${escapeAttr(display.label)}">${display.icon}</span>
         <span class="history-filename" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
         ${deleteBtn}
       </div>
@@ -148,7 +141,7 @@ export function bindHistoryControls(): void {
 
   // Delegated, because the list is re-rendered on every 1036 response and per-row
   // listeners would be rebound each time.
-  $('print-history-entries').addEventListener('click', (e) => {
+  $('print-history-entries').addEventListener('click', async (e) => {
     const btn = (e.target as HTMLElement).closest('.history-delete-btn') as HTMLElement | null;
     if (!btn) return;
     const taskId = btn.dataset.taskId;
@@ -157,13 +150,11 @@ export function bindHistoryControls(): void {
     const name = btn.dataset.filename || 'this entry';
     // The record is destroyed on the printer, not hidden here — same shape as the file
     // delete in files.ts, and equally irreversible.
-    if (
-      !confirm(
-        `Delete the history entry for ${name}?\n\nThis removes it from the printer and cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog(
+      `Delete the history entry for ${name}?\n\nThis removes it from the printer and cannot be undone.`,
+      { title: 'Delete history entry', confirmLabel: 'Delete', danger: true },
+    );
+    if (!ok || !historyClient) return;
 
     // Method 1038 (HistoryDelete) takes a list of task ids. NOT 1049 — that is
     // UpdateToken, and sending it here would have written the printer's auth token

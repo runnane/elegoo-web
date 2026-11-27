@@ -238,8 +238,35 @@ export function renderAIPanel(): void {
   });
 }
 
+/** The monitor's own health, as the server sends it under `aiConfig.health` (ELEG-168). */
+export interface AIHealthView {
+  state?: string;
+  reason?: string | null;
+  since?: number | null;
+  lastAnalysisAt?: number | null;
+}
+
+function clock(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * The status line for a degraded monitor: says it is NOT analysing, why, since when, and
+ * when it last did (ELEG-168). Pure, so a test can reach it.
+ */
+export function degradedMessage(health: AIHealthView | null | undefined): string {
+  const why = health?.reason ?? 'camera unavailable';
+  const since = health?.since ? ` since ${clock(health.since)}` : '';
+  const last = health?.lastAnalysisAt
+    ? ` — last analysed ${clock(health.lastAnalysisAt)}`
+    : ' — nothing analysed yet';
+  return `Not analysing — ${why}${since}${last}`;
+}
+
 function aiStatusIcon(): string {
   switch (aiServiceStatus) {
+    case 'degraded':
+      return '⚠️';
     case 'monitoring':
       return '🔍';
     case 'idle':
@@ -253,6 +280,8 @@ function aiStatusIcon(): string {
 
 function aiStatusMessage(): string {
   switch (aiServiceStatus) {
+    case 'degraded':
+      return degradedMessage(aiConfig?.health as AIHealthView | undefined);
     case 'monitoring':
       return 'Monitoring active — analyzing camera every ' + (aiConfig?.intervalSec ?? '?') + 's';
     case 'idle':

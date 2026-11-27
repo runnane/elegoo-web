@@ -1,8 +1,14 @@
 import type { CommandSender } from '../ws-client';
-import { $, fetchTimeout } from './helpers';
+import { $ } from './helpers';
+import { apiWrite } from './api-key';
 import { toast } from './toast';
+import { isPrintLocked } from './print-lock';
+import { confirmDialog } from './confirm-dialog';
 
 let controlsBound = false;
+
+export const HOME_CONFIRM =
+  'Home all axes?\n\nThe toolhead will move — make sure the bed is clear.';
 
 /** Track in-flight commands by unique ID → method + elements to re-enable */
 let nextCmdId = 0;
@@ -20,11 +26,19 @@ export function onCommandResponse(method: number): void {
   for (const [id, entry] of inFlight) {
     if (entry.method !== method) continue;
     clearTimeout(entry.timer);
-    for (const el of entry.elements) {
-      (el as HTMLButtonElement).disabled = false;
-      el.classList.remove('cmd-pending');
-    }
+    releaseElements(entry.elements);
     inFlight.delete(id);
+  }
+}
+
+/**
+ * End a command's in-flight disable. An element the print lock holds (ELEG-163) stays
+ * disabled: a response or timeout arriving mid-print must not hand it back.
+ */
+function releaseElements(elements: HTMLElement[]): void {
+  for (const el of elements) {
+    el.classList.remove('cmd-pending');
+    if (!isPrintLocked(el)) (el as HTMLButtonElement).disabled = false;
   }
 }
 
@@ -35,6 +49,9 @@ function guardedSend(
   params: Record<string, unknown>,
   ...elements: HTMLElement[]
 ): void {
+  // A control the print lock holds never sends, however the click arrived (ELEG-163).
+  if (elements.some(isPrintLocked)) return;
+
   // Per-method throttle: drop if sent too recently
   const now = Date.now();
   if (now - (lastSentAt.get(method) ?? 0) < THROTTLE_MS) return;
@@ -65,10 +82,7 @@ function guardedSend(
   const timer = setTimeout(() => {
     const entry = inFlight.get(cmdId);
     if (!entry) return;
-    for (const el of entry.elements) {
-      (el as HTMLButtonElement).disabled = false;
-      el.classList.remove('cmd-pending');
-    }
+    releaseElements(entry.elements);
     inFlight.delete(cmdId);
   }, timeout);
 
@@ -87,16 +101,29 @@ export function bindControls(client: CommandSender): void {
   const btnStop = $('btn-stop') as HTMLButtonElement;
   btnPause.addEventListener('click', () => guardedSend(client, 1021, {}, btnPause));
   btnResume.addEventListener('click', () => guardedSend(client, 1023, {}, btnResume));
-  btnStop.addEventListener('click', () => {
-    if (confirm('Stop the current print?')) {
+  btnStop.addEventListener('click', async () => {
+    if (
+      await confirmDialog('Stop the current print?', {
+        title: 'Stop print',
+        confirmLabel: 'Stop print',
+        danger: true,
+      })
+    ) {
       guardedSend(client, 1022, {}, btnStop);
     }
   });
 
   // Emergency Stop
   const btnEStop = $('btn-estop') as HTMLButtonElement;
-  btnEStop.addEventListener('click', () => {
-    if (confirm('⚠️ EMERGENCY STOP\nThis immediately halts all motion and heaters.\nContinue?')) {
+  btnEStop.addEventListener('click', async () => {
+    if (
+      await confirmDialog('This immediately halts all motion and heaters.\nContinue?', {
+        title: '⚠️ EMERGENCY STOP',
+        confirmLabel: 'Emergency stop',
+        danger: true,
+        className: 'confirm-dialog-emergency',
+      })
+    ) {
       guardedSend(client, 1007, {}, btnEStop);
     }
   });
@@ -146,7 +173,19 @@ export function bindControls(client: CommandSender): void {
   // so both buttons send 'xyz' and are disabled together
   const btnHomeAll = $('btn-home-all') as HTMLButtonElement;
   const btnHomeAllZ = $('btn-home-all-z') as HTMLButtonElement;
-  const homeAll = () => {
+  // Homing moves the toolhead, so the button confirms first — the same question Shift+H
+  // used to ask on its own, which left the on-screen button doing less checking than
+  // the shortcut (ELEG-163). The shortcut now clicks this button and inherits it.
+  const homeAll = async () => {
+    if (isPrintLocked(btnHomeAll)) return;
+    const ok = await confirmDialog(HOME_CONFIRM, {
+      title: 'Home axes',
+      confirmLabel: 'Home',
+      danger: true,
+    });
+    // guardedSend re-checks the print lock, so a print that started while the dialog was
+    // open still cannot be homed under.
+    if (!ok) return;
     guardedSend(client, 1026, { homed_axes: 'xyz' }, btnHomeAll, btnHomeAllZ);
   };
   btnHomeAll.addEventListener('click', homeAll);
@@ -225,7 +264,7 @@ export function bindControls(client: CommandSender): void {
     captureBtn.disabled = true;
     captureBtn.textContent = `⏳ ${duration}s...`;
     try {
-      const res = await fetchTimeout(
+      const res = await apiWrite(
         '/api/debug/capture',
         {
           method: 'POST',

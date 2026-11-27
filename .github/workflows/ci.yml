@@ -20,10 +20,16 @@ jobs:
       #
       # Still `pnpm/action-setup`. Its successor `pnpm/setup` requires pnpm v11+, which
       # ELEG-9 made possible. action-setup@v6 reads the 11.x `packageManager` pin just
-      # as it read 10.x, so ELEG-9 kept the action and changed only the pin.
+      # as it read 10.x, so ELEG-9 kept the action and changed only the pin, and
+      # ELEG-138 did the same for 12.x.
       #
-      # `node-version: 22` resolves to the newest 22.x, which satisfies pnpm 11's
-      # `engines.node >=22.13`.
+      # This step runs pnpm 12 DIRECTLY, not through an older global that switches to
+      # the pin. Run that way, pnpm 12 makes pnpm-lock.yaml two YAML documents unless
+      # `pmOnFail: ignore` is in pnpm-workspace.yaml (ELEG-138), and `pnpm gates`
+      # fails on a document marker — so this job is where that setting is proven.
+      #
+      # `node-version: 22` resolves to the newest 22.x, which satisfies the
+      # `engines.node >=22.22.2` floor in package.json.
       - uses: pnpm/action-setup@v6
 
       # `cache: pnpm` is explicit and must stay. setup-node v5 added automatic

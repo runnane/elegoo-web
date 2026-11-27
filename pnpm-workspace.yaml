@@ -2,7 +2,7 @@
 # reading it ("The `pnpm` field in package.json is no longer read by pnpm"), which
 # left the effective overrides empty while pnpm-lock.yaml still recorded them — and
 # --frozen-lockfile correctly refused the mismatch (ELEG-4). This file is the
-# documented new home and is read by both 10.x and 11.x.
+# documented new home and is read by 10.x, 11.x and 12.x.
 
 # Security pins, not compatibility shims — keep them.
 #
@@ -19,15 +19,18 @@
 # a floor nobody can date. Check with: pnpm why <pkg>
 overrides:
   # release-it and jsdom (dev only) both pull undici 8.x. 8.10.2 closes the GHSA batch
-  # Dependabot raised on 8.0–8.10.1 (ELEG-117), two of them high.
-  undici: '>=8.10.2'
+  # Dependabot raised on 8.0–8.10.1 (ELEG-117), two of them high. 8.12.2 closes the
+  # next batch on 8.0–8.12.1 (ELEG-137), four of them high.
+  undici: '>=8.12.2'
 
   # @modelcontextprotocol/sdk 1.30.0 → express / ajv / express-rate-limit / hono.
   # Its declared ranges already permit all of these; only the lockfile was stale.
-  hono: '>=4.12.34'
-  '@hono/node-server': '>=2.0.5'
-  qs: '>=6.15.2'
-  body-parser: '>=2.3.0'
+  # Raised again in ELEG-137: hono <4.13.16 (five advisories), @hono/node-server
+  # <2.1.6 (two), qs <=6.16.0 (one), body-parser <2.4.0 (one, high).
+  hono: '>=4.13.16'
+  '@hono/node-server': '>=2.1.6'
+  qs: '>=6.16.1'
+  body-parser: '>=2.4.0'
   fast-uri: '>=3.1.5'
   # 10.7.1 closes four SSRF/trust-boundary classifier advisories (ELEG-117). RUNTIME:
   # express-rate-limit (via the sdk) and socks both resolve it.
@@ -49,8 +52,11 @@ overrides:
   # directly under `node --import tsx`, so this is not a build-only advisory.
   esbuild: '>=0.28.1'
 
-  # @types/three 0.178.1 pins fflate 0.8.2 exactly (GHSA-px8p-9vwx-vf98, moderate).
-  # Dev only — a types package. Caret, not >=, because 0.x minors may break (ELEG-117).
+  # fflate 0.8.2 has GHSA-px8p-9vwx-vf98 (moderate). Added in ELEG-117 when @types/three
+  # 0.178.1 pinned 0.8.2 exactly. Re-checked in ELEG-120 at @types/three 0.185.4: it now
+  # declares ~0.8.2, and png-js 2.0.0 (via pdfkit, a RUNTIME dependency) declares ^0.8.2.
+  # Both ranges still admit the vulnerable 0.8.2, so the floor stays; only pdfkit's own
+  # ^0.8.3 excludes it. Caret, not >=, because 0.x minors may break.
   fflate: '^0.8.3'
 
   # release-it → proxy-agent → pac-proxy-agent → get-uri 8.0.1 → basic-ftp 5.3.1.
@@ -59,8 +65,9 @@ overrides:
   # This CROSSES get-uri's declared ^5.3.1 (get-uri has no release that widens it), so
   # upstream has not blessed it. Verified rather than assumed: get-uri's ftp.js calls only
   # Client#access/lastMod/list/downloadTo/close, all unchanged in 6.x, and a probe drove
-  # get-uri's ftp path into basic-ftp 6.x (see the PR for ELEG-118).
-  basic-ftp: '>=6.2.1'
+  # get-uri's ftp path into basic-ftp 6.x (see the PR for ELEG-118). Raised to 6.2.4 for
+  # GHSA-5pm8-86m8-9m6r on <=6.2.3 (ELEG-137), a patch within the same 6.x line.
+  basic-ftp: '>=6.2.4'
 
 # Which dependencies may run install scripts (ELEG-9). pnpm 11 REMOVED
 # `onlyBuiltDependencies`, which this file used to carry. It is ignored now, not
@@ -102,6 +109,24 @@ allowBuilds:
 # .github/dependabot.yml keeps its PRs outside the window.
 minimumReleaseAge: 1440
 
+# Keeps pnpm-lock.yaml ONE YAML document (ELEG-138). Without it, pnpm 12 invoked
+# directly (as pnpm/action-setup runs it in CI) prepends its own toolchain lock as a
+# leading `packageManagerDependencies` document, and the project graph moves into a
+# second one. GitHub's dependency graph reads only the first document, so Dependabot
+# would see no npm dependency at all on this public repo, and its zero reads as clean.
+# Measured in ELEG-128; lookout (LOOK-102) and hexrealm (HEXR-825) shipped the same.
+#
+# The cost: pnpm 12 no longer switches itself to `packageManager` when the running
+# version differs. scripts/gates.sh therefore fails on a running pnpm major that
+# differs from the pin, and on any `---` / `...` document marker in the lockfile.
+pmOnFail: ignore
+
+# three and @types/three are held out of `pnpm outdated` / `pnpm update` because
+# gcode-preview decides which three is allowed. 3.0.0-alpha.7 declares
+# three >=0.166.0 <0.186.0, so three is pinned exactly at 0.185.1 (the newest inside that
+# cap) and @types/three at 0.185.4 to match (ELEG-120). Move all three together, and only
+# after a real render of the preview — no gate draws it. gcode-preview itself is pinned
+# exactly in package.json: there is no semver promise between 3.0 alphas.
 updateConfig:
   ignoreDependencies:
     - three

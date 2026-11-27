@@ -28,6 +28,7 @@ import { applyCors, corsHeaders } from './cors.js';
 import { initLogger, getLogger } from './logger.js';
 import { connectionPresetsPath, initDataPaths, printQueueFile } from './data-paths.js';
 import { PrintQueue } from './print-queue.js';
+import { printBusyRefusal } from './print-guard.js';
 import { readCachedSn, writeCachedSn } from './sn-cache.js';
 import {
   ConnectionPresets,
@@ -96,9 +97,24 @@ if (config.aiEnabled) {
   );
 }
 log.info(`Moonraker: http://${config.bindAddress}:${config.moonrakerPort}`);
+// Whether writes are gated (ELEG-139). Never the key itself — not even a prefix.
+if (config.serviceApiKey) {
+  log.info(
+    'Write auth: enabled — /api/* writes, /ws commands and /mcp control tools need SERVICE_API_KEY',
+  );
+} else {
+  log.warn(
+    '⚠  SERVICE_API_KEY is not set — every /api/* write, /ws command and /mcp control tool is OPEN to anyone who can reach ' +
+      'this port (uploads, the print queue, printer commands). Set a key of 32+ characters ' +
+      'to require it (see README).',
+  );
+}
 
 // --- State Store (shared state for all consumers) ---
 const store = new StateStore(bridge, config.progressInterval);
+
+// --- Print guard backstop (ELEG-176) — every surface checks first; this catches any that forget ---
+bridge.setCommandGuard((method, params) => printBusyRefusal(method, params, store.status));
 
 // --- Print Queue (ELEG-35) — holds the list; every start is a human's explicit request ---
 const printQueue = new PrintQueue(store, bridge, printQueueFile());
@@ -171,7 +187,7 @@ const httpServer = createServer((req, res) => {
         config.corsPolicy,
         req.headers.origin,
         'GET, POST, DELETE, OPTIONS',
-        'Content-Type, mcp-session-id',
+        'Content-Type, Authorization, mcp-session-id',
         'mcp-session-id',
       ),
     );
@@ -180,7 +196,7 @@ const httpServer = createServer((req, res) => {
       res.end();
       return;
     }
-    handleMcpRequest(req, res, store, bridge).catch((err) => {
+    handleMcpRequest(req, res, store, bridge, config.serviceApiKey).catch((err) => {
       log.error('MCP request error:', err);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -217,7 +233,7 @@ const httpServer = createServer((req, res) => {
         config.corsPolicy,
         req.headers.origin,
         'GET, POST, DELETE, OPTIONS',
-        'Content-Type, Authorization',
+        'Content-Type, Authorization, X-Api-Key',
       ),
     );
     if (req.method === 'OPTIONS') {
@@ -232,7 +248,7 @@ const httpServer = createServer((req, res) => {
 });
 
 // --- WebSocket Transport (for browser clients) ---
-const wsTransport = new WebSocketTransport(httpServer, store, bridge);
+const wsTransport = new WebSocketTransport(httpServer, store, bridge, config);
 
 // Provide service references for status panel
 wsTransport.setServices({ telegram, aiMonitor });
@@ -254,6 +270,18 @@ if (aiMonitor) {
     if (telegram) {
       telegram.sendAIAlert(alert);
     }
+  });
+
+  // The monitor emits `degraded` once per episode (on the transition), and only runs
+  // during a print, so this is one notice per episode during a print (ELEG-168).
+  // A flapping camera starts a new episode each time it recovers, so the same alert
+  // cooldown as AI alerts also bounds this notice.
+  let lastDegradedNotice = 0;
+  aiMonitor.on('degraded', (health: { reason: string | null; since: number | null }) => {
+    const now = Date.now();
+    if (!telegram || now - lastDegradedNotice < config.aiAlertCooldownSec * 1000) return;
+    lastDegradedNotice = now;
+    void telegram.sendAIDegraded(health);
   });
 
   aiMonitor.on(

@@ -89,7 +89,9 @@ function stubConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
 }
 
 function fakeReq(url: string, method = 'GET'): IncomingMessage {
-  return { url, method } as unknown as IncomingMessage;
+  // `headers` is always present on a real request; the router reads it for the write gate
+  // (ELEG-142).
+  return { url, method, headers: {} } as unknown as IncomingMessage;
 }
 
 function fakeRes(): { res: ServerResponse; status: () => number; body: () => unknown } {
@@ -180,12 +182,16 @@ describe('queryObjects — Klipper-style printer object shapes', () => {
     expect(r.is_active).toBe(false);
   });
 
-  it('virtual_sdcard: is_active while paused (status 3), not only while actively printing (status 2)', () => {
+  it('virtual_sdcard: is_active while paused (status 2 + 2502), not while Loading Filament (status 3)', () => {
     const s = makeStore();
+    s.status = baseStatus({
+      machine_status: { status: 2, sub_status: 2502, exception_status: [], progress: 47 },
+    });
+    expect(queryObjects(s, { virtual_sdcard: null }).virtual_sdcard.is_active).toBe(true);
     s.status = baseStatus({
       machine_status: { status: 3, sub_status: 0, exception_status: [], progress: 47 },
     });
-    expect(queryObjects(s, { virtual_sdcard: null }).virtual_sdcard.is_active).toBe(true);
+    expect(queryObjects(s, { virtual_sdcard: null }).virtual_sdcard.is_active).toBe(false);
   });
 
   it('display_status: progress mirrors machine_status.progress / 100 regardless of print state', () => {
@@ -276,6 +282,12 @@ describe('queryObjects — Klipper-style printer object shapes', () => {
     });
   });
 
+  it('gcode_move.speed passes the printer value (already mm/min) through unconverted (ELEG-187)', () => {
+    const s = makeStore();
+    s.status = baseStatus({ gcode_move: { x: 1, y: 2, z: 3, e: 9, speed: 12000, speed_mode: 0 } });
+    expect(queryObjects(s, { gcode_move: null }).gcode_move.speed).toBe(12000);
+  });
+
   it('toolhead: falls back to gcode_move.e when .extruder is absent', () => {
     const s = makeStore();
     s.status = baseStatus({ gcode_move: { x: 1, y: 2, z: 3, e: 9, speed: 10, speed_mode: 0 } });
@@ -328,26 +340,26 @@ describe('queryObjects — print_stats.state: CC2 machine_status/sub_status → 
     expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('printing');
   });
 
-  it('status 3 → paused', () => {
+  it('status 3 (Loading Filament) → standby, not paused', () => {
     const s = makeStore();
     s.status = baseStatus({
       machine_status: { status: 3, sub_status: 0, exception_status: [], progress: 10 },
     });
-    expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('paused');
+    expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('standby');
   });
 
-  it('sub_status 2502 → paused, independent of machine_status', () => {
+  it('status 2 + sub_status 2502 → paused', () => {
     const s = makeStore();
     s.status = baseStatus({
-      machine_status: { status: 1, sub_status: 2502, exception_status: [], progress: 10 },
+      machine_status: { status: 2, sub_status: 2502, exception_status: [], progress: 10 },
     });
     expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('paused');
   });
 
-  it('sub_status 2505 → paused', () => {
+  it('status 2 + sub_status 2505 → paused', () => {
     const s = makeStore();
     s.status = baseStatus({
-      machine_status: { status: 1, sub_status: 2505, exception_status: [], progress: 10 },
+      machine_status: { status: 2, sub_status: 2505, exception_status: [], progress: 10 },
     });
     expect(queryObjects(s, { print_stats: null }).print_stats.state).toBe('paused');
   });

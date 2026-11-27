@@ -29,6 +29,7 @@
 import type { CommandSender } from '../ws-client';
 import type { PowerLossState } from '../types';
 import { escapeHtml } from './helpers';
+import { confirmDialog } from './confirm-dialog';
 
 /**
  * Only prompt once per recovery. Without this, the dialog would be rebuilt on every
@@ -100,10 +101,16 @@ function showPowerLossDialog(filename: string | undefined, client: CommandSender
     client.sendCommand(1023, {});
   });
 
-  overlay.querySelector('#power-loss-cancel')?.addEventListener('click', () => {
+  overlay.querySelector('#power-loss-cancel')?.addEventListener('click', async () => {
     // Confirmed separately: this abandons a job that may be most of the way done, and
     // the printer cannot be asked to undo it.
-    if (!confirm('Cancel the interrupted print?\n\nThis cannot be undone.')) return;
+    const ok = await confirmDialog('Cancel the interrupted print?\n\nThis cannot be undone.', {
+      title: 'Cancel interrupted print',
+      confirmLabel: 'Cancel print',
+      cancelLabel: 'Keep print',
+      danger: true,
+    });
+    if (!ok) return;
     close();
     client.sendCommand(1022, {});
   });

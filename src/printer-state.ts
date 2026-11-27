@@ -27,22 +27,32 @@ function deepMerge(
   return result;
 }
 
-/** Map CC2 task status to human-readable string */
-function mapTaskStatus(status: number | string | undefined): string {
+/**
+ * Map a 1036 history entry's `task_status` to the status the history card shows.
+ *
+ * The codes are the vendor web app's, the only renderer of this field we have: its
+ * history table labels them `0 Other, 1 Complete, 2 Cancel, 3 Cancel, 4 Printing,
+ * 5 Pause` (data/raw/index-unminified.html, around line 104898). The firmware sources in
+ * data/CentauriCarbon2 do not encode it, and CC2_PROTOCOL_REFERENCE.md §1036 shows only
+ * `"task_status": 1`. This used to read 1 as printing and 2 as completed, so every
+ * finished print showed as ❓ printing and every cancelled one as completed (ELEG-162).
+ *
+ * There is no "failed" code: the vendor app files a failed print under Cancel too.
+ */
+export function mapTaskStatus(status: number | string | undefined): string {
   if (typeof status === 'string') return status;
   switch (status) {
-    case 0:
-      return 'unknown';
     case 1:
-      return 'printing';
-    case 2:
       return 'completed';
+    case 2:
     case 3:
-      return 'failed';
-    case 4:
       return 'stopped';
+    case 4:
+      return 'printing';
+    case 5:
+      return 'paused';
     default:
-      return 'unknown';
+      return 'unknown'; // 0 ("Other") and anything new
   }
 }
 
@@ -84,7 +94,8 @@ export class PrinterState {
     meters: number;
   }> = [];
   timelapseList: Record<string, unknown>[] = [];
-  videoUrl: string | null = null;
+  /** URL of the last exported timelapse video (method 1051's reply). Not a camera URL. */
+  timelapseUrl: string | null = null;
   /** Toolhead zone state (from server) */
   zones: ZoneState = { current: 'outside', previous: 'outside', enteredAt: 0, history: [] };
   /** Print history from method 1036 */
@@ -289,23 +300,14 @@ export class PrinterState {
         }
         break;
       }
-      case 1050: {
-        // GET_VIDEO_URL
-        const errorCode = result.error_code as number | undefined;
-        const url = result.url as string | undefined;
-        if (errorCode === 0 && url) {
-          this.videoUrl = url;
-          this.notify();
-        }
-        break;
-      }
+      // No 1050 case: 1050 is GET_TOKEN in the firmware enum, not a video URL (ELEG-186).
       case 1051: {
-        // EXPORT_TIMELAPSE
+        // EXPORT_TIMELAPSE_VIDEO
         const errorCode = result.error_code as number | undefined;
         const url = result.url as string | undefined;
         if (errorCode === 0) {
           if (url) {
-            this.videoUrl = url;
+            this.timelapseUrl = url;
           }
           this.notify();
         }

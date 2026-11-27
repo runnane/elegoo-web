@@ -261,10 +261,14 @@ motors into whatever is on the bed, or abort a job that has been running for hou
 Verifying one of those is operator work: give the exact command, ask for the output,
 interpret it. See [`AGENTS.md`](../AGENTS.md).
 
-## `pnpm dev` on this host collides with production — three ways
+## `pnpm dev` on the production host collides with production — three ways
 
-Production runs on this same machine (see [deployment.md](deployment.md)), and it holds
-**both** service ports:
+**This section applies only on the production host** — the machine where
+`/opt/elegooweb` exists (see [deployment.md](deployment.md) for the two-command check).
+Elsewhere the ports are free and there is no second MQTT client, but the Telegram
+collision below still applies wherever your `.env` holds the production bot token.
+
+On the production host, production holds **both** service ports:
 
 ```
 LISTEN 0.0.0.0:8088      docker-proxy        (SERVICE_PORT, published by the elegoo-web container)
@@ -314,6 +318,59 @@ safest way to work here.
 '^access-control-allow-origin'` printing nothing means "header absent" *or* "server never
 came up", and those look identical. Print the status line too — a check that passes
 because nothing answered is worse than no check.
+
+## Rendering the gcode preview for real (ELEG-120)
+
+No gate draws `src/ui/gcode-preview.ts`, and a gcode-preview / three bump has changed
+both its API and its layer indexing without one test noticing. The recipe ELEG-120 used,
+with nothing of it committed:
+
+- **A throwaway vite page** in an untracked directory of the checkout, importing
+  `../src/ui/gcode-preview` and exposing `loadGcode` / `renderGcodePreview` on `window`,
+  with the four element ids the module looks up (`gcode-preview-canvas` with a real CSS
+  size — `resize()` divides by `offsetHeight` — `-status`, `-info`, `gcode-layer-slider`).
+  Its own vite config with **no proxy at all** and a non-default port, so nothing can
+  reach the service.
+- **`playwright-core` installed in a temp directory**, not in `package.json`, at the
+  version whose Chromium is already in `~/.cache/ms-playwright`. Launch with
+  `--use-angle=swiftshader --enable-unsafe-swiftshader` for WebGL. `page.route` answers
+  `/api/files/download` with a **generated** fixture and aborts every other request.
+- **What to check**: the status line reads `N layers · …` (a WebGL failure is swallowed
+  into `Error: …`); extrusion-coloured pixel counts against a travel-only control file
+  (the build-volume grid alone is "not blank"); rAF requests and `gl.clear` calls during
+  an idle second after load (0 — 60 means the animate-loop workaround missed); and a
+  follow-mode `renderGcodePreview` call showing the expected single layer, for a file
+  with and without slicer `;LAYER_CHANGE` comments. Use `page.screenshot`, not
+  `toDataURL` — `preserveDrawingBuffer` is off. Run it on `main` and on the branch.
+
+## Measuring layout against production's real content (ELEG-164)
+
+Layout bugs here are driven by *content*: ELEG-164's 1556px phone column came from the
+MQTT log's live rows, which an isolated service with no printer never renders. jsdom
+has no layout engine. So measure in a real engine, against production's DOM, without
+deploying anything:
+
+- **The engine.** Playwright's cached `chrome-headless-shell` is on the workstation even
+  where no `chromium` is on `PATH`
+  (`~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/`).
+  Start it with `--remote-debugging-port` and drive it over CDP from a throwaway Node
+  script: Node 22 has `fetch` and `WebSocket` built in, so nothing is installed.
+- **Read-only first.** Register a guard with `Page.addScriptToEvaluateOnNewDocument`
+  *before* navigating. It wraps `WebSocket.prototype.send`, `fetch` and `XMLHttpRequest`,
+  drops every non-GET request and every `{type:'command'}` frame whose method is not a
+  known read, and records what it dropped. The page's own connect-time reads
+  (1002/1044/1048/2006) are reads; anything the guard records is a finding.
+- **Test the build, not a snippet.** Run `pnpm build`, then in the page remove every
+  `link[rel=stylesheet]` and `<style>` and inject `dist/assets/index-*.css`. That is
+  exactly the new CSS on production's markup, which is valid as long as the change
+  touches no markup.
+- **Measure, don't eyeball.** `Emulation.setDeviceMetricsOverride` at 360/390/768/1440,
+  then count elements under `#dashboard` whose `getBoundingClientRect().right` exceeds
+  `innerWidth` (`getBoundingClientRect` ignores clipping, so clipped-off content counts),
+  and read `getComputedStyle(#dashboard-main).gridTemplateColumns`. Measure before and
+  after in the same run. `Page.captureScreenshot` gives the picture for the issue.
+
+Keep the script out of the tree, in the job's tmp directory.
 
 ## What nothing checks — say so instead of implying otherwise
 

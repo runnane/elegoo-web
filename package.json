@@ -1,11 +1,11 @@
 {
   "name": "elegoo-web",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.28.5",
+  "packageManager": "pnpm@12.22.0",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.22.2"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec biome check --staged --write --no-errors-on-unmatched"
@@ -40,36 +40,36 @@
     "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1 && simple-git-hooks >/dev/null 2>&1 || true"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
+    "@biomejs/biome": "^2.6.4",
     "@release-it/conventional-changelog": "^12.0.2",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^22.20.5",
     "@types/pdfkit": "^0.17.6",
-    "@types/three": "0.178.1",
+    "@types/three": "0.185.4",
     "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "^5.0.4",
     "concurrently": "^10.0.6",
-    "jsdom": "^30.1.3",
-    "knip": "^6.41.0",
+    "jsdom": "^31.0.1",
+    "knip": "^6.44.1",
     "release-it": "^21.1.1",
     "simple-git-hooks": "^2.14.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4",
+    "vite": "^8.3.8",
     "vitest": "^5.0.4"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "dotenv": "^18.0.8",
-    "gcode-preview": "3.0.0-alpha.4",
+    "gcode-preview": "3.0.0-alpha.7",
     "grammy": "^1.46.0",
     "mqtt": "^5.16.0",
     "pdfkit": "^0.20.2",
     "sharp": "^0.35.4",
-    "three": "0.178.0",
+    "three": "0.185.1",
     "tsx": "^4.23.15",
     "winston": "^3.19.0",
-    "ws": "^8.22.0",
+    "ws": "^8.23.0",
     "zod": "^4.6.7"
   }
 }

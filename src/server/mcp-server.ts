@@ -44,15 +44,23 @@
  *   emergency_stop        — Emergency stop
  *   enable_video_stream   — Enable camera MJPEG stream
  *   send_command          — Raw MQTT command (advanced)
+ *
+ * Write auth (ELEG-141): every tool from set_temperature down is registered through
+ * `writeTool()` and needs SERVICE_API_KEY when one is configured. The read tools, the
+ * resources, initialize and tools/list stay open. The key is checked on EVERY HTTP
+ * request in `handleMcpRequest`, never once per session — see `WRITE_SCOPE`.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import { STATUS_NAMES, SUB_STATUS_NAMES, SPEED_MODE_NAMES, EXCEPTION_NAMES } from '../types.js';
 import { getLogger } from './logger.js';
+import { authorize, extractKey, guardHttp, UNAUTHORIZED_MESSAGE } from './write-auth.js';
+import { printBusyRefusal } from './print-guard.js';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
@@ -63,6 +71,24 @@ const txt = (text: string) => ({ content: [{ type: 'text' as const, text }] });
 const err = (text: string) => ({ content: [{ type: 'text' as const, text }], isError: true });
 const json = (obj: unknown) => txt(JSON.stringify(obj, null, 2));
 const needConn = (bridge: MqttBridge) => (bridge.isConnected ? null : err('Printer not connected'));
+
+/**
+ * The scope `handleMcpRequest` grants a request that may write: the right key, or no key
+ * configured at all. The SDK hands the request's `req.auth` to the tool handler as
+ * `extra.authInfo`, **per request** — so a session opened with the key grants nothing to a
+ * later request on the same session id that does not carry it.
+ */
+const WRITE_SCOPE = 'printer:write';
+
+/** The tool error a gated tool returns without the key. Names the key; never contains it. */
+const mcpWriteRefusal = (tool: string) =>
+  err(`"${tool}" needs SERVICE_API_KEY. ${UNAUTHORIZED_MESSAGE}`);
+
+/** True when the request this tool call arrived on was granted the write scope. */
+function canWrite(extra: unknown): boolean {
+  const auth = (extra as { authInfo?: AuthInfo } | undefined)?.authInfo;
+  return !!auth?.scopes.includes(WRITE_SCOPE);
+}
 
 function buildStatusText(store: StateStore): string {
   const s = store.status;
@@ -105,6 +131,30 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     { name: 'elegoo-cc2', version: '2.0.0' },
     { capabilities: { resources: {}, tools: {} } },
   );
+
+  /**
+   * `registerTool` for anything that changes the machine. The gate runs before the
+   * handler — before `needConn`, before any `bridge` call — so a refused call has no
+   * effect at all. The SDK passes `extra` as the LAST argument: `(args, extra)` for a tool
+   * with an `inputSchema`, `(extra)` for one without, which is why it is read from the end.
+   */
+  const writeTool: McpServer['registerTool'] = (name, config, cb) => {
+    const gated = (async (...a: unknown[]) => {
+      if (!canWrite(a[a.length - 1])) return mcpWriteRefusal(name);
+      return (cb as (...b: unknown[]) => unknown)(...a);
+    }) as typeof cb;
+    return mcp.registerTool(name, config, gated);
+  };
+
+  /**
+   * The print guard (ELEG-176), as a tool error: `null` when the command may be sent. Every
+   * tool that can move the head, drop a heater or change filament asks this before it
+   * sends, so it never answers success for a command the guard would have dropped.
+   */
+  const refuseWhilePrinting = (tool: string, method: number, params: unknown) => {
+    const refusal = printBusyRefusal(method, params, store.status);
+    return refusal ? err(`"${tool}" refused: ${refusal}`) : null;
+  };
 
   // ── Resources ──────────────────────────────────────────────
 
@@ -342,9 +392,9 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     return store.canvas ? json(store.canvas) : txt('No Canvas data');
   });
 
-  // ── Control tools ──────────────────────────────────────────
+  // ── Control tools — every one through writeTool() (ELEG-141) ─
 
-  mcp.registerTool(
+  writeTool(
     'set_temperature',
     {
       description: 'Set nozzle and/or bed temperature',
@@ -366,12 +416,15 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
         p.heater_bed = args.bed;
       }
       if (!Object.keys(p).length) return err('Specify nozzle and/or bed');
+      // One frame carries both targets, so a mixed request is all or nothing.
+      const busy = refuseWhilePrinting('set_temperature', 1028, p);
+      if (busy) return busy;
       bridge.sendCommand(1028, p);
       return txt(`Temperature set: ${JSON.stringify(p)}`);
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'fan',
     {
       description: 'Set fan speed',
@@ -391,7 +444,7 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'speed_mode',
     {
       description: 'Set print speed mode',
@@ -408,7 +461,7 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'led',
     {
       description: 'Toggle LED light',
@@ -422,7 +475,7 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'home',
     {
       description: 'Home printer axes',
@@ -433,12 +486,15 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async (args) => {
       const c = needConn(bridge);
       if (c) return c;
-      bridge.sendCommand(1026, { homed_axes: args.axes ?? 'xyz' });
+      const p = { homed_axes: args.axes ?? 'xyz' };
+      const busy = refuseWhilePrinting('home', 1026, p);
+      if (busy) return busy;
+      bridge.sendCommand(1026, p);
       return txt(`Homing ${args.axes ?? 'xyz'}`);
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'move',
     {
       description: 'Jog a single axis',
@@ -450,12 +506,15 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async (args) => {
       const c = needConn(bridge);
       if (c) return c;
-      bridge.sendCommand(1027, { axes: args.axis, distance: args.distance });
+      const p = { axes: args.axis, distance: args.distance };
+      const busy = refuseWhilePrinting('move', 1027, p);
+      if (busy) return busy;
+      bridge.sendCommand(1027, p);
       return txt(`Moving ${args.axis} ${args.distance}mm`);
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'start_print',
     {
       description: 'Start printing a file',
@@ -472,28 +531,28 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool('pause_print', { description: 'Pause current print' }, async () => {
+  writeTool('pause_print', { description: 'Pause current print' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
     bridge.sendCommand(1021, {});
     return txt('Paused');
   });
 
-  mcp.registerTool('resume_print', { description: 'Resume paused print' }, async () => {
+  writeTool('resume_print', { description: 'Resume paused print' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
     bridge.sendCommand(1023, {});
     return txt('Resumed');
   });
 
-  mcp.registerTool('stop_print', { description: 'Stop/cancel current print' }, async () => {
+  writeTool('stop_print', { description: 'Stop/cancel current print' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
     bridge.sendCommand(1022, {});
     return txt('Stopped');
   });
 
-  mcp.registerTool(
+  writeTool(
     'emergency_stop',
     { description: 'Emergency stop — immediately halts printer' },
     async () => {
@@ -504,32 +563,34 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool('auto_level', { description: 'Start auto bed leveling' }, async () => {
+  writeTool('auto_level', { description: 'Start auto bed leveling' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
+    const busy = refuseWhilePrinting('auto_level', 1032, {});
+    if (busy) return busy;
     bridge.sendCommand(1032, {});
     return txt('Auto-leveling started');
   });
 
-  mcp.registerTool('pid_calibrate', { description: 'Start PID auto-tune' }, async () => {
+  writeTool('pid_calibrate', { description: 'Start PID auto-tune' }, async () => {
     const c = needConn(bridge);
     if (c) return c;
+    const busy = refuseWhilePrinting('pid_calibrate', 1034, {});
+    if (busy) return busy;
     bridge.sendCommand(1034, {});
     return txt('PID calibration started');
   });
 
-  mcp.registerTool(
-    'vibration_calibrate',
-    { description: 'Start resonance optimization' },
-    async () => {
-      const c = needConn(bridge);
-      if (c) return c;
-      bridge.sendCommand(1033, {});
-      return txt('Vibration calibration started');
-    },
-  );
+  writeTool('vibration_calibrate', { description: 'Start resonance optimization' }, async () => {
+    const c = needConn(bridge);
+    if (c) return c;
+    const busy = refuseWhilePrinting('vibration_calibrate', 1033, {});
+    if (busy) return busy;
+    bridge.sendCommand(1033, {});
+    return txt('Vibration calibration started');
+  });
 
-  mcp.registerTool(
+  writeTool(
     'self_check',
     {
       description: 'Run combined self-test',
@@ -542,16 +603,19 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     async (args) => {
       const c = needConn(bridge);
       if (c) return c;
-      bridge.sendCommand(1035, {
+      const p = {
         ringing_optimize: args.ringing ?? true,
         pid_check: args.pid ?? true,
         auto_bed_leveling: args.leveling ?? true,
-      });
+      };
+      const busy = refuseWhilePrinting('self_check', 1035, p);
+      if (busy) return busy;
+      bridge.sendCommand(1035, p);
       return txt('Self-check started');
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'delete_file',
     {
       description: 'Delete a file from printer storage',
@@ -568,29 +632,29 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool(
-    'load_filament',
-    { description: 'Feed/load filament into extruder' },
-    async () => {
-      const c = needConn(bridge);
-      if (c) return c;
-      bridge.sendCommand(1024, {});
-      return txt('Loading filament');
-    },
-  );
+  writeTool('load_filament', { description: 'Feed/load filament into extruder' }, async () => {
+    const c = needConn(bridge);
+    if (c) return c;
+    const busy = refuseWhilePrinting('load_filament', 1024, {});
+    if (busy) return busy;
+    bridge.sendCommand(1024, {});
+    return txt('Loading filament');
+  });
 
-  mcp.registerTool(
+  writeTool(
     'unload_filament',
     { description: 'Retract/unload filament from extruder' },
     async () => {
       const c = needConn(bridge);
       if (c) return c;
+      const busy = refuseWhilePrinting('unload_filament', 1025, {});
+      if (busy) return busy;
       bridge.sendCommand(1025, {});
       return txt('Unloading filament');
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'set_auto_refill',
     {
       description: 'Enable/disable Canvas auto-refill',
@@ -604,7 +668,7 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool(
+  writeTool(
     'enable_video_stream',
     {
       description: 'Enable camera MJPEG stream via SDCP',
@@ -626,7 +690,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
     },
   );
 
-  mcp.registerTool(
+  // Always gated: it sends any method number, reads and writes alike.
+  writeTool(
     'send_command',
     {
       description: 'Send raw MQTT command (advanced)',
@@ -644,6 +709,8 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
       } catch {
         return err('Invalid JSON');
       }
+      const busy = refuseWhilePrinting('send_command', args.method, p);
+      if (busy) return busy;
       bridge.sendCommand(args.method, p);
       return txt(`Sent method=${args.method} params=${JSON.stringify(p)}`);
     },
@@ -656,12 +723,32 @@ export function createMcpServer(store: StateStore, bridge: MqttBridge): McpServe
 /** Manage per-session transports and handle /mcp requests */
 const sessions = new Map<string, StreamableHTTPServerTransport>();
 
+/**
+ * `serviceApiKey` is read on every call (the caller passes `config.serviceApiKey`), and the
+ * key is checked on every request — initialize, a reused session, GET and DELETE alike:
+ *
+ *   - a presented but wrong key → HTTP 401, here, before the transport sees the request;
+ *   - the right key, or no key configured → `req.auth` carries `WRITE_SCOPE`, which the
+ *     SDK passes to this request's tool calls as `extra.authInfo`;
+ *   - no key presented → no scope: reads and tools/list work, `writeTool()`s refuse.
+ *
+ * `req.auth` holds a constant token, never the presented key.
+ */
 export async function handleMcpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   store: StateStore,
   bridge: MqttBridge,
+  serviceApiKey: string,
 ): Promise<void> {
+  if (!guardHttp(req, res, serviceApiKey, false)) return;
+  const scopes = authorize(serviceApiKey, extractKey(req), true) === 'ok' ? [WRITE_SCOPE] : [];
+  (req as IncomingMessage & { auth?: AuthInfo }).auth = {
+    token: 'service-api-key',
+    clientId: 'elegoo-web',
+    scopes,
+  };
+
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   if (req.method === 'GET' || req.method === 'DELETE') {

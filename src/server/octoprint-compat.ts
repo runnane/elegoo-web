@@ -14,9 +14,22 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
-import type { FanInfo } from '../types.js';
+import { type FanInfo, isPaused } from '../types.js';
 import { getLogger } from './logger.js';
-import { octoprintApiSettings, octoprintLoginPayload } from './compat-auth.js';
+import {
+  type OctoPrintAccess,
+  octoprintApiSettings,
+  octoprintCurrentUser,
+  octoprintLoginPayload,
+} from './compat-auth.js';
+import { authorize, extractKey } from './write-auth.js';
+import { printBusyRefusal, printBusyRefusalAll } from './print-guard.js';
+import {
+  homeCommand,
+  moveCommands,
+  type PrinterCommand,
+  temperatureCommand,
+} from './printer-commands.js';
 
 const _log = getLogger('OctoPrint');
 
@@ -53,14 +66,14 @@ export function getOctoPrintState(store: StateStore) {
   const ms = store.status?.machine_status;
   const machineStatus = ms?.status ?? 0;
   const isPrinting = machineStatus === 2;
-  const isPaused = machineStatus === 3 || ms?.sub_status === 2502 || ms?.sub_status === 2505;
+  const paused = isPaused(machineStatus, ms?.sub_status);
   const isIdle = machineStatus === 1;
   const isError = (ms?.exception_status?.length ?? 0) > 0;
 
   let text = 'Offline';
   if (store.status) {
     if (isError) text = 'Error';
-    else if (isPaused) text = 'Paused';
+    else if (paused) text = 'Paused';
     else if (isPrinting) text = 'Printing';
     else if (isIdle) text = 'Operational';
     else text = 'Operational';
@@ -70,8 +83,8 @@ export function getOctoPrintState(store: StateStore) {
     text,
     flags: {
       operational: !!store.status,
-      paused: isPaused,
-      printing: isPrinting && !isPaused,
+      paused,
+      printing: isPrinting && !paused,
       pausing: ms?.sub_status === 2501,
       cancelling: ms?.sub_status === 2503,
       sdReady: true,
@@ -104,6 +117,35 @@ export function getTemperatureData(store: StateStore) {
   };
 }
 
+/**
+ * Methods the OctoPrint layer treats as reads. **Everything else is a write and needs
+ * `SERVICE_API_KEY`** when it is set (ELEG-143) — default-deny by method, so a POST route
+ * added later is gated without anyone remembering to gate it.
+ */
+const READ_METHODS = new Set(['GET', 'HEAD']);
+
+/**
+ * The one non-GET request that is open: `POST /api/login`, a stub that changes nothing.
+ * OctoPrint's API docs exempt Login from the 403 that a missing key gets elsewhere, and a
+ * passive login returns "the current user", so a keyless caller gets a guest record here
+ * rather than a refusal (the ELEG-25 plan's open row). A **wrong** key is still a 403.
+ */
+const OPEN_NON_READS = new Set(['POST /api/login']);
+
+/** The refusal. OctoPrint answers a missing or wrong API key with 403, not 401. */
+function forbidden(res: ServerResponse, verdict: 'missing' | 'invalid'): void {
+  json(
+    res,
+    {
+      error: verdict === 'invalid' ? 'Invalid API key' : 'API key required',
+      message:
+        'This action needs the service API key. Enter SERVICE_API_KEY as the API key ' +
+        'in your OctoPrint host settings (sent as "X-Api-Key: <key>" or "Authorization: Bearer <key>").',
+    },
+    403,
+  );
+}
+
 export function createOctoPrintRouter(
   store: StateStore,
   bridge: MqttBridge,
@@ -119,6 +161,45 @@ export function createOctoPrintRouter(
     const [urlPath, _query] = fullUrl.split('?');
     // Strip the /octoprint prefix to get the OctoPrint-style path
     const path = urlPath.replace(/^\/octoprint/, '');
+
+    // --- The write gate (ELEG-143) ---
+    // Inside the router, before any route, so it covers BOTH mounts: /octoprint/* on the
+    // main port and :7125/api/* (moonraker-server.ts prepends /octoprint). A wrong key is
+    // refused on any route, reads included, so a slicer's "Test connection" is truthful.
+    // The key is read per request: `serviceApiKey` is '' when unset (writes open).
+    const expected = config.serviceApiKey;
+    const presented = extractKey(req);
+    const isWrite = !READ_METHODS.has(method) && !OPEN_NON_READS.has(`${method} ${path}`);
+    const verdict = authorize(expected, presented, isWrite);
+    if (verdict !== 'ok') {
+      forbidden(res, verdict);
+      return true;
+    }
+    const access: OctoPrintAccess = !expected ? 'open' : presented !== null ? 'apikey' : 'guest';
+
+    /**
+     * Send one command unless the print guard (ELEG-176) refuses it, in which case answer
+     * 409 — what OctoPrint itself answers for a jog while printing. True when it was sent.
+     */
+    const sendUnlessBusy = (m: number, params: Record<string, unknown>): boolean => {
+      const busy = printBusyRefusal(m, params, store.status);
+      if (busy) {
+        json(res, { error: busy }, 409);
+        return false;
+      }
+      bridge.sendCommand(m, params);
+      return true;
+    };
+    /** The compound form: if any command is refused, none is sent. */
+    const sendAllUnlessBusy = (sends: PrinterCommand[]): boolean => {
+      const busy = printBusyRefusalAll(sends, store.status);
+      if (busy) {
+        json(res, { error: busy }, 409);
+        return false;
+      }
+      for (const [m, params] of sends) bridge.sendCommand(m, params);
+      return true;
+    };
 
     // --- GET /api/version ---
     if (path === '/api/version' && method === 'GET') {
@@ -188,10 +269,12 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'target' && cmd.targets?.tool0 != null) {
-            bridge.sendCommand(1028, {
-              target: 'extruder',
-              temperature: cmd.targets.tool0,
-            });
+            const send = temperatureCommand('extruder', cmd.targets.tool0);
+            if (!send) {
+              json(res, { error: 'targets.tool0 must be a number' }, 400);
+              return;
+            }
+            if (!sendUnlessBusy(...send)) return;
           }
           noContent(res);
         })
@@ -218,10 +301,12 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'target' && cmd.target != null) {
-            bridge.sendCommand(1028, {
-              target: 'heater_bed',
-              temperature: cmd.target,
-            });
+            const send = temperatureCommand('heater_bed', cmd.target);
+            if (!send) {
+              json(res, { error: 'target must be a number' }, 400);
+              return;
+            }
+            if (!sendUnlessBusy(...send)) return;
           }
           noContent(res);
         })
@@ -248,18 +333,24 @@ export function createOctoPrintRouter(
         .then((body) => {
           const cmd = JSON.parse(body);
           if (cmd.command === 'jog') {
-            const axes: Record<string, number> = {};
-            if (cmd.x != null) axes.x = cmd.x;
-            if (cmd.y != null) axes.y = cmd.y;
-            if (cmd.z != null) axes.z = cmd.z;
-            bridge.sendCommand(1027, {
-              direction: 'relative',
-              ...axes,
-              speed: cmd.speed ?? 3000,
-            });
+            // OctoPrint's `absolute: true` makes x/y/z coordinates, not distances. The
+            // printer's move is relative only, so sending them as distances would move the
+            // head somewhere nobody asked for: refuse instead.
+            if (cmd.absolute === true) {
+              json(res, { error: 'Absolute jog is not supported; send relative distances' }, 400);
+              return;
+            }
+            // One 1027 per non-zero axis (ELEG-180), decided as a whole by the print guard
+            // before any is sent. `speed` has no field in the printer's move and is dropped.
+            const sends = moveCommands({ x: cmd.x, y: cmd.y, z: cmd.z });
+            if (!sendAllUnlessBusy(sends)) return;
           } else if (cmd.command === 'home') {
-            const homeAxes = cmd.axes?.length ? cmd.axes : ['x', 'y', 'z'];
-            bridge.sendCommand(1026, { axes: homeAxes });
+            const send = homeCommand(Array.isArray(cmd.axes) ? cmd.axes : undefined);
+            if (!send) {
+              json(res, { error: 'axes must name x, y and/or z' }, 400);
+              return;
+            }
+            if (!sendUnlessBusy(...send)) return;
           }
           noContent(res);
         })
@@ -272,7 +363,7 @@ export function createOctoPrintRouter(
       const s = store.status;
       const ps = s?.print_status;
       const ms = s?.machine_status;
-      const isPrinting = ms?.status === 2 || ms?.status === 3;
+      const isPrinting = ms?.status === 2;
       json(res, {
         job: {
           file: {
@@ -321,8 +412,8 @@ export function createOctoPrintRouter(
               break;
             case 'pause':
               if (cmd.action === 'toggle') {
-                const isPaused = store.status?.machine_status?.status === 3;
-                bridge.sendCommand(isPaused ? 1023 : 1021, {});
+                const ms = store.status?.machine_status;
+                bridge.sendCommand(isPaused(ms?.status, ms?.sub_status) ? 1023 : 1021, {});
               } else if (cmd.action === 'resume') {
                 bridge.sendCommand(1023, {});
               } else {
@@ -364,7 +455,7 @@ export function createOctoPrintRouter(
     // --- GET /api/settings (minimal stub) ---
     if (path === '/api/settings' && method === 'GET') {
       json(res, {
-        api: octoprintApiSettings(),
+        api: octoprintApiSettings(!!expected),
         feature: {
           sdSupport: true,
           temperatureGraph: true,
@@ -425,21 +516,16 @@ export function createOctoPrintRouter(
       return true;
     }
 
-    // --- GET /api/login (stub, always "logged in") ---
+    // --- POST /api/login (stub) ---
+    // Open (OPEN_NON_READS): a keyless caller is answered as the guest it is.
     if (path === '/api/login' && method === 'POST') {
-      json(res, octoprintLoginPayload());
+      json(res, octoprintLoginPayload(access));
       return true;
     }
 
     // --- GET /api/currentuser ---
     if (path === '/api/currentuser' && method === 'GET') {
-      json(res, {
-        name: 'elegoo',
-        admin: true,
-        groups: ['admins', 'users'],
-        permissions: [],
-        roles: ['admin', 'user'],
-      });
+      json(res, octoprintCurrentUser(access));
       return true;
     }
 

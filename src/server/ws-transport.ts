@@ -10,22 +10,47 @@
  *   { type: "raw", direction, topic, data } // MQTT raw log entry
  *   { type: "connection", connected }       // printer connection state
  *   { type: "service_status", ... }         // periodic service health
+ *   { type: "auth_result", ok }             // answer to an auth frame (or upgrade header)
+ *   { type: "command_refused", method, code, reason } // never forwarded; code is
+ *                                           // 'auth' (needs the key) or 'busy' (ELEG-176)
  *
  * Client → Server:
+ *   { type: "auth", key }                   // authorise this connection (ELEG-140)
  *   { type: "command", method, params }     // forwarded to printer api_request
+ *
+ * Write auth (ELEG-140). Connecting, `init` and every broadcast are open: the stream is a
+ * read and carries what `/api/status` already serves. A `command` frame is classified by
+ * `method-policy.ts` (default-deny); with `SERVICE_API_KEY` set, a non-read is forwarded
+ * only on a connection that presented the key — by an `auth` frame (browsers cannot set
+ * WebSocket headers, and a `?key=` would land in proxy logs) or by `Authorization:
+ * Bearer` / `X-Api-Key` on the upgrade request. With the key unset, every frame is
+ * forwarded as before. The key is never logged or echoed.
+ *
+ * Print guard (ELEG-176). A command that passes auth is then checked against
+ * `print-guard.ts`: while a job is active, motion, homing, heater-off and filament changes
+ * are refused with `code: 'busy'` and the guard's message as `reason`.
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'http';
+import type { IncomingMessage, Server } from 'http';
 import type { StateStore, EventLogEntry } from './state-store.js';
 import { getCameraHealth } from './rest-api.js';
+import { printerCameraReport } from './camera-health.js';
+import type { CameraHealth, CameraState } from '../types.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { TelegramIntegration } from './telegram.js';
 import type { AIMonitor } from './ai-monitor.js';
+import type { ServiceConfig } from './config.js';
 import { getLogger } from './logger.js';
 import { getBuildInfo } from './build-info.js';
+import { authorize, checkKey, extractKey } from './write-auth.js';
+import { isReadMethod } from './method-policy.js';
+import { printBusyRefusal } from './print-guard.js';
 
 const log = getLogger('WS');
+
+/** Per-connection auth: the key this connection proved, or null. Never sent anywhere. */
+const verifiedKeys = new WeakMap<WebSocket, string>();
 
 export interface ServiceStatusProvider {
   telegram: TelegramIntegration | null;
@@ -42,14 +67,23 @@ export class WebSocketTransport {
     server: Server,
     private store: StateStore,
     private bridge: MqttBridge,
+    /**
+     * Read per frame, never cached: `serviceApiKey` is `''` when unset. `cameraEnabled`
+     * feeds the camera's `disabled` state in `service_status`.
+     */
+    private config: Pick<ServiceConfig, 'serviceApiKey' | 'cameraEnabled'>,
   ) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
 
-    this.wss.on('connection', (ws) => {
+    this.wss.on('connection', (ws, req: IncomingMessage) => {
       log.info(`Client connected (total: ${this.wss.clients.size})`);
 
       // Send current state snapshot on connect
       this.sendInit(ws);
+
+      // A non-browser client may present the key on the upgrade request instead.
+      const presented = extractKey(req);
+      if (presented !== null) this.authenticate(ws, presented);
 
       ws.on('message', (raw) => {
         this.handleClientMessage(ws, raw.toString());
@@ -167,16 +201,22 @@ export class WebSocketTransport {
           ? 'running'
           : 'stopped'
         : 'disabled',
-      ai: this.services.aiMonitor
-        ? this.services.aiMonitor.monitoring
-          ? 'monitoring'
-          : this.services.aiMonitor.isRunning
-            ? 'idle'
-            : 'stopped'
-        : 'disabled',
+      // `degraded` (ELEG-168): monitoring a print but not getting frames. The panel's
+      // config summary carries the reason and timestamps under `aiConfig.health`.
+      ai: this.services.aiMonitor ? this.services.aiMonitor.statusValue : 'disabled',
       aiConfig: this.services.aiMonitor?.getConfigSummary() ?? null,
-      camera: getCameraHealth(),
+      // `camera` stays a string so the panel's ok/err check is a lookup; `cameraHealth`
+      // carries the reason and timestamps (ELEG-178). See `CameraState` in src/types.ts.
+      ...this.cameraStatus(),
     };
+  }
+
+  private cameraStatus(): { camera: CameraState; cameraHealth: CameraHealth } {
+    const health = getCameraHealth({
+      enabled: this.config.cameraEnabled,
+      printerReportsCamera: printerCameraReport(this.bridge.isConnected, this.store.status),
+    });
+    return { camera: health.state, cameraHealth: health };
   }
 
   private sendInit(ws: WebSocket): void {
@@ -193,7 +233,9 @@ export class WebSocketTransport {
       thumbnailFailed: this.store.thumbnailFailed,
       fileTotalLayers: this.store.fileTotalLayers,
       timelapseList: this.store.timelapseList,
-      videoUrl: this.store.videoUrl,
+      // Was `videoUrl` until ELEG-186. It is the 1051 timelapse export URL, never a camera
+      // URL; the SPA does not read this field today.
+      timelapseUrl: this.store.timelapseUrl,
       zones: this.store.zones,
       layerTimes: this.store.layerTimes,
       filamentUsage: this.store.getFilamentUsageArray(),
@@ -205,7 +247,22 @@ export class WebSocketTransport {
     ws.send(JSON.stringify(msg));
   }
 
-  private handleClientMessage(_ws: WebSocket, raw: string): void {
+  /**
+   * Check a presented key and record the outcome on the connection. A wrong or empty key
+   * leaves (or makes) the connection unauthorised — it can still read, and its writes are
+   * refused. Replies `{type:'auth_result', ok}`; never echoes the key.
+   */
+  private authenticate(ws: WebSocket, presented: unknown): void {
+    const expected = this.config.serviceApiKey;
+    const key = typeof presented === 'string' ? presented : null;
+    // Unset: nothing to prove, everything is forwarded anyway.
+    const ok = !expected || (key !== null && checkKey(key, expected));
+    if (expected && ok && key !== null) verifiedKeys.set(ws, key);
+    else verifiedKeys.delete(ws);
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'auth_result', ok }));
+  }
+
+  private handleClientMessage(ws: WebSocket, raw: string): void {
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(raw);
@@ -213,10 +270,39 @@ export class WebSocketTransport {
       return;
     }
 
+    if (msg.type === 'auth') {
+      this.authenticate(ws, msg.key);
+      return;
+    }
+
     if (msg.type === 'command') {
       const method = msg.method as number;
       const params = (msg.params as Record<string, unknown>) ?? {};
       if (typeof method === 'number') {
+        // The verified key (or none) goes through the same decision as every HTTP
+        // surface; re-checked per frame, so it follows the configured key.
+        const verdict = authorize(
+          this.config.serviceApiKey,
+          verifiedKeys.get(ws) ?? null,
+          !isReadMethod(method),
+        );
+        if (verdict !== 'ok') {
+          ws.send(
+            JSON.stringify({
+              type: 'command_refused',
+              method,
+              code: 'auth',
+              reason: verdict === 'invalid' ? 'Invalid API key' : 'API key required',
+            }),
+          );
+          return;
+        }
+        // The print guard (ELEG-176): motion, heater-off and filament changes mid-print.
+        const busy = printBusyRefusal(method, params, this.store.status);
+        if (busy !== null) {
+          ws.send(JSON.stringify({ type: 'command_refused', method, code: 'busy', reason: busy }));
+          return;
+        }
         this.bridge.sendCommand(method, params);
       }
     }

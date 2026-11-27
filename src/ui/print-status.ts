@@ -10,8 +10,17 @@ import {
   isOtaInProgressSubStatus,
 } from '../types';
 import { maybeShowPowerLossDialog } from './power-loss-dialog';
+import { computePrintTiming } from './print-timing';
 import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
 import { loadUISettings, saveUISettings } from './ui-settings';
+import { setCameraStreamUrlSource, setPrinterReportsCamera } from './camera-card';
+import {
+  formatTemperature,
+  formatToolheadSpeed,
+  printerSubtitle,
+  statusBadge,
+  subStatusSuffix,
+} from './dashboard-format';
 
 let lastThumbnailFile = '';
 
@@ -103,6 +112,7 @@ let overlayEnabled = loadUISettings().cameraOverlay;
 function getCameraStreamUrl(): string {
   return overlayEnabled ? '/api/stream/overlay' : '/api/stream';
 }
+setCameraStreamUrlSource(getCameraStreamUrl);
 
 export function toggleCameraOverlay(): void {
   overlayEnabled = !overlayEnabled;
@@ -139,6 +149,7 @@ function updateCamera(hasCamera: boolean, _printerIp: string): void {
     overlay.classList.remove('hidden');
     overlay.textContent = 'Camera not connected';
   }
+  setPrinterReportsCamera(hasCamera);
 }
 
 export function renderDashboard(state: PrinterState, client: CommandSender): void {
@@ -188,52 +199,15 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
     $('print-filename').textContent = ps.filename;
     $('print-filename').title = ps.filename;
   } else {
-    $('print-filename').textContent = statusName + (subStatusName ? ` — ${subStatusName}` : '');
+    const sub = subStatusSuffix(statusName, subStatusName);
+    $('print-filename').textContent = sub ? `${statusName} — ${subStatusName}` : statusName;
   }
 
-  // Status badge — always show both status and sub-status
+  // Status badge — the sub-status is dropped when it only repeats the status (ELEG-174)
+  const badgeView = statusBadge(machineStatus?.status, machineStatus?.sub_status);
   const badge = $('print-status-badge');
-  const subLabel = subStatusName ? ` · ${subStatusName}` : '';
-  if (isPrinting && !isPaused) {
-    badge.textContent = `⟳ Printing${subLabel}`;
-    badge.className = 'print-status-badge badge-printing';
-  } else if (isPaused) {
-    badge.textContent = `⏸ Paused${subLabel}`;
-    badge.className = 'print-status-badge badge-paused';
-  } else if (machineStatus?.status === 5) {
-    badge.textContent = `📐 ${statusName}${subLabel}`;
-    badge.className = 'print-status-badge badge-busy';
-  } else if (
-    machineStatus?.status === 3 ||
-    machineStatus?.status === 4 ||
-    machineStatus?.status === 13
-  ) {
-    badge.textContent = `🔄 ${statusName}${subLabel}`;
-    badge.className = 'print-status-badge badge-busy';
-  } else if (
-    machineStatus?.status === 6 ||
-    machineStatus?.status === 7 ||
-    machineStatus?.status === 8
-  ) {
-    badge.textContent = `⚙️ ${statusName}${subLabel}`;
-    badge.className = 'print-status-badge badge-busy';
-  } else if (machineStatus?.status === 14) {
-    badge.textContent = `🛑 ${statusName}`;
-    badge.className = 'print-status-badge badge-error';
-  } else if (powerLoss !== 'none') {
-    // Status 15 used to fall through to the `else` below and render as `badge-idle` —
-    // the printer sitting on a half-finished job awaiting a decision, styled as though
-    // it had nothing to do (ELEG-29).
-    badge.textContent =
-      powerLoss === 'awaiting_decision'
-        ? '⚡ Power loss — resume or cancel'
-        : `⚡ ${statusName}${subLabel}`;
-    badge.className =
-      'print-status-badge ' + (powerLoss === 'awaiting_decision' ? 'badge-error' : 'badge-busy');
-  } else {
-    badge.textContent = statusName + subLabel;
-    badge.className = 'print-status-badge badge-idle';
-  }
+  badge.textContent = badgeView.text;
+  badge.className = `print-status-badge ${badgeView.className}`;
 
   // Progress — compute from durations in delta updates (available every second)
   // machine_status.progress only arrives from full 1002 responses (every ~5s)
@@ -264,12 +238,12 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   if (isPrinting || isPaused) {
     const pctStr = `${progress}%`;
     const stateStr = isPaused ? 'Paused' : 'Printing';
-    const sub = subStatusName ? ` · ${subStatusName}` : '';
+    const sub = subStatusSuffix(stateStr, subStatusName);
     document.title = `${pctStr} ${stateStr}${sub} — elegoo-web`;
   } else if (machineStatus?.status === 1) {
     document.title = 'Idle — elegoo-web';
   } else {
-    const sub = subStatusName ? ` · ${subStatusName}` : '';
+    const sub = subStatusSuffix(statusName, subStatusName);
     document.title = `${statusName}${sub} — elegoo-web`;
   }
 
@@ -315,17 +289,20 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
     (isPrinting || isPaused) && remaining !== '--' ? `Remaining: ${remaining}` : '--';
 
   // Elapsed time
-  const printDur = ps?.print_duration;
-  if (printDur != null && (isPrinting || isPaused)) {
-    $('print-elapsed').textContent = `Elapsed: ${formatTime(printDur)}`;
+  const timing = computePrintTiming(ps, Date.now());
+  if (timing && (isPrinting || isPaused)) {
+    const printing =
+      timing.printingSec != null && timing.printingSec !== timing.elapsedSec
+        ? ` (printing ${formatTime(timing.printingSec)})`
+        : '';
+    $('print-elapsed').textContent = `Elapsed: ${formatTime(timing.elapsedSec)}${printing}`;
   } else {
     $('print-elapsed').textContent = '--';
   }
 
-  // Start time and ETA (calculated from elapsed / remaining)
-  if ((isPrinting || isPaused) && printDur != null) {
-    const startedAt = new Date(Date.now() - printDur * 1000);
-    $('print-started').textContent = `Started: ${formatClock(startedAt)}`;
+  // Start time and ETA (start from total_duration, which includes preheat — ELEG-169)
+  if ((isPrinting || isPaused) && timing) {
+    $('print-started').textContent = `Started: ${formatClock(timing.startedAt)}`;
   } else {
     $('print-started').textContent = '--';
   }
@@ -341,10 +318,10 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   $('btn-resume').classList.toggle('hidden', !isPaused);
   $('btn-stop').classList.toggle('hidden', !isPrinting && !isPaused);
 
-  // Temperatures (show 2 decimal places like Elegoo app)
+  // Temperatures — whole degrees, or one decimal when the reading has one (ELEG-174)
   const ext = s.extruder;
   if (ext) {
-    $('temp-nozzle').textContent = ext.temperature.toFixed(2);
+    $('temp-nozzle').textContent = formatTemperature(ext.temperature);
     $('temp-nozzle-target').textContent = Math.round(ext.target).toString();
     const nozzlePct = ext.target > 0 ? Math.min(100, (ext.temperature / ext.target) * 100) : 0;
     ($('temp-nozzle-bar') as HTMLElement).style.width = `${nozzlePct}%`;
@@ -358,7 +335,7 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
 
   const bed = s.heater_bed;
   if (bed) {
-    $('temp-bed').textContent = bed.temperature.toFixed(2);
+    $('temp-bed').textContent = formatTemperature(bed.temperature);
     $('temp-bed-target').textContent = Math.round(bed.target).toString();
     const bedPct = bed.target > 0 ? Math.min(100, (bed.temperature / bed.target) * 100) : 0;
     ($('temp-bed-bar') as HTMLElement).style.width = `${bedPct}%`;
@@ -372,7 +349,7 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
 
   const chamber = s.ztemperature_sensor;
   if (chamber) {
-    $('temp-chamber').textContent = chamber.temperature.toFixed(2);
+    $('temp-chamber').textContent = formatTemperature(chamber.temperature);
     const minT = chamber.measured_min_temperature;
     const maxT = chamber.measured_max_temperature;
     const rangeEl = $('temp-chamber-range');
@@ -401,7 +378,7 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   }
 
   // Live speed & flow
-  $('live-speed').textContent = pos?.speed ? `${Math.round(pos.speed)} mm/min` : '-- mm/min';
+  $('live-speed').textContent = formatToolheadSpeed(pos?.speed);
   const currentE = pos?.extruder ?? pos?.e ?? 0;
   const now = Date.now();
   // Only recompute rates when we get a NEW extruder position (not every render)
@@ -430,7 +407,7 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   // Per-spool filament usage
   renderFilamentUsage(state);
 
-  // Fans — use Elegoo naming (Model/Assistance/Case)
+  // Fans — labelled Model / Auxiliary / Case in index.html (ELEG-174)
   const fans = s.fans;
   if (fans) {
     updateFan('fan-model', fans.fan?.speed ?? 0, 'fan-model-toggle', fans.fan?.rpm);
@@ -465,7 +442,11 @@ export function renderHeader(state: PrinterState): void {
   if (attrs) {
     // The header truncates this in CSS at phone widths, so the full string also goes in
     // `title` (ELEG-43, ELEG-90).
-    const name = `${attrs.hostname} (${attrs.machine_model}) — FW ${attrs.software_version?.ota_version}`;
+    const name = printerSubtitle(
+      attrs.hostname,
+      attrs.machine_model,
+      attrs.software_version?.ota_version,
+    );
     const el = $('printer-name');
     el.textContent = name;
     el.title = name;

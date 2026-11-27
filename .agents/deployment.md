@@ -1,13 +1,25 @@
 # Deployment — and why `MERGED` is not `IN_PRODUCTION`
 
-Production for this repo runs **on the same machine you develop on**. That is still the
-single most important thing on this page — your checkout and `/opt/elegooweb` (the live
-service) are different trees that can silently disagree.
+Production for this repo runs on **one specific host — which is not necessarily the
+machine you are on.** Agent sessions and other checkouts routinely run elsewhere. So
+check before you reason about what is running:
+
+```bash
+ls /opt/elegooweb                          # absent → this is not the production host
+docker ps --filter name=elegoo-web         # no row → no production container here
+```
+
+On a machine where both come back empty, a refused `localhost:8088` means nothing is
+deployed *here*, not that production is down — read production through its public
+surface or ask its operator. Everything below that says "the production host" means the
+machine where `/opt/elegooweb` exists. On that host, the single most important thing on
+this page is that your checkout and `/opt/elegooweb` (the live service) are different
+trees that can silently disagree.
 
 **Since ELEG-108 (2026-09-16) production is a Docker Compose stack, not the systemd
 unit.** `elegooweb.service` is stopped and disabled; its unit file and `/opt/elegooweb/src`
 are kept on disk for rollback until an operator cleans them up, but neither is what is
-running. Reasoning about this host from the old systemd shape — or handing an operator
+running. Reasoning about the production host from the old systemd shape — or handing an operator
 `sudo pnpm service:install` as the deploy command — is now wrong: that would rsync the
 checkout over the stack root and restart a unit that is meant to stay off.
 
@@ -22,16 +34,16 @@ checkout over the stack root and restart a unit that is meant to stay off.
 | ports | `8088` and `7125` published on **all interfaces** (`0.0.0.0`), same as the systemd unit's default bind |
 | env | `env_file: .env` (that `.env` is at `/opt/elegooweb/.env`, separate from the checkout's) plus one override: `environment: DATA_DIR=/app/data` — `environment:` wins over `env_file:`, so a `DATA_DIR` set in `.env` cannot leak into the container's path layout |
 | volumes | `/opt/elegooweb/data`, `/opt/elegooweb/.cache` and `/opt/elegooweb/.env` bind-mounted from the same directory the systemd install used — `data/`, `.cache/` and `.env` never moved |
-| build | there is **no build step on this host any more** — the image is built by CI and pulled. The frontend and backend both ship inside it |
+| build | there is **no build step on the production host any more** — the image is built by CI and pulled. The frontend and backend both ship inside it |
 
-`elegooweb.service` is confirmed `disabled`/`inactive` on this host (`systemctl
+`elegooweb.service` is confirmed `disabled`/`inactive` on the production host (`systemctl
 is-enabled` / `is-active`, read 2026-09-16); its unit file and `/opt/elegooweb/src` are
 kept only as the rollback path below, not as a second running copy.
 
 There is also the systemd installer (`contrib/install.sh`, `sudo pnpm service:install`)
 — it is real, it is a supported path for other users' hosts, and `README.md` documents
-it. **It is not what deploys this host.** Don't hand an operator that command for a
-deploy here.
+it. **It is not what deploys the production host.** Don't hand an operator that command
+for a deploy there.
 
 ## How a deploy happens
 
@@ -129,9 +141,10 @@ network position, not code.
 ## Operator commands
 
 These are the ones worth pasting into an `OPERATOR:` issue. All of them are for a
-human on this host; an agent may read (`docker ps`, `docker logs`, `curl`) but does not
-pull, recreate, stop or restart the container, and does not run `docker compose
-up`/`down`/`pull`/`restart` on this host.
+human on the production host; an agent there may read (`docker ps`, `docker logs`,
+`curl`) but does not pull, recreate, stop or restart the container, and does not run
+`docker compose up`/`down`/`pull`/`restart`. An agent anywhere else cannot run them at
+all — check the two commands at the top of this page first.
 
 ```bash
 # what is running, and since when

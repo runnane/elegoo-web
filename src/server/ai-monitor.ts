@@ -518,6 +518,32 @@ async function analyzeWithVlm(jpeg: Buffer, config: ServiceConfig): Promise<AIAn
 
 const MAX_HISTORY = 100;
 
+/**
+ * Consecutive intervals without a frame before the monitor calls itself degraded
+ * (ELEG-168). Three is 30 s at the default interval: long enough that one dropped frame
+ * is not an alarm, short enough to matter during a print.
+ */
+export const DEGRADED_AFTER_FAILURES = 3;
+
+/** Where the monitor's frames come from. Production passes `getSnapshot`; tests pass a fake. */
+export type FrameSource = (config: ServiceConfig) => Promise<Buffer | null>;
+
+/**
+ * The monitor's own truth about whether it is analysing (ELEG-168): "did my last N
+ * intervals get a frame". Deliberately separate from the camera card's health, because
+ * the monitor can be blind for reasons the card does not see (a fetch that throws).
+ */
+export interface AIHealth {
+  state: 'ok' | 'degraded';
+  /** Why it is degraded; null when ok. */
+  reason: string | null;
+  /** When the current failing run began (ms epoch); null when ok. */
+  since: number | null;
+  /** Last time a frame was fetched and analysed (ms epoch); null if never this process. */
+  lastAnalysisAt: number | null;
+  consecutiveFailures: number;
+}
+
 export class AIMonitor extends EventEmitter {
   private analysisHistory: AIAnalysis[] = [];
   private localAnalyzer: LocalAnalyzer;
@@ -530,10 +556,16 @@ export class AIMonitor extends EventEmitter {
   private _running = false;
   private labelConfigs: AILabelConfig[] = buildDefaultLabelConfigs();
   private labelConfigPath: string;
+  private consecutiveFrameFailures = 0;
+  private failingSince: number | null = null;
+  private failureReason: string | null = null;
+  private lastAnalysisAt: number | null = null;
+  private degraded = false;
 
   constructor(
     private store: StateStore,
     private config: ServiceConfig,
+    private frameSource: FrameSource = getSnapshot,
   ) {
     super();
     this.localAnalyzer = new LocalAnalyzer(config.aiLocalModel);
@@ -560,9 +592,59 @@ export class AIMonitor extends EventEmitter {
     this.isPrinting = true;
     this.consecutiveWarnings = 0;
     this.consecutiveLowMotion = 0;
+    this.clearFrameFailures();
     this.localAnalyzer.reset();
     this.motionDetector.reset();
     this.startAnalysisLoop();
+  }
+
+  private clearFrameFailures(): void {
+    this.consecutiveFrameFailures = 0;
+    this.failingSince = null;
+    this.failureReason = null;
+    this.degraded = false;
+  }
+
+  /** A frame could not be obtained this interval. Degrades after N in a row. */
+  private recordFrameFailure(reason: string): void {
+    if (this.consecutiveFrameFailures === 0) this.failingSince = Date.now();
+    this.consecutiveFrameFailures++;
+    this.failureReason = reason;
+    if (!this.degraded && this.consecutiveFrameFailures >= DEGRADED_AFTER_FAILURES) {
+      this.degraded = true;
+      const health = this.getHealth();
+      log.warn(`Degraded — not analysing: ${reason} (since ${health.since})`);
+      // One event per episode: it fires on the transition only, never on each failed interval.
+      this.emit('degraded', health);
+    }
+  }
+
+  private recordFrameSuccess(): void {
+    const wasDegraded = this.degraded;
+    this.lastAnalysisAt = Date.now();
+    this.clearFrameFailures();
+    if (wasDegraded) {
+      log.info('Recovered — frames are arriving again');
+      this.emit('recovered', this.getHealth());
+    }
+  }
+
+  /** The monitor's health, for the service status and the panel. */
+  getHealth(): AIHealth {
+    return {
+      state: this.degraded ? 'degraded' : 'ok',
+      reason: this.degraded ? this.failureReason : null,
+      since: this.degraded ? this.failingSince : null,
+      lastAnalysisAt: this.lastAnalysisAt,
+      consecutiveFailures: this.consecutiveFrameFailures,
+    };
+  }
+
+  /** The value `service_status.ai` carries. `degraded` outranks `monitoring`. */
+  get statusValue(): 'degraded' | 'monitoring' | 'idle' | 'stopped' {
+    if (this.monitoring && this.degraded) return 'degraded';
+    if (this.monitoring) return 'monitoring';
+    return this._running ? 'idle' : 'stopped';
   }
 
   private onPrintEnded(): void {
@@ -585,7 +667,8 @@ export class AIMonitor extends EventEmitter {
     }
   }
 
-  private async runAnalysis(): Promise<void> {
+  /** One analysis interval. Public so a test can drive it without timers. */
+  async runAnalysis(): Promise<void> {
     if (!this.isPrinting) return;
 
     // Skip analysis during warmup/heating/filament change — only analyze when actively printing
@@ -598,11 +681,24 @@ export class AIMonitor extends EventEmitter {
       return;
     }
 
-    const snapshot = await getSnapshot(this.config);
+    let snapshot: Buffer | null = null;
+    let failure: string | null = null;
+    try {
+      snapshot = await this.frameSource(this.config);
+      if (!snapshot) {
+        failure = this.config.cameraEnabled
+          ? 'camera unavailable — no frame returned'
+          : 'camera disabled in configuration';
+      }
+    } catch (err) {
+      failure = `frame fetch error — ${(err as Error).message.slice(0, 100)}`;
+    }
     if (!snapshot) {
-      log.warn('No snapshot available for analysis');
+      log.warn(`No snapshot available for analysis: ${failure}`);
+      this.recordFrameFailure(failure ?? 'camera unavailable');
       return;
     }
+    this.recordFrameSuccess();
 
     // Motion detection (always runs, even if CLIP/VLM disabled)
     const motion = await this.motionDetector.detect(snapshot);
@@ -765,6 +861,7 @@ export class AIMonitor extends EventEmitter {
       alertCooldownSec: this.config.aiAlertCooldownSec,
       analysisCount: this.analysisHistory.length,
       consecutiveWarnings: this.consecutiveWarnings,
+      health: this.getHealth(),
     };
   }
 

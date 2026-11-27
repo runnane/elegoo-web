@@ -18,7 +18,7 @@
 import type { ClientRequest, IncomingMessage, ServerResponse } from 'http';
 import { request as httpRequest } from 'http';
 import { createHash } from 'crypto';
-import { writeFile, readdir, readFile, mkdir, stat, unlink } from 'fs/promises';
+import { writeFile, readdir, readFile, mkdir, stat, unlink, rename } from 'fs/promises';
 import { createReadStream, createWriteStream, existsSync } from 'fs';
 import { join, resolve, extname } from 'path';
 import { PassThrough } from 'stream';
@@ -33,9 +33,15 @@ import { handlePrintQueueRequest } from './print-queue-routes.js';
 import { generateReportPDF } from './print-report-pdf.js';
 import { getBuildInfo } from './build-info.js';
 import { applyCors, corsHeaders } from './cors.js';
+import { guardHttp } from './write-auth.js';
 import { captureLogDir, gcodeCacheDir } from './data-paths.js';
 import { getLogger } from './logger.js';
-import { resolveTimelapseUpstream, type TimelapseUpstream } from './timelapse-proxy.js';
+import {
+  buildPrinterDownloadPath,
+  resolveTimelapseUpstream,
+  type TimelapseDownload,
+  type TimelapseUpstream,
+} from './timelapse-proxy.js';
 import {
   STATUS_NAMES,
   SUB_STATUS_NAMES,
@@ -43,7 +49,13 @@ import {
   EXCEPTION_NAMES,
   mqttPhaseMessage,
 } from '../types.js';
-import type { FanInfo } from '../types.js';
+import type { CameraHealth, FanInfo } from '../types.js';
+import {
+  CameraEvidence,
+  type CameraHealthInput,
+  deriveCameraHealth,
+  printerCameraReport,
+} from './camera-health.js';
 
 const log = getLogger('REST');
 const debugLog = getLogger('Debug');
@@ -61,6 +73,10 @@ let fetchInFlight: Promise<Buffer | null> | null = null;
  * error from printer A cannot land in printer B's snapshot cache or stream.
  */
 let cameraGeneration = 0;
+/** What really happened on the camera path — the input to `getCameraHealth` (ELEG-178). */
+const cameraEvidence = new CameraEvidence();
+/** Bound on the snapshot fetch, headers **and** body. */
+const SNAPSHOT_TIMEOUT_MS = 10_000;
 
 // Debug capture state
 let activeCapture: { file: string } | null = null;
@@ -131,14 +147,25 @@ async function evictOldCache(): Promise<void> {
   }
 }
 
-async function handleFileDownload(
+/** Upstream port and idle timeout of the printer download; injectable for tests. */
+export interface DownloadUpstreamOptions {
+  port?: number;
+  timeoutMs?: number;
+}
+
+const PRINTER_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+export async function handleFileDownload(
   res: ServerResponse,
   fileName: string,
   baseName: string,
   source: string,
   isGcode: boolean,
   config: ServiceConfig,
+  upstream: DownloadUpstreamOptions = {},
 ): Promise<void> {
+  const port = upstream.port ?? 80;
+  const timeoutMs = upstream.timeoutMs ?? PRINTER_DOWNLOAD_TIMEOUT_MS;
   // Try serving from cache first (gcode files only)
   if (isGcode) {
     try {
@@ -168,13 +195,36 @@ async function handleFileDownload(
   const dlPath = pathMap[source] ?? '/download';
   log.info(`Download proxy: ${fileName} from ${dlPath}`);
 
+  let failed = false;
+  let discardPartial: (() => void) | null = null;
+  // End the download. Before headers: the JSON error. After headers a status can no
+  // longer be sent, so the only way to tell the browser is to destroy the response
+  // (it used to be left open forever) and drop the partial cache file.
+  const failDownload = (
+    reason: string,
+    status = 502,
+    message = 'Printer download failed',
+  ): void => {
+    if (failed) return;
+    failed = true;
+    discardPartial?.();
+    if (!res.headersSent) {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    } else {
+      log.warn(`Download proxy: ${fileName} ended early (${reason}), destroying response`);
+      res.destroy();
+    }
+    proxyReq.destroy();
+  };
+
   const proxyReq = httpRequest(
     {
       hostname: config.printerIp,
-      port: 80,
+      port,
       path: `${dlPath}?X-Token=${encodeURIComponent(config.printerPassword)}&file_name=${encodeURIComponent(fileName)}`,
       method: 'GET',
-      timeout: 120_000,
+      timeout: timeoutMs,
       // Printer's libhv sends both Content-Length and Transfer-Encoding: chunked,
       // which is invalid HTTP. Node's strict parser rejects this.
       insecureHTTPParser: true,
@@ -187,7 +237,7 @@ async function handleFileDownload(
         return;
       }
       // Keep the socket alive during slow transfers
-      proxyRes.socket?.setTimeout(120_000);
+      proxyRes.socket?.setTimeout(timeoutMs);
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${baseName}"`,
@@ -196,20 +246,47 @@ async function handleFileDownload(
           : {}),
       });
 
-      // For gcode files, tee the stream to a cache file
+      // The printer went away or stalled mid-body: the response must not be left open.
+      proxyRes.on('aborted', () => failDownload('upstream aborted mid-body'));
+      proxyRes.on('close', () => {
+        if (!proxyRes.complete) failDownload('upstream closed before the body completed');
+      });
+      // The browser left: stop pulling from the printer and drop the partial file.
+      res.on('close', () => {
+        if (!res.writableFinished) failDownload('client closed the download');
+      });
+
+      // For gcode files, tee the stream to a cache file. It is written under a
+      // `.part` name and only renamed into place once the whole body arrived, so a
+      // partial file can never be served from the cache.
       if (isGcode) {
         const cachePath = join(gcodeCacheDir(), gcodeCacheKey(config.printerIp, fileName));
-        const cacheStream = createWriteStream(cachePath);
+        const partPath = `${cachePath}.part`;
+        const cacheStream = createWriteStream(partPath);
         const tee = new PassThrough();
         tee.pipe(res);
         tee.pipe(cacheStream);
         proxyRes.pipe(tee);
+        discardPartial = () => {
+          tee.destroy();
+          cacheStream.once('close', () => {
+            unlink(partPath).catch(() => {});
+          });
+          cacheStream.destroy();
+        };
         cacheStream.on('finish', () => {
-          evictOldCache().catch(() => {});
-          log.info(`Cached gcode: ${fileName}`);
+          if (failed || !proxyRes.complete) return;
+          rename(partPath, cachePath)
+            .then(() => {
+              evictOldCache().catch(() => {});
+              log.info(`Cached gcode: ${fileName}`);
+            })
+            .catch(() => {
+              unlink(partPath).catch(() => {});
+            });
         });
         cacheStream.on('error', () => {
-          unlink(cachePath).catch(() => {});
+          unlink(partPath).catch(() => {});
         });
       } else {
         proxyRes.pipe(res);
@@ -218,18 +295,11 @@ async function handleFileDownload(
   );
   proxyReq.on('error', (err) => {
     log.error(`Download proxy error: ${(err as NodeJS.ErrnoException).code} ${err.message}`);
-    if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Failed to connect to printer' }));
-    }
+    failDownload('upstream error', 502, 'Failed to connect to printer');
   });
   proxyReq.on('timeout', () => {
     log.error('Download proxy timeout');
-    proxyReq.destroy();
-    if (!res.headersSent) {
-      res.writeHead(504, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Download timed out' }));
-    }
+    failDownload('upstream timeout', 504, 'Download timed out');
   });
   proxyReq.end();
 }
@@ -289,28 +359,49 @@ export async function precacheGcodeAsync(
             return;
           }
           proxyRes.socket?.setTimeout(120_000);
-          const cacheStream = createWriteStream(cachePath);
+          // Written as `.part` and renamed only when the body completed, so a stalled
+          // or aborted download never leaves a partial file the cache would serve.
+          const partPath = `${cachePath}.part`;
+          const cacheStream = createWriteStream(partPath);
+          discardPartial = () => {
+            cacheStream.once('close', () => {
+              unlink(partPath).catch(() => {});
+            });
+            cacheStream.destroy();
+          };
           let bytes = 0;
           proxyRes.on('data', (chunk: Buffer) => {
             bytes += chunk.length;
           });
+          proxyRes.on('close', () => {
+            if (!proxyRes.complete)
+              fail(new Error('Precache download ended before the body completed'));
+          });
           proxyRes.pipe(cacheStream);
           cacheStream.on('finish', () => {
-            evictOldCache().catch(() => {});
-            log.info(`Precache: cached ${fileName} (${bytes} bytes)`);
-            resolve(bytes);
+            if (failed || !proxyRes.complete) return;
+            rename(partPath, cachePath)
+              .then(() => {
+                evictOldCache().catch(() => {});
+                log.info(`Precache: cached ${fileName} (${bytes} bytes)`);
+                resolve(bytes);
+              })
+              .catch((err: unknown) => fail(err as Error));
           });
-          cacheStream.on('error', (err) => {
-            unlink(cachePath).catch(() => {});
-            reject(err);
-          });
+          cacheStream.on('error', (err) => fail(err));
         },
       );
-      proxyReq.on('error', reject);
-      proxyReq.on('timeout', () => {
+      let failed = false;
+      let discardPartial: (() => void) | null = null;
+      const fail = (err: Error): void => {
+        if (failed) return;
+        failed = true;
+        discardPartial?.();
         proxyReq.destroy();
-        reject(new Error('Precache download timed out'));
-      });
+        reject(err);
+      };
+      proxyReq.on('error', (err) => fail(err));
+      proxyReq.on('timeout', () => fail(new Error('Precache download timed out')));
       proxyReq.end();
     });
 
@@ -332,37 +423,58 @@ async function fetchCameraFrame(cameraUrl: string): Promise<Buffer | null> {
   if (fetchInFlight) return fetchInFlight;
 
   const generation = cameraGeneration;
-  fetchInFlight = doFetch(cameraUrl);
+  const attempt = doFetch(cameraUrl);
+  fetchInFlight = attempt.then((r) => r.frame);
   try {
-    const result = await fetchInFlight;
-    // The printer was switched while this was in flight: it is the old camera's frame.
+    const result = await attempt;
+    // The printer was switched while this was in flight: it is the old camera's frame,
+    // and its failure is the old camera's failure.
     if (generation !== cameraGeneration) return null;
-    if (result) {
-      cachedSnapshot = result;
+    if (result.frame) {
+      cachedSnapshot = result.frame;
       cacheTime = Date.now();
+      cameraEvidence.frame(cacheTime);
+    } else {
+      cameraEvidence.failed(result.error);
     }
-    return result;
+    return result.frame;
   } finally {
     fetchInFlight = null;
   }
 }
 
-async function doFetch(cameraUrl: string): Promise<Buffer | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(cameraUrl, { signal: controller.signal });
-    clearTimeout(timeout);
+type FetchResult = { frame: Buffer; error?: undefined } | { frame: null; error: string };
 
-    if (!res.ok) return null;
+/** The underlying cause of a `fetch failed` (`connect ECONNREFUSED …`), or the message. */
+function describeFetchError(err: unknown): string {
+  const e = err as Error & { cause?: { message?: string } };
+  if (e?.name === 'AbortError') {
+    return `Snapshot timed out after ${SNAPSHOT_TIMEOUT_MS / 1000} s`;
+  }
+  return `Snapshot failed: ${e?.cause?.message || e?.message || String(err)}`;
+}
+
+async function doFetch(cameraUrl: string): Promise<FetchResult> {
+  const controller = new AbortController();
+  // Bounds the body read too. It used to be cleared once the headers arrived, so a
+  // camera that answered and then stalled pinned `fetchInFlight` — and every later
+  // snapshot — for ever (ELEG-178).
+  const timeout = setTimeout(() => controller.abort(), SNAPSHOT_TIMEOUT_MS);
+  try {
+    const res = await fetch(cameraUrl, { signal: controller.signal });
+
+    if (!res.ok) {
+      res.body?.cancel().catch(() => {});
+      return { frame: null, error: `Camera answered HTTP ${res.status}` };
+    }
 
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('image/jpeg') || contentType.includes('image/jpg')) {
-      return Buffer.from(await res.arrayBuffer());
+      return { frame: Buffer.from(await res.arrayBuffer()) };
     }
 
     // MJPEG stream — extract first frame
-    if (!res.body) return null;
+    if (!res.body) return { frame: null, error: 'Camera answered with an empty body' };
     const reader = res.body.getReader();
     const chunks: Buffer[] = [];
     let totalLen = 0;
@@ -381,30 +493,42 @@ async function doFetch(cameraUrl: string): Promise<Buffer | null> {
         const endIdx = combined.indexOf(JPEG_END, startIdx + 2);
         if (endIdx === -1) continue;
 
-        reader.cancel();
-        return combined.subarray(startIdx, endIdx + 2);
+        return { frame: combined.subarray(startIdx, endIdx + 2) };
       }
     } finally {
       reader.cancel().catch(() => {});
     }
 
-    return null;
+    return { frame: null, error: 'Camera response held no JPEG frame' };
   } catch (err) {
-    log.warn(`Snapshot failed: ${(err as Error).message}`);
-    return null;
+    const error = describeFetchError(err);
+    log.warn(error);
+    return { frame: null, error };
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+/**
+ * The camera's health, from evidence (ELEG-178): see `deriveCameraHealth`. Exported for
+ * `/ws` `service_status` (`camera` + `cameraHealth`) and `/api/health` (`camera`), and
+ * for the camera card and AI monitor work that builds on it (ELEG-166, ELEG-168).
+ */
+export function getCameraHealth(input: CameraHealthInput): CameraHealth {
+  return deriveCameraHealth(cameraEvidence, input);
+}
+
+/** `getCameraHealth` for the service's own bridge and store — what `/api/health` reports. */
+function currentCameraHealth(config: ServiceConfig, store: StateStore): CameraHealth {
+  return getCameraHealth({
+    enabled: config.cameraEnabled,
+    printerReportsCamera: printerCameraReport(_bridge?.isConnected ?? false, store.status),
+  });
 }
 
 /** Shared snapshot fetcher — used by both REST API, Telegram, and AI monitor.
  *  Prefers the cached frame from the active MJPEG fan-out stream (zero-cost).
  *  Only falls back to a dedicated HTTP fetch if no recent frame is available. */
-/** Check actual camera stream health (fresh cached frame or active upstream). */
-export function getCameraHealth(): 'available' | 'unavailable' {
-  if (cachedSnapshot && Date.now() - cacheTime < CACHE_TTL_MS) return 'available';
-  if (upstreamActive) return 'available';
-  return 'unavailable';
-}
-
 export async function getSnapshot(config: ServiceConfig): Promise<Buffer | null> {
   if (!config.cameraEnabled) return null;
   // Use cached frame from MJPEG stream if fresh (within TTL)
@@ -427,20 +551,131 @@ let lastOverlayTime = 0;
 
 let upstreamReq: ClientRequest | null = null;
 
+/**
+ * Timeouts on the stream path (ELEG-178). `upstreamMs` is the socket idle timeout on the
+ * one upstream connection: no bytes for that long is a failure. `stallMs` bounds how long
+ * a viewer waits without a frame before its response is ended with the reason, so a dead
+ * camera is an answer, not a hang. Mutable only so tests need not wait 10 s.
+ */
+const cameraTimeouts = { upstreamMs: 10_000, stallMs: 20_000, idleCloseMs: 5_000 };
+
+/** Stops the live upstream attempt quietly (no failure, no retry); null with none open. */
+let stopUpstream: (() => void) | null = null;
+let idleCloseTimer: NodeJS.Timeout | null = null;
+
+function cancelIdleClose(): void {
+  if (idleCloseTimer) clearTimeout(idleCloseTimer);
+  idleCloseTimer = null;
+}
+
+/**
+ * ELEG-184: when the last viewer leaves, close the upstream after a short grace period, so
+ * the printer's few MJPEG client slots are not held for frames nobody sees. The grace lets a
+ * page reload or a stream/overlay toggle reuse the connection; a viewer arriving in it
+ * cancels the close (see `addViewer`).
+ */
+function scheduleIdleClose(): void {
+  if (streamClients.size > 0 || overlayClients.size > 0) return;
+  if (!upstreamActive || idleCloseTimer) return;
+  idleCloseTimer = setTimeout(() => {
+    idleCloseTimer = null;
+    if (streamClients.size > 0 || overlayClients.size > 0) return;
+    log.info('No camera viewers left; closing the upstream MJPEG stream');
+    stopUpstream?.();
+  }, cameraTimeouts.idleCloseMs);
+  idleCloseTimer.unref();
+}
+
+/** Test seam: shorten the stream timeouts. Production never calls this. */
+export function setCameraTimeouts(t: Partial<typeof cameraTimeouts>): void {
+  Object.assign(cameraTimeouts, t);
+}
+
+/** Per viewer: has it ever had a frame, and the watchdog that ends it if frames stop. */
+const viewerState = new Map<ServerResponse, { gotFrame: boolean; watchdog: NodeJS.Timeout }>();
+
+function writeFramePart(client: ServerResponse, frame: Buffer): void {
+  client.write(`${MJPEG_BOUNDARY}\r\n`);
+  client.write('Content-Type: image/jpeg\r\n');
+  client.write(`Content-Length: ${frame.length}\r\n\r\n`);
+  client.write(frame);
+  const v = viewerState.get(client);
+  if (v) {
+    v.gotFrame = true;
+    v.watchdog.refresh();
+  }
+}
+
+/**
+ * End one viewer's response with the reason. The 200 and the multipart headers are already
+ * on the wire (they are flushed on connect), so the error is in-band: a final `text/plain`
+ * part, then the end of the response.
+ */
+function endViewer(client: ServerResponse, reason: string): void {
+  const v = viewerState.get(client);
+  if (v) clearTimeout(v.watchdog);
+  viewerState.delete(client);
+  streamClients.delete(client);
+  overlayClients.delete(client);
+  scheduleIdleClose();
+  if (client.writableEnded) return;
+  try {
+    const body = `Camera unavailable: ${reason}\r\n`;
+    client.write(`${MJPEG_BOUNDARY}\r\n`);
+    client.write('Content-Type: text/plain; charset=utf-8\r\n');
+    client.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n`);
+    client.end(body);
+  } catch {
+    client.destroy();
+  }
+}
+
+/**
+ * The upstream failed. A viewer that has never had a frame has nothing to resume, so it
+ * gets the reason now rather than waiting on a retry loop; a viewer that was watching keeps
+ * its response open for the retry, bounded by its own watchdog.
+ */
+function failWaitingViewers(reason: string): void {
+  for (const [client, v] of [...viewerState]) {
+    if (!v.gotFrame) endViewer(client, reason);
+  }
+}
+
 function startMjpegUpstream(cameraUrl: string): void {
   if (upstreamActive) return;
   upstreamActive = true;
   const generation = cameraGeneration;
   /** False once the service has switched printer: this upstream must then go quiet. */
   const current = () => generation === cameraGeneration;
-  const retryLater = (ms: number) => {
+  cameraEvidence.attemptStarted();
+  /** One failure per attempt: a timeout's destroy() also raises `error`, which is noise. */
+  let settled = false;
+  const fail = (reason: string, retryMs: number) => {
+    if (settled || !current()) return;
+    settled = true;
+    log.warn(`Upstream: ${reason}`);
+    cameraEvidence.failed(reason);
     upstreamActive = false;
     upstreamReq = null;
+    stopUpstream = null;
+    failWaitingViewers(reason);
+    // Retry only for a viewer still holding a response — no blind loop with nobody watching.
     if (streamClients.size > 0 || overlayClients.size > 0) {
       setTimeout(() => {
-        if (current()) startMjpegUpstream(cameraUrl);
-      }, ms);
+        if (current() && (streamClients.size > 0 || overlayClients.size > 0)) {
+          startMjpegUpstream(cameraUrl);
+        }
+      }, retryMs);
     }
+  };
+  stopUpstream = () => {
+    if (settled || !current()) return;
+    settled = true; // silences fail() for the error the destroy raises
+    if (cameraEvidence.connectingSince !== null) cameraEvidence.attemptEnded();
+    upstreamActive = false;
+    upstreamReq = null;
+    stopUpstream = null;
+    req.destroy();
   };
 
   const url = new URL(cameraUrl);
@@ -449,13 +684,22 @@ function startMjpegUpstream(cameraUrl: string): void {
     port: url.port || 80,
     path: url.pathname + (url.search || ''),
     method: 'GET',
-    timeout: 10_000,
+    timeout: cameraTimeouts.upstreamMs,
   };
 
   log.info(`Opening upstream MJPEG stream to ${cameraUrl}`);
 
   const req = httpRequest(reqOpts, (upstream) => {
     let buf = Buffer.alloc(0);
+
+    // A non-200 used to be parsed as if it were the stream, then looped through a retry
+    // with no trace of why (ELEG-178).
+    if (upstream.statusCode !== 200) {
+      upstream.resume();
+      req.destroy();
+      fail(`Camera answered HTTP ${upstream.statusCode}`, 5000);
+      return;
+    }
 
     upstream.on('data', (chunk: Buffer) => {
       if (!current()) return;
@@ -477,14 +721,12 @@ function startMjpegUpstream(cameraUrl: string): void {
         // Update snapshot cache too
         cachedSnapshot = frame;
         cacheTime = Date.now();
+        cameraEvidence.frame(cacheTime);
 
         // Broadcast to all connected clients
         for (const client of streamClients) {
           try {
-            client.write(`${MJPEG_BOUNDARY}\r\n`);
-            client.write('Content-Type: image/jpeg\r\n');
-            client.write(`Content-Length: ${frame.length}\r\n\r\n`);
-            client.write(frame);
+            writeFramePart(client, frame);
           } catch {
             streamClients.delete(client);
           }
@@ -501,10 +743,7 @@ function startMjpegUpstream(cameraUrl: string): void {
                 if (!overlayFrame) return;
                 for (const client of overlayClients) {
                   try {
-                    client.write(`${MJPEG_BOUNDARY}\r\n`);
-                    client.write('Content-Type: image/jpeg\r\n');
-                    client.write(`Content-Length: ${overlayFrame.length}\r\n\r\n`);
-                    client.write(overlayFrame);
+                    writeFramePart(client, overlayFrame);
                   } catch {
                     overlayClients.delete(client);
                   }
@@ -519,31 +758,16 @@ function startMjpegUpstream(cameraUrl: string): void {
       }
     });
 
-    upstream.on('end', () => {
-      if (!current()) return;
-      log.info('Upstream stream ended');
-      retryLater(2000);
-    });
-
-    upstream.on('error', (err) => {
-      if (!current()) return;
-      log.warn(`Upstream error: ${err.message}`);
-      retryLater(5000);
-    });
+    upstream.on('end', () => fail('Camera closed the stream', 2000));
+    upstream.on('error', (err) => fail(`Camera stream error: ${err.message}`, 5000));
   });
   upstreamReq = req;
 
-  req.on('error', (err) => {
-    if (!current()) return;
-    log.warn(`Upstream connection failed: ${err.message}`);
-    retryLater(5000);
-  });
+  req.on('error', (err) => fail(`Camera connection failed: ${err.message}`, 5000));
 
   req.on('timeout', () => {
-    if (!current()) return;
-    log.warn('Upstream connection timed out');
+    fail(`No data from the camera for ${cameraTimeouts.upstreamMs / 1000} s`, 2000);
     req.destroy();
-    retryLater(2000);
   });
 
   req.end();
@@ -559,8 +783,12 @@ export function resetCameraForPrinterSwitch(config: ServiceConfig): void {
   cachedSnapshot = null;
   cacheTime = 0;
   fetchInFlight = null;
+  // Printer A's frames and failures say nothing about printer B's camera.
+  cameraEvidence.reset();
+  cancelIdleClose();
   const old = upstreamReq;
   upstreamReq = null;
+  stopUpstream = null;
   upstreamActive = false;
   old?.destroy();
   if (config.cameraEnabled && (streamClients.size > 0 || overlayClients.size > 0)) {
@@ -568,23 +796,52 @@ export function resetCameraForPrinterSwitch(config: ServiceConfig): void {
   }
 }
 
-function addStreamClient(res: ServerResponse, config: ServiceConfig): void {
+/**
+ * Register one MJPEG viewer (`/api/stream`, `/api/stream/overlay`, `/webcam/?action=stream`).
+ * The headers are flushed **now**: `writeHead` alone sends nothing until the first body
+ * write, so a dead upstream used to look to the client like a request that never answered
+ * (ELEG-167). The watchdog then bounds the wait for a frame.
+ */
+function addViewer(
+  res: ServerResponse,
+  config: ServiceConfig,
+  set: Set<ServerResponse>,
+  kind: string,
+): void {
   res.writeHead(200, {
     'Content-Type': `multipart/x-mixed-replace; boundary=${MJPEG_BOUNDARY}`,
     'Cache-Control': 'no-cache, no-store',
     Connection: 'close',
   });
+  res.flushHeaders();
 
-  streamClients.add(res);
-  log.info(`Stream client connected (total: ${streamClients.size})`);
+  set.add(res);
+  const watchdog = setTimeout(() => {
+    const last = cameraEvidence.lastFailure;
+    endViewer(
+      res,
+      `No frame from the camera for ${cameraTimeouts.stallMs / 1000} s${last ? ` (last error: ${last})` : ''}`,
+    );
+  }, cameraTimeouts.stallMs);
+  viewerState.set(res, { gotFrame: false, watchdog });
+  log.info(`${kind} client connected (total: ${set.size})`);
 
   res.on('close', () => {
-    streamClients.delete(res);
-    log.info(`Stream client disconnected (total: ${streamClients.size})`);
+    clearTimeout(watchdog);
+    viewerState.delete(res);
+    set.delete(res);
+    log.info(`${kind} client disconnected (total: ${set.size})`);
+    scheduleIdleClose();
   });
 
+  // A viewer inside the grace period keeps the upstream that is already open.
+  cancelIdleClose();
   // Start upstream if not already running
   startMjpegUpstream(config.cameraUrl);
+}
+
+function addStreamClient(res: ServerResponse, config: ServiceConfig): void {
+  addViewer(res, config, streamClients, 'Stream');
 }
 
 // ---- MJPEG overlay processing ----
@@ -687,21 +944,7 @@ async function processOverlayFrame(frame: Buffer): Promise<Buffer | null> {
 }
 
 function addOverlayClient(res: ServerResponse, config: ServiceConfig): void {
-  res.writeHead(200, {
-    'Content-Type': `multipart/x-mixed-replace; boundary=${MJPEG_BOUNDARY}`,
-    'Cache-Control': 'no-cache, no-store',
-    Connection: 'close',
-  });
-
-  overlayClients.add(res);
-  log.info(`Overlay client connected (total: ${overlayClients.size})`);
-
-  res.on('close', () => {
-    overlayClients.delete(res);
-    log.info(`Overlay client disconnected (total: ${overlayClients.size})`);
-  });
-
-  startMjpegUpstream(config.cameraUrl);
+  addViewer(res, config, overlayClients, 'Overlay');
 }
 
 let _bridge: MqttBridge | null = null;
@@ -766,6 +1009,26 @@ function serveStatic(url: string, res: ServerResponse): void {
   res.end('Not found');
 }
 
+/**
+ * `/api/*` writes that stay open with a key set (ELEG-139). Exact method + path.
+ * `POST /api/client-error` is a size-capped log line the SPA must be able to send
+ * before anyone has entered a key; it reaches neither the printer nor any config.
+ */
+const OPEN_API_WRITES = new Set(['POST /api/client-error']);
+
+/**
+ * Whether an `/api/*` request is a write that needs the key. **Default-deny:** every
+ * method other than GET and HEAD is a write unless it is listed in OPEN_API_WRITES, so a
+ * write route added later is gated without anyone remembering to gate it. Reads (GET)
+ * stay open — that includes the camera, `/api/metrics/prometheus` and downloads.
+ */
+function isGatedApiWrite(method: string | undefined, url: string): boolean {
+  const m = (method || 'GET').toUpperCase();
+  if (m === 'GET' || m === 'HEAD') return false;
+  const path = url.split('?')[0];
+  return !OPEN_API_WRITES.has(`${m} ${path}`);
+}
+
 export function createRestRouter(
   store: StateStore,
   config: ServiceConfig,
@@ -777,7 +1040,11 @@ export function createRestRouter(
   printQueue?: PrintQueue | null,
 ) {
   overlayStore = store;
-  if (bridge) _bridge = bridge;
+  if (bridge) {
+    _bridge = bridge;
+    // A camera failure from before the printer came back is stale (ELEG-178).
+    bridge.on('connected', () => cameraEvidence.printerReconnected());
+  }
   return (req: IncomingMessage, res: ServerResponse) => {
     const url = req.url || '';
 
@@ -787,13 +1054,24 @@ export function createRestRouter(
     if (url.startsWith('/api/')) {
       applyCors(
         res,
-        corsHeaders(config.corsPolicy, req.headers.origin, 'GET, POST, OPTIONS', 'Content-Type'),
+        corsHeaders(
+          config.corsPolicy,
+          req.headers.origin,
+          // DELETE too: /api/reports/:id, /api/queue/items/:id, /api/layer-data,
+          // /api/config/ai-labels and /api/printers/:id are DELETE writes (ELEG-149).
+          'GET, POST, DELETE, OPTIONS',
+          'Content-Type, Authorization, X-Api-Key',
+        ),
       );
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
         return;
       }
+      // Write authentication (ELEG-139): the one gate for every /api/* route, including
+      // the presets and queue handlers below. After the CORS block, so a preflight (which
+      // never carries credentials) still answers and a 401 still carries CORS headers.
+      if (!guardHttp(req, res, config.serviceApiKey, isGatedApiWrite(req.method, url))) return;
     }
 
     if (presetsHandler && url.startsWith('/api/printers') && presetsHandler(req, res)) return;
@@ -823,6 +1101,11 @@ export function createRestRouter(
           // Which address the one connection targets — changes when a connection preset is
           // switched (ELEG-95). Already sent to every `/ws` client in `service_status`.
           printerIp: _bridge?.ip ?? null,
+          // Whether SERVICE_API_KEY gates writes (ELEG-139). Never the key itself.
+          writeAuth: config.serviceApiKey ? 'enabled' : 'disabled',
+          // The camera's state from evidence, with the reason (ELEG-178). Reading it
+          // never touches the camera: no probe, the firmware has few client slots.
+          camera: currentCameraHealth(config, store),
           clients: 0, // filled in by ws-transport if needed
           // Which commit is serving this. All-null on an unstamped deploy or a dev
           // run; cached, because this endpoint is polled.
@@ -1601,6 +1884,15 @@ export function createRestRouter(
       return;
     }
 
+    // No /api/ route matched: a JSON 404, never the SPA shell with a 200 (ELEG-171) — a
+    // typo'd or version-skewed call must fail here, not later at JSON.parse, and a
+    // monitor probing an /api/ URL must not read the HTML shell as healthy.
+    if (url.startsWith('/api/')) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found', path: url.split('?')[0] }));
+      return;
+    }
+
     // Not an API route — serve static files from dist/
     serveStatic(url, res);
 
@@ -1719,12 +2011,20 @@ function uploadChunk(
 }
 
 /** Stream a timelapse video from the printer, passing Range through so <video> can seek. */
-function proxyTimelapseVideo(
+export function proxyTimelapseVideo(
   req: IncomingMessage,
   res: ServerResponse,
   config: ServiceConfig,
-  target: TimelapseUpstream,
+  target: TimelapseUpstream | TimelapseDownload,
 ): void {
+  // A `download` target goes through the printer's authenticated /download endpoint (see
+  // buildPrinterDownloadPath for the finding and its provenance). That path carries the
+  // printer password, so it must not reach a log line, an error body or a response header:
+  // nothing below echoes `path`, and upstream errors are logged by message only.
+  const path =
+    'kind' in target
+      ? buildPrinterDownloadPath(config.printerPassword, target.fileName)
+      : target.path;
   const headers: Record<string, string> = {};
   const range = req.headers.range;
   if (typeof range === 'string') headers.Range = range;
@@ -1745,10 +2045,13 @@ function proxyTimelapseVideo(
     {
       hostname: config.printerIp,
       port: target.port,
-      path: target.path,
+      path,
       method: 'GET',
       headers,
       timeout: 15_000,
+      // The printer's libhv sends both Content-Length and Transfer-Encoding: chunked, which
+      // Node's strict parser rejects. The same server answers the direct path too.
+      insecureHTTPParser: true,
     },
     (up) => {
       const status = up.statusCode ?? 502;

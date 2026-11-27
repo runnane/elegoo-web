@@ -39,16 +39,20 @@ export const DEFAULT_MAIN = [
 /** All known card IDs */
 export const ALL_CARD_IDS = [...DEFAULT_SIDEBAR, ...DEFAULT_MAIN];
 
-/** Human-readable names for cards */
+/**
+ * Human-readable names for cards — shown in Settings → Panel Layout, and **the same
+ * string as the card's own `<h3>` in index.html**. They used to differ ("Toolhead" vs
+ * "Control", ELEG-174); `dashboard-markup-dom.test.ts` now fails when they drift.
+ */
 export const CARD_NAMES: Record<string, string> = {
   'temps-card': '🌡️ Temperatures',
   'canvas-card': '🎨 Canvas / AMS',
   'camera-card': '📷 Camera',
   'ai-card': '🤖 AI Monitor',
   'event-log-card': '📜 Event Log',
-  'gcode-preview-card': '📐 Layer Preview',
-  'toolhead-card': '🎯 Toolhead',
-  'fans-card': '🌀 Fans',
+  'gcode-preview-card': '📐 G-code Preview',
+  'toolhead-card': '🎯 Control',
+  'fans-card': '🌀 Fans & Light',
   'speed-flow-card': '⚡ Speed & Flow',
   'files-card': '📁 Files',
   'print-queue-card': '🗂️ Print Queue',

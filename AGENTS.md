@@ -19,19 +19,23 @@ Printer MQTT ←→ MqttBridge (singleton) ←→ StateStore
 ```
 
 Work is tracked in the **ELEG** project of our own control-plane portal, reached over
-the `respawn-control` MCP server. [`.mcp.json`](.mcp.json) wires it up with the portal
-endpoint **fixed in the file** (a deliberate choice, c834c18) and **no token** — this
-repository is public, so the token is the one thing that comes from the environment:
+the `respawn-control` MCP server. [`.mcp.json`](.mcp.json) stays tracked (untracking it
+would drop the tracker from every worktree session) but carries **no internal value**:
+this repository is public, so both the portal URL and the token are expanded from the
+environment — `"url": "${RESPAWN_MCP_URL}"` and `Bearer ${RESPAWN_MCP_TOKEN}` (ELEG-133).
+Set both under `env` in the **user-level** `~/.claude/settings.json`, which is the copy a
+worktree session sees — never in a file in this repo:
 
-```bash
-export RESPAWN_MCP_TOKEN='<api key>'
+```json
+{ "env": { "RESPAWN_MCP_URL": "<portal mcp url>", "RESPAWN_MCP_TOKEN": "<api key>" } }
 ```
 
-Set it in your shell profile (not in a file in this repo). There is no URL variable:
-nothing reads one, so exporting it has no effect. With the token unset or rejected the
-server answers 401 and the MCP server fails to connect — look at the token first, not
-the URL — and the `/`-commands below will tell you to fix it rather than guessing at
-issue state.
+How each fails differs, so read the symptom before the token. With `RESPAWN_MCP_URL`
+unset the config is rejected outright (`its url is not a valid URL`) and the tracker
+tools are simply absent. With the token unset or rejected the server answers 401 and the
+MCP server fails to connect. Either way the `/`-commands below will tell you to fix it
+rather than guessing at issue state. (ELEG-129 had briefly made the URL a literal in the
+file; the owner reversed that on 2026-11-25.)
 
 **The thing on the other end is a physical machine with heaters and motors.** That
 single fact is what makes this repo different from its siblings, and it has its own
@@ -47,9 +51,11 @@ pnpm dev:web               # frontend only
 pnpm dev:service           # service only (tsx watch)
 ```
 
-Node ≥ 22.13 (`engines` in `package.json`; `@types/node` is pinned `^22` to that floor), pnpm 11 — pinned by `packageManager` in `package.json`, and an older global
-`pnpm` switches to it by itself. There is no database and no container needed for
-development.
+Node ≥ 22.22.2 (`engines` in `package.json`, set by the dev-only `jsdom` 31 requirement; `@types/node` is pinned `^22` to that floor's major), pnpm 12 — pinned by `packageManager` in `package.json`. A pnpm 10 or 11 global switches
+to it by itself; a different pnpm 12+ global does **not**, because `pmOnFail: ignore`
+(which keeps `pnpm-lock.yaml` one YAML document, ELEG-138) also turns that switch off.
+`pnpm gates` fails on a pnpm major that differs from the pin and on any document marker
+in the lockfile. There is no database and no container needed for development.
 
 **Coming from a pnpm-10 `node_modules`** (any checkout from before ELEG-9): the first
 pnpm 11 install has to purge it, and **refuses to without a TTY** —
@@ -161,7 +167,7 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
   in the only place agents look. Same for `README.md`'s environment-variable table
   when `src/server/config.ts` gains a key.
 - **Secrets stay server-side and out of git.** `PRINTER_PASSWORD`,
-  `TELEGRAM_BOT_TOKEN`, `AI_VLM_API_KEY` are read from the environment
+  `TELEGRAM_BOT_TOKEN`, `AI_VLM_API_KEY`, `SERVICE_API_KEY` are read from the environment
   (`.env`, which is gitignored) at runtime — never hardcoded, never returned to the
   browser, never logged, and **placeholders only** in `.env.example`,
   `docker-compose.example.yml` and anything else committed. Mirrors the org
@@ -223,8 +229,11 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
 - **`IN_PRODUCTION` is real here, and merging is not it.** ELEG has
   `tracksProduction` on because production is a *separate step*: since ELEG-108
   (2026-09-16) the service runs as a Docker Compose stack rooted at
-  **`/opt/elegooweb`** (container `elegoo-web`, image `ghcr.io/runnane/elegoo-web:latest`)
-  — not the systemd unit, which is stopped and disabled and kept only for rollback. A
+  **`/opt/elegooweb`** on the production host (container `elegoo-web`, image
+  `ghcr.io/runnane/elegoo-web:latest`) — not the systemd unit, which is stopped and
+  disabled and kept only for rollback. **The production host is not necessarily the
+  machine you are on**: `ls /opt/elegooweb` first, and read a refused `localhost:8088`
+  on a machine without it as "not deployed here", not "production is down". A
   merged PR changes nothing that is running. See
   [`.agents/deployment.md`](.agents/deployment.md) — and note that performing the
   deploy is operator work.
@@ -243,7 +252,7 @@ Actions minutes (the private siblings do not, hence their self-hosted runners).
 
   | Action | Who runs it |
   | --- | --- |
-  | shell on this host, `docker compose`, reading `/opt/elegooweb`, `docker logs` | **them** — give exact commands, ask for output |
+  | shell on the production host, `docker compose`, reading `/opt/elegooweb`, `docker logs` | **them** — give exact commands, ask for output |
   | anything through an MCP tool or a tracker write | **you** — never "here are the MCP calls to make"; they have no client for it |
   | a printer command (temps, motion, print start/stop, emergency stop) | **them**, at or near the machine |
 

@@ -1,8 +1,11 @@
 /** Service status — compact header badge with click-to-expand dropdown + system info */
 
 import { $, escapeHtml } from './helpers';
+import { applyCameraStatus } from './camera-card';
 import type { PrinterState } from '../printer-state';
 import {
+  CAMERA_OK_STATES,
+  type CameraHealth,
   type MqttPhase,
   type VersionStampish,
   UNKNOWN_VERSION_LABEL,
@@ -31,7 +34,25 @@ export interface ServiceStatus {
   wsClients: number;
   telegram: string;
   ai: string;
+  /** A `CameraState` since ELEG-178; `available`/`unavailable` from an older server. */
   camera: string;
+  /**
+   * The reason and timestamps behind `camera` (ELEG-178). Optional for the same reason as
+   * `mqttPhase`: a browser can be holding a `service_status` from before this shipped.
+   */
+  cameraHealth?: CameraHealth;
+}
+
+/** Healthy camera readings: the evidence-derived ones, plus the pre-ELEG-178 value. */
+const CAMERA_OK: string[] = [...CAMERA_OK_STATES, 'available'];
+
+/** The Camera row's value: the state, and the reason when the server sent one. */
+export function cameraRowValue(s: Pick<ServiceStatus, 'camera' | 'cameraHealth'>): string {
+  const state = escapeHtml(s.camera);
+  const reason = s.cameraHealth?.reason;
+  return reason
+    ? `${state}<span class="svc-detail" title="${escapeHtml(reason)}"> — ${escapeHtml(reason)}</span>`
+    : state;
 }
 
 interface ServiceCheck {
@@ -67,6 +88,7 @@ let dropdownBound = false;
 export function updateServiceStatus(data: Record<string, unknown>): void {
   lastStatus = data as unknown as ServiceStatus;
   renderServiceStatus();
+  applyCameraStatus(lastStatus);
 }
 
 function formatUptime(seconds: number): string {
@@ -82,8 +104,55 @@ function isOk(state: string, okValues: string[]): boolean {
   return okValues.includes(state);
 }
 
-function dotHtml(ok: boolean): string {
-  return `<span class="status-dot ${ok ? 'status-dot-ok' : 'status-dot-err'}"></span>`;
+/**
+ * The states an indicator can be in. `disabled` is a service the operator switched off
+ * (the server reports it as `disabled`); `ok`/`err` are the healthy and unhealthy
+ * readings (an unstamped build is `err`, ELEG-48).
+ */
+export type IndicatorState = 'ok' | 'err' | 'disabled';
+
+/**
+ * State → non-colour cue (ELEG-130, WCAG 1.4.1). The glyph is drawn inside the dot and
+ * the label is its accessible name; colour stays as a secondary cue. The four glyphs must
+ * stay pairwise distinct — a test pins that.
+ */
+export function indicatorCue(state: IndicatorState): { glyph: string; label: string } {
+  switch (state) {
+    case 'ok':
+      return { glyph: '✓', label: 'OK' };
+    case 'err':
+      return { glyph: '✕', label: 'Unavailable' };
+    case 'disabled':
+      return { glyph: '–', label: 'Disabled' };
+  }
+}
+
+/** Reduce a service's reported value to an indicator state. */
+export function indicatorState(value: string, okValues: string[]): IndicatorState {
+  if (isOk(value, okValues)) return 'ok';
+  return value === 'disabled' ? 'disabled' : 'err';
+}
+
+const DOT_CLASS: Record<IndicatorState, string> = {
+  ok: 'status-dot-ok',
+  err: 'status-dot-err',
+  disabled: 'status-dot-off',
+};
+
+/** One indicator: glyph inside the dot, accessible name and tooltip from the cue. */
+function dotHtml(state: IndicatorState, name?: string): string {
+  const { glyph, label } = indicatorCue(state);
+  const text = name ? `${name}: ${label}` : label;
+  return `<span class="status-dot ${DOT_CLASS[state]}" role="img" aria-label="${escapeHtml(text)}" title="${escapeHtml(text)}"><span aria-hidden="true">${glyph}</span></span>`;
+}
+
+function stateTextHtml(state: IndicatorState): string {
+  return `<span class="svc-state">${indicatorCue(state).label}</span>`;
+}
+
+/** A dropdown row: indicator, service name, reported value, and the state as text. */
+function rowHtml(state: IndicatorState, name: string, value: string): string {
+  return `<div class="svc-item">${dotHtml(state, name)}<span class="svc-label">${escapeHtml(name)}</span><span class="svc-value">${value}</span>${stateTextHtml(state)}</div>`;
 }
 
 export function renderServiceStatus(): void {
@@ -124,7 +193,7 @@ export function renderServiceStatus(): void {
     { label: 'MQTT', state: s.mqtt, okValues: ['connected'] },
     { label: 'Telegram', state: s.telegram, okValues: ['running'] },
     { label: 'AI', state: s.ai, okValues: ['monitoring', 'idle'] },
-    { label: 'Camera', state: s.camera, okValues: ['available'] },
+    { label: 'Camera', state: s.camera, okValues: CAMERA_OK },
     { label: 'Printer', state: s.printerSn ? 'ok' : 'err', okValues: ['ok'] },
   ];
 
@@ -133,7 +202,9 @@ export function renderServiceStatus(): void {
 
   // Header badge: colored dots + count
   const allOk = healthy === total;
-  dotsEl.innerHTML = checks.map((c) => dotHtml(isOk(c.state, c.okValues))).join('');
+  dotsEl.innerHTML = checks
+    .map((c) => dotHtml(indicatorState(c.state, c.okValues), c.label))
+    .join('');
   countEl.textContent = `${healthy}/${total}`;
   badge.classList.toggle('svc-all-ok', allOk);
   badge.classList.toggle('svc-has-err', !allOk);
@@ -165,14 +236,14 @@ export function renderServiceStatus(): void {
   dropdown.innerHTML = `
     ${firmwareBanner}
     <div class="svc-list">
-      <div class="svc-item">${dotHtml(isOk(s.mqtt, ['connected']))}<span class="svc-label">MQTT</span><span class="svc-value">${mqttLabel}</span></div>
-      <div class="svc-item">${dotHtml(isOk(s.telegram, ['running']))}<span class="svc-label">Telegram</span><span class="svc-value">${s.telegram}</span></div>
-      <div class="svc-item">${dotHtml(isOk(s.ai, ['monitoring', 'idle']))}<span class="svc-label">AI</span><span class="svc-value">${s.ai}</span></div>
-      <div class="svc-item">${dotHtml(isOk(s.camera, ['available']))}<span class="svc-label">Camera</span><span class="svc-value">${s.camera}</span></div>
-      <div class="svc-item">${dotHtml(!!s.printerSn)}<span class="svc-label">Printer</span><span class="svc-value">${s.printerSn || 'unknown'}</span></div>
-      <div class="svc-item">${dotHtml(true)}<span class="svc-label">WS Clients</span><span class="svc-value">${s.wsClients}</span></div>
-      <div class="svc-item">${dotHtml(true)}<span class="svc-label">Uptime</span><span class="svc-value">${formatUptime(s.uptime)}</span></div>
-      <div class="svc-item">${dotHtml(version !== UNKNOWN_VERSION_LABEL)}<span class="svc-label">Version</span><span class="svc-value">${escapeHtml(version)}</span></div>
+      ${rowHtml(indicatorState(s.mqtt, ['connected']), 'MQTT', mqttLabel)}
+      ${rowHtml(indicatorState(s.telegram, ['running']), 'Telegram', s.telegram)}
+      ${rowHtml(indicatorState(s.ai, ['monitoring', 'idle']), 'AI', s.ai)}
+      ${rowHtml(indicatorState(s.camera, CAMERA_OK), 'Camera', cameraRowValue(s))}
+      ${rowHtml(s.printerSn ? 'ok' : 'err', 'Printer', escapeHtml(s.printerSn || 'unknown'))}
+      ${rowHtml('ok', 'WS Clients', String(s.wsClients))}
+      ${rowHtml('ok', 'Uptime', formatUptime(s.uptime))}
+      ${rowHtml(version === UNKNOWN_VERSION_LABEL ? 'err' : 'ok', 'Version', escapeHtml(version))}
     </div>
   `;
 }

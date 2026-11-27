@@ -13,6 +13,8 @@
  */
 
 import { CONNECTION_PRESETS_API_ENV } from '../types';
+import { apiWrite } from './api-key';
+import { confirmDialog } from './confirm-dialog';
 
 interface PresetView {
   id: string;
@@ -40,11 +42,13 @@ async function request(
   url: string,
   body?: unknown,
 ): Promise<{ ok: boolean; data: Record<string, unknown> }> {
-  const res = await fetch(url, {
+  const init: RequestInit = {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  };
+  // Writes carry the key and explain a 401 (ELEG-139); the GET list is open.
+  const res = method === 'GET' ? await fetch(url, init) : await apiWrite(url, init);
   let data: Record<string, unknown> = {};
   try {
     data = (await res.json()) as Record<string, unknown>;
@@ -70,29 +74,31 @@ export function mountPrinterPresets(root: HTMLElement): void {
   const errorOf = (data: Record<string, unknown>, fallback: string) =>
     typeof data.error === 'string' ? data.error : fallback;
 
-  const nameInput = el('input');
+  // `settings-input`, so they take the theme rather than the browser's light-grey
+  // disabled styling, which was unreadable in the dark theme (ELEG-174).
+  const nameInput = el('input', 'settings-input');
   nameInput.type = 'text';
   nameInput.maxLength = 64;
   nameInput.placeholder = 'Name';
   nameInput.setAttribute('aria-label', 'Printer name');
-  const ipInput = el('input');
+  const ipInput = el('input', 'settings-input');
   ipInput.type = 'text';
   ipInput.inputMode = 'decimal';
   ipInput.placeholder = 'IPv4 address';
   ipInput.setAttribute('aria-label', 'Printer IPv4 address');
-  const passwordInput = el('input');
+  const passwordInput = el('input', 'settings-input');
   passwordInput.type = 'password';
   passwordInput.autocomplete = 'new-password';
   passwordInput.placeholder = 'Access code (optional)';
   passwordInput.setAttribute('aria-label', 'Printer access code');
   const addButton = el('button', 'btn btn-sm btn-ghost', 'Add printer');
   addButton.type = 'button';
-  const formRow = el('div', 'settings-row');
+  const formRow = el('div', 'settings-row printer-presets-form');
   formRow.append(nameInput, ipInput, passwordInput, addButton);
   const lockedHint = el(
     'p',
     'settings-hint',
-    `Adding, removing and switching printers here is turned off. Set ${CONNECTION_PRESETS_API_ENV}=true in the service environment and restart to turn it on — the API has no authentication, so anyone who can reach this page could then re-point the service.`,
+    `Adding, removing and switching printers here is turned off. Set ${CONNECTION_PRESETS_API_ENV}=true in the service environment and restart to turn it on — and set SERVICE_API_KEY too, so those changes need the API key. Without a key, anyone who can reach the service could re-point it.`,
   );
   controls.append(formRow, lockedHint);
 
@@ -145,8 +151,9 @@ export function mountPrinterPresets(root: HTMLElement): void {
   }
 
   async function activate(p: PresetView): Promise<void> {
-    const confirmed = window.confirm(
+    const confirmed = await confirmDialog(
       `Switch the service to ${p.name} (${p.ip})?\n\nIt disconnects from the current printer and clears its charts, layer times and event log. Telegram, the AI monitor and Moonraker/OctoPrint clients all follow.`,
+      { title: 'Switch printer', confirmLabel: 'Switch', danger: true },
     );
     if (!confirmed) return;
     setStatus(`Switching to ${p.name}…`);
@@ -160,7 +167,12 @@ export function mountPrinterPresets(root: HTMLElement): void {
   }
 
   async function remove(p: PresetView): Promise<void> {
-    if (!window.confirm(`Remove the saved printer ${p.name} (${p.ip})?`)) return;
+    const confirmed = await confirmDialog(`Remove the saved printer ${p.name} (${p.ip})?`, {
+      title: 'Remove printer',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!confirmed) return;
     const { ok, data } = await request('DELETE', `/api/printers/${encodeURIComponent(p.id)}`);
     setStatus(ok ? `Removed ${p.name}.` : errorOf(data, 'Remove failed.'));
     void refresh();

@@ -14,9 +14,13 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { StateStore } from './state-store.js';
 import type { MqttBridge } from './mqtt-bridge.js';
 import type { ServiceConfig } from './config.js';
-import type { FanInfo } from '../types.js';
+import { type FanInfo, isPaused } from '../types.js';
 import { getLogger } from './logger.js';
 import { otaDisplayMessage } from './ota-status.js';
+import { authorize, extractKey } from './write-auth.js';
+import { printBusyRefusalAll } from './print-guard.js';
+import { translateGcode } from './printer-commands.js';
+import { isMoonrakerHttpWrite, MOONRAKER_UNAUTHORIZED } from './moonraker-auth.js';
 import { loadavg, freemem } from 'os';
 
 const _log = getLogger('Moonraker');
@@ -146,7 +150,10 @@ export function queryObjects(
             s?.gcode_move?.z ?? 0,
             s?.gcode_move?.extruder ?? s?.gcode_move?.e ?? 0,
           ],
-          speed: (s?.gcode_move?.speed ?? 0) * 60, // mm/s → mm/min
+          // The CC2 already reports gcode_move.speed in mm/min (a live 12000 = F12000 =
+          // 200 mm/s; /api/metrics exports it as elegoo_speed_mm_per_min), and Moonraker's
+          // gcode_move.speed is mm/min too, so it passes through unconverted (ELEG-187).
+          speed: s?.gcode_move?.speed ?? 0,
           speed_factor: 1,
         });
         break;
@@ -155,9 +162,8 @@ export function queryObjects(
         const ms = s?.machine_status;
         const ps = s?.print_status;
         let state = 'standby';
-        if (ms?.status === 2) state = 'printing';
-        else if (ms?.status === 3 || ms?.sub_status === 2502 || ms?.sub_status === 2505)
-          state = 'paused';
+        if (isPaused(ms?.status, ms?.sub_status)) state = 'paused';
+        else if (ms?.status === 2) state = 'printing';
         else if (ms?.sub_status === 2077) state = 'complete';
         else if ((ms?.exception_status?.length ?? 0) > 0) state = 'error';
         result.print_stats = pick({
@@ -176,7 +182,7 @@ export function queryObjects(
 
       case 'virtual_sdcard': {
         const ms = s?.machine_status;
-        const isPrinting = ms?.status === 2 || ms?.status === 3;
+        const isPrinting = ms?.status === 2;
         result.virtual_sdcard = pick({
           file_path: s?.print_status?.filename ?? '',
           progress: isPrinting ? (ms?.progress ?? 0) / 100 : 0,
@@ -265,6 +271,20 @@ export function createMoonrakerRouter(
     const query = parseQuery(fullUrl);
     // Strip the /moonraker prefix
     const path = urlPath.replace(/^\/moonraker/, '');
+
+    // Write auth (ELEG-142): one decision for every route under this mount, before any of
+    // them runs. A wrong key is refused even on a read; no key is refused only on a write.
+    // The key is read per request, never cached. Returning true matters: index.ts would
+    // otherwise fall through to the REST handler on a response already ended.
+    const verdict = authorize(
+      config.serviceApiKey,
+      extractKey(req),
+      isMoonrakerHttpWrite(method, path, query),
+    );
+    if (verdict !== 'ok') {
+      jsonRaw(res, { error: MOONRAKER_UNAUTHORIZED }, 401);
+      return true;
+    }
 
     // --- GET /server/info ---
     if (path === '/server/info' && method === 'GET') {
@@ -415,26 +435,16 @@ export function createMoonrakerRouter(
       readBody(req)
         .then((body) => {
           const parsed = JSON.parse(body);
-          const script = (parsed.script || '').trim().toUpperCase();
-          // Handle common gcodes
-          if (script === 'G28' || script.startsWith('G28 ')) {
-            bridge.sendCommand(1026, { axes: ['x', 'y', 'z'] });
-          } else if (script.startsWith('M104 ')) {
-            const match = script.match(/S(\d+)/);
-            if (match) {
-              bridge.sendCommand(1028, { target: 'extruder', temperature: parseInt(match[1]) });
-            }
-          } else if (script.startsWith('M140 ')) {
-            const match = script.match(/S(\d+)/);
-            if (match) {
-              bridge.sendCommand(1028, { target: 'heater_bed', temperature: parseInt(match[1]) });
-            }
-          } else if (script === 'M112') {
-            bridge.sendCommand(1022, {});
-          } else if (script === 'TURN_OFF_HEATERS') {
-            bridge.sendCommand(1028, { target: 'extruder', temperature: 0 });
-            bridge.sendCommand(1028, { target: 'heater_bed', temperature: 0 });
+          // Translate first, send after: the print guard (ELEG-176) decides the whole
+          // script up front, so TURN_OFF_HEATERS mid-print sends neither half. The
+          // translator is the :7125 server's too (ELEG-180), so the two cannot drift.
+          const sends = translateGcode(String(parsed.script || ''));
+          const busy = printBusyRefusalAll(sends, store.status);
+          if (busy) {
+            errorResponse(res, busy, 409);
+            return;
           }
+          for (const [m, p] of sends) bridge.sendCommand(m, p);
           json(res, 'ok');
         })
         .catch(() => errorResponse(res, 'Invalid JSON'));

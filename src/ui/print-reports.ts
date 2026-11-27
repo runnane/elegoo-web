@@ -3,6 +3,8 @@
  */
 
 import { $, escapeHtml, formatTime, fetchTimeout } from './helpers';
+import { apiWrite } from './api-key';
+import { confirmDialog } from './confirm-dialog';
 import { type ListControls, createListControls } from './list-controls';
 import { nonZero } from './list-sort';
 
@@ -135,7 +137,7 @@ function renderReportList(): void {
         <div class="report-actions">
           <a href="/api/reports/${encodeURIComponent(r.id)}/pdf" class="btn btn-sm btn-primary" title="Download PDF report" download>📄 PDF</a>
           <a href="/api/reports/${encodeURIComponent(r.id)}" class="btn btn-sm btn-ghost" title="View raw JSON data" target="_blank">{ }</a>
-          <button class="btn btn-sm btn-danger report-delete-btn" data-report-id="${escapeHtml(r.id)}" title="Delete report">🗑</button>
+          <button class="btn btn-sm btn-ghost report-delete-btn" data-report-id="${escapeHtml(r.id)}" title="Delete report">🗑</button>
         </div>
       </div>`;
   }
@@ -146,9 +148,15 @@ function renderReportList(): void {
   container.querySelectorAll('.report-delete-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const id = (btn as HTMLElement).dataset.reportId;
-      if (!id || !confirm(`Delete report for this print?`)) return;
+      if (!id) return;
+      const ok = await confirmDialog('Delete report for this print?', {
+        title: 'Delete report',
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!ok) return;
       try {
-        const res = await fetchTimeout(`/api/reports/${encodeURIComponent(id)}`, {
+        const res = await apiWrite(`/api/reports/${encodeURIComponent(id)}`, {
           method: 'DELETE',
         });
         if (res.ok) {

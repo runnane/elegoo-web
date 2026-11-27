@@ -47,6 +47,14 @@
   --bed-color: #f59e0b;
   --border: #2a2b3d;
   --border-subtle: #1f2033;
+  /*
+   * Form-control outline (ELEG-174). `--border` is about 1.3:1 against `--bg-input`,
+   * which left the API-key field with no visible edge; this is about 3.5:1, the WCAG
+   * non-text minimum with some margin.
+   */
+  --border-input: #6b6e85;
+  /* Native controls (and anything unstyled) render dark too, not light-grey. */
+  color-scheme: dark;
   --radius: 10px;
   --radius-sm: 6px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.24), 0 1px 2px rgba(0, 0, 0, 0.16);
@@ -124,6 +132,8 @@
   --bed-color: #b45309;
   --border: #d6d8e2;
   --border-subtle: #e8e9f0;
+  --border-input: #8a8da0;
+  color-scheme: light;
   --shadow: 0 1px 3px rgba(16, 18, 32, 0.1), 0 1px 2px rgba(16, 18, 32, 0.06);
   --shadow-lg: 0 4px 12px rgba(16, 18, 32, 0.12), 0 2px 4px rgba(16, 18, 32, 0.08);
 
@@ -348,6 +358,11 @@ body {
   margin-bottom: 20px;
   color: var(--accent);
 }
+.connect-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
 .form-group {
   margin-bottom: 16px;
 }
@@ -397,6 +412,16 @@ body {
 }
 .btn:active {
   transform: scale(0.97);
+}
+/* There was no disabled look at all, so a disabled button — the calibration actions
+   while printing, a command in flight, the print lock (ELEG-163) — looked live. */
+.btn:disabled,
+.btn:disabled:hover,
+.btn:disabled:active {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
 }
 .btn-primary {
   background: var(--accent);
@@ -514,6 +539,14 @@ body {
   right: -4px;
   top: 0;
   bottom: 0;
+}
+
+/* A grid item's min-width defaults to its min-content, so one wide card (a long log
+   line, a filename) widened the whole track. Long content scrolls or wraps inside its
+   own card instead (ELEG-164). */
+.dashboard-main > *,
+.dashboard-sidebar > * {
+  min-width: 0;
 }
 
 .dashboard-main {
@@ -1152,6 +1185,28 @@ body {
   color: var(--text-muted);
   font-style: italic;
 }
+/* Unavailable / connecting state (ELEG-166): sits over the feed, built once by camera-card.ts */
+.camera-unavailable {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  background: #000;
+  color: var(--text-muted);
+}
+.camera-unavailable-title {
+  color: var(--text-primary, #fff);
+}
+.camera-unavailable-note .camera-unavailable-title {
+  font-weight: normal;
+  font-style: italic;
+  color: var(--text-muted);
+}
 
 /* Camera fullscreen overlay */
 .camera-modal {
@@ -1484,10 +1539,12 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+/* Value and unit stay on one line; the items wrap instead (ELEG-174). */
 .speed-flow-value {
   font-size: 16px;
   font-family: var(--font-mono);
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 /* Filament usage breakdown */
@@ -2010,9 +2067,22 @@ body {
 
 /* Responsive: mobile */
 @media (max-width: 800px) {
+  /* minmax(0, 1fr), not 1fr: a bare 1fr is minmax(auto, 1fr), so the one column could
+     never be narrower than its widest card's min-content. The MQTT log's rows held it at
+     ~1556px on a 390px phone, clipping every main-area card (ELEG-164). */
   .dashboard-sidebar,
   .dashboard-main {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .slog-row-header {
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 0;
+  }
+  .slog-time,
+  .slog-method,
+  .slog-topic {
+    min-width: 0;
   }
   .print-status-top {
     flex-direction: column;
@@ -2191,6 +2261,15 @@ body {
 
 /* Responsive: narrow mobile */
 @media (max-width: 480px) {
+  /* All five tabs share the row instead of scrolling Help off-screen (ELEG-164). */
+  .main-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 2px;
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: normal;
+  }
   .dashboard-sidebar,
   .dashboard-main {
     padding: 6px;
@@ -2239,7 +2318,7 @@ body {
 }
 .log-filter-input {
   background: var(--bg-input);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-input);
   border-radius: 4px;
   color: var(--text-primary);
   padding: 4px 8px;
@@ -2471,11 +2550,18 @@ body {
 
 .log-select {
   background: var(--bg-input);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-input);
   border-radius: 4px;
   color: var(--text-primary);
   padding: 4px 8px;
   font-size: 0.8rem;
+}
+/* Placeholders at --text-secondary: --text-muted is under 3:1 on --bg-input (ELEG-174). */
+.log-select::placeholder,
+.log-filter-input::placeholder,
+.settings-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
 }
 
 .log-status-bar {
@@ -2851,18 +2937,41 @@ body {
   color: var(--text-primary);
   margin-left: auto;
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The camera's reason (ELEG-178): secondary to the state it explains. */
+.svc-detail {
+  color: var(--text-muted);
+  font-weight: 400;
 }
 .status-dot {
-  width: 7px;
-  height: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
 }
 .status-dot-ok {
   background: var(--success);
 }
 .status-dot-err {
   background: var(--danger);
+}
+.status-dot-off {
+  background: var(--text-muted);
+}
+.svc-state {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  min-width: 5.5em;
+  text-align: right;
 }
 .svc-loading {
   color: var(--text-muted);
@@ -3180,6 +3289,7 @@ body {
 }
 
 /* ─── Print History ──────────────────────────── */
+/* Shared with #print-reports-entries (ELEG-173) so both lists scroll inside their card. */
 .print-history-entries {
   max-height: 400px;
   overflow-y: auto;
@@ -3364,6 +3474,12 @@ body {
   color: var(--text-muted);
   margin: 0 0 8px;
 }
+.spool-calc-error {
+  color: var(--danger);
+}
+.spool-calc-inputs input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
 .settings-hint code {
   background: var(--bg-input);
   padding: 1px 4px;
@@ -3445,15 +3561,29 @@ body {
 }
 .settings-input {
   background: var(--bg-input);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-input);
   border-radius: var(--radius-sm);
-  color: var(--text);
+  color: var(--text-primary);
   padding: 6px 10px;
   font-size: 0.85rem;
   width: 100%;
 }
+/* Disabled reads as disabled through the surface and cursor, not by fading the text
+   below a readable contrast (ELEG-174). */
 .settings-input:disabled {
-  opacity: 0.5;
+  background: var(--bg-surface);
+  border-style: dashed;
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+/* The Printer connections add-form: three inputs and a button in one row. */
+.printer-presets-form {
+  flex-wrap: wrap;
+}
+.printer-presets-form .settings-input {
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 0;
 }
 .settings-input-row {
   display: flex;
@@ -3465,21 +3595,40 @@ body {
 }
 
 /* ─── AI Label Config ──────────────────────────────── */
-/* ─── AI Label Config ──────────────────────────────── */
 .ai-label-config-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
 }
+/*
+ * A wrapping row, not a fixed grid (ELEG-174). The grid had six columns for seven fields,
+ * so the delete button wrapped onto a row of its own, and its fixed widths truncated the
+ * Group and Severity selects ("Print in Prog", "CRITI"). The label textarea takes the
+ * whole first line; the other fields share the next one and wrap when it is narrow.
+ */
 .ai-label-config-row {
-  display: grid;
-  grid-template-columns: 1fr 120px 100px 70px 70px 36px;
-  gap: 6px;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: flex-end;
   padding: 8px;
   background: var(--bg-input);
   border-radius: var(--radius-sm);
+}
+.ai-label-config-field {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.ai-label-config-label {
+  flex-basis: 100%;
+}
+.ai-label-config-num {
+  flex: 0 0 72px;
+}
+.ai-label-config-delete {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .ai-label-config-delete .btn {
   color: var(--danger);
@@ -3502,16 +3651,10 @@ body {
 }
 .ai-label-config-field textarea.settings-input {
   resize: vertical;
-  min-height: 36px;
+  /* three lines of text plus the padding and border, so the third line is not clipped */
+  min-height: calc(3 * 1.3em + 10px);
+  line-height: 1.3;
   font-family: inherit;
-}
-@media (max-width: 700px) {
-  .ai-label-config-row {
-    grid-template-columns: 1fr 1fr;
-  }
-  .ai-label-config-label {
-    grid-column: 1 / -1;
-  }
 }
 
 /* ── Spool Calculator ── */
@@ -3733,6 +3876,23 @@ body {
   display: flex;
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+/* In-app confirmation (ELEG-165): messages carry \n line breaks from the old confirm() text. */
+.confirm-dialog {
+  max-width: 400px;
+}
+.confirm-dialog-message {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.confirm-dialog-emergency {
+  border-color: var(--danger, #e5484d);
+  box-shadow: 0 8px 32px rgba(229, 72, 77, 0.45);
+}
+.confirm-dialog-emergency .print-dialog-header {
+  color: var(--danger, #e5484d);
+  border-bottom-color: var(--danger, #e5484d);
 }
 .print-dialog-header {
   display: flex;

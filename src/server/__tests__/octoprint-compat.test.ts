@@ -80,12 +80,13 @@ function stubConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     printerIp: '203.0.113.5',
     servicePort: 8088,
     cameraEnabled: false,
+    serviceApiKey: '',
     ...overrides,
   } as unknown as ServiceConfig;
 }
 
 function fakeReq(url: string, method = 'GET'): IncomingMessage {
-  return { url, method } as unknown as IncomingMessage;
+  return { url, method, headers: {} } as unknown as IncomingMessage;
 }
 
 function fakeRes(): { res: ServerResponse; status: () => number; body: () => unknown } {
@@ -136,14 +137,14 @@ describe('getOctoPrintState — CC2 machine_status/sub_status → OctoPrint stat
     expect(r.flags.ready).toBe(false);
   });
 
-  it('paused via machine_status 3 → Paused', () => {
+  it('machine_status 3 (Loading Filament) is not Paused and not printing', () => {
     const s = makeStore();
     s.status = baseStatus({
       machine_status: { status: 3, sub_status: 0, exception_status: [], progress: 40 },
     });
     const r = getOctoPrintState(s);
-    expect(r.text).toBe('Paused');
-    expect(r.flags.paused).toBe(true);
+    expect(r.text).toBe('Operational');
+    expect(r.flags.paused).toBe(false);
     expect(r.flags.printing).toBe(false);
   });
 
@@ -159,10 +160,10 @@ describe('getOctoPrintState — CC2 machine_status/sub_status → OctoPrint stat
     expect(r.flags.printing).toBe(false);
   });
 
-  it('paused via sub_status 2505 → Paused', () => {
+  it('paused via sub_status 2505 under machine_status 2 → Paused', () => {
     const s = makeStore();
     s.status = baseStatus({
-      machine_status: { status: 1, sub_status: 2505, exception_status: [], progress: 0 },
+      machine_status: { status: 2, sub_status: 2505, exception_status: [], progress: 0 },
     });
     expect(getOctoPrintState(s).text).toBe('Paused');
   });
@@ -318,10 +319,10 @@ describe('createOctoPrintRouter — REST endpoints', () => {
     expect(result.progress.printTimeLeft).toBeNull();
   });
 
-  it('/api/job: progress stays populated while paused (status 3) — its own isPrinting includes paused', () => {
+  it('/api/job: progress stays populated while paused (status 2 + 2502) — its own isPrinting includes paused', () => {
     const s = makeStore();
     s.status = baseStatus({
-      machine_status: { status: 3, sub_status: 0, exception_status: [], progress: 63 },
+      machine_status: { status: 2, sub_status: 2502, exception_status: [], progress: 63 },
     });
     const router = createOctoPrintRouter(s, stubBridge(), stubConfig());
     const { res, body } = fakeRes();

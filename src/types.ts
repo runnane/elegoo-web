@@ -88,6 +88,47 @@ export interface ExternalDevice {
   type: string;
 }
 
+/**
+ * The camera's health, derived from evidence rather than from a frame cache (ELEG-178).
+ * Computed by `deriveCameraHealth` in `src/server/camera-health.ts`, in this precedence:
+ *
+ * - `disabled` — `CAMERA_ENABLED` is false; nothing is attempted.
+ * - `streaming` — a real frame arrived within the last `STREAMING_WINDOW_MS`.
+ * - `unreachable` — the most recent attempt (stream or snapshot) failed after the last
+ *   frame; `reason` says how (`HTTP 503`, a timeout, a refused connection).
+ * - `connecting` — an attempt is open and no frame has arrived yet. Deliberately **not**
+ *   streaming: a connection that never delivers must not read as a working camera.
+ * - `idle` — the connected printer reports `external_device.camera: true` and nothing is
+ *   pulling frames. Not an error: the upstream is opened only on demand.
+ * - `absent` — the connected printer reports no camera.
+ * - `unknown` — no frame, no failure, and no printer report (MQTT not connected, so the
+ *   store's `external_device` is a stale replay and is not trusted).
+ */
+export type CameraState =
+  | 'disabled'
+  | 'streaming'
+  | 'unreachable'
+  | 'connecting'
+  | 'idle'
+  | 'absent'
+  | 'unknown';
+
+/** The states the service-status panel counts as healthy. */
+export const CAMERA_OK_STATES: readonly CameraState[] = ['streaming', 'idle'];
+
+export interface CameraHealth {
+  state: CameraState;
+  /** One sentence a human can read: why the camera is in this state. */
+  reason: string;
+  /** Epoch ms of the last real frame, from the stream or a snapshot. */
+  lastFrameAt: number | null;
+  /** Epoch ms and text of the last failed attempt. */
+  lastFailureAt: number | null;
+  lastFailure: string | null;
+  /** `external_device.camera` from a connected printer; null when not connected. */
+  printerReportsCamera: boolean | null;
+}
+
 export interface CanvasTray {
   tray_id: number;
   brand: string;
@@ -507,6 +548,38 @@ export function powerLossState(
   if (subStatus === SUB_POWER_LOSS_RESUMING) return 'resuming';
   if (subStatus === SUB_POWER_LOSS_RESUMED) return 'resumed';
   return 'awaiting_decision';
+}
+
+// ─── Job active (ELEG-163 UI lock, ELEG-176 server guard) ─────────────
+
+/**
+ * `machine_status.status` values during which a job owns the machine. Shared by the SPA's
+ * print lock and the server's print guard, so the two cannot disagree on what "printing"
+ * means. Paused is a sub-status of 2, not a status of its own (3 is Loading Filament).
+ */
+const JOB_STATUSES = new Set([
+  2, // Printing (paused is a sub-status of this)
+  STATUS_POWER_LOSS_RECOVERY, // 15 — an interrupted job awaiting resume/cancel
+]);
+
+/** True while the printer has a job that a motion or heater command could ruin. */
+export function isJobActive(status: PrinterStatus | null | undefined): boolean {
+  const s = status?.machine_status?.status;
+  return s != null && JOB_STATUSES.has(s);
+}
+
+/** Sub-statuses under status 2 that mean the job is paused: 2502 Paused, 2505 Filament Interruption. */
+const PAUSED_SUB_STATUSES = new Set([2502, 2505]);
+
+/**
+ * True when a job is paused: status 2 (Printing) with a paused sub-status. Status 3 is Loading
+ * Filament, never a pause, and a paused sub-status outside status 2 is not a paused job.
+ */
+export function isPaused(
+  status: number | null | undefined,
+  subStatus: number | null | undefined,
+): boolean {
+  return status === 2 && subStatus != null && PAUSED_SUB_STATUSES.has(subStatus);
 }
 
 // ─── Command result codes (`error_code` on a method response) ────────

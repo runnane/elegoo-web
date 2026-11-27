@@ -4,7 +4,25 @@
  *
  * Provides the same interface as the old CC2MqttClient so the UI
  * modules don't need to change.
+ *
+ * Write auth (ELEG-140): when a key is stored in Settings, it goes to the service as an
+ * `{type:'auth', key}` frame on every (re)connect, and again before the next command if
+ * the stored key has changed since — so a key saved mid-session takes effect without a
+ * reconnect. A gated command sent without it comes back as `command_refused` and is
+ * explained with the same message as a REST 401. A `command_refused` with `code: 'busy'`
+ * is the print guard instead (ELEG-176) and toasts the server's reason.
  */
+
+import { NEEDS_API_KEY_MESSAGE, getApiKey } from './ui/api-key';
+import { toast } from './ui/toast';
+
+/**
+ * Refusals not worth a toast: methods the SPA sends by itself on every page load that the
+ * service's default-deny list does not (yet) admit. An anonymous viewer just goes without
+ * that panel; telling them on every load that "this needs the API key" for something they
+ * never asked for would be noise. See DENIED_BY_DEFAULT in src/server/method-policy.ts.
+ */
+const SILENT_REFUSALS = new Set([2006]);
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -70,6 +88,9 @@ export class WsClient {
   private shouldReconnect = true;
   private _sn = '';
   private _printerIp = '';
+  /** The key sent on the current socket (`null` before any), so a change is re-sent. */
+  private sentKey: string | null = null;
+  private lastRefusalToast = 0;
   private opts: WsClientOptions;
 
   constructor(opts: WsClientOptions) {
@@ -83,6 +104,9 @@ export class WsClient {
 
     this.ws.onopen = () => {
       this.reconnectDelay = 1000;
+      // A new socket is a new, unauthorised connection on the service.
+      this.sentKey = null;
+      this.syncAuth();
       // Don't set 'connected' yet — wait for init message
     };
 
@@ -243,6 +267,24 @@ export class WsClient {
         break;
       }
 
+      case 'command_refused': {
+        const method = msg.method as number;
+        // ELEG-176: refused because a print is running, not because of the key. Telling
+        // a printing user to enter an API key would send them the wrong way, so the
+        // server's own reason is shown. Any other (or absent) code keeps the key message,
+        // which is what an older server that sends no `code` means.
+        const busy = msg.code === 'busy';
+        if (!busy && SILENT_REFUSALS.has(method)) break;
+        // One toast for a burst (a card firing several gated commands at once).
+        const now = Date.now();
+        if (now - this.lastRefusalToast > 3000) {
+          this.lastRefusalToast = now;
+          const reason = typeof msg.reason === 'string' && msg.reason ? msg.reason : null;
+          toast(busy && reason ? reason : NEEDS_API_KEY_MESSAGE, 'error');
+        }
+        break;
+      }
+
       case 'zone_change': {
         this.opts.onZoneChange?.(
           msg as unknown as { from: string; to: string; x: number; y: number; timestamp: number },
@@ -254,7 +296,21 @@ export class WsClient {
 
   sendCommand(method: number, params: Record<string, unknown>): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.syncAuth();
     this.ws.send(JSON.stringify({ type: 'command', method, params }));
+  }
+
+  /**
+   * Send the stored key if this socket has not seen it yet. Frames arrive in order, so an
+   * auth frame sent here is processed before the command that follows it. A key cleared
+   * in Settings is sent as `''`, which de-authorises the connection.
+   */
+  private syncAuth(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const key = getApiKey();
+    if (key === (this.sentKey ?? '')) return;
+    this.ws.send(JSON.stringify({ type: 'auth', key }));
+    this.sentKey = key;
   }
 
   disconnect(): void {

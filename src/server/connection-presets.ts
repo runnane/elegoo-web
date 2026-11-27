@@ -17,7 +17,8 @@
  *   the CC2 the password is the printer's own access code (it is the MQTT password *and*
  *   the `X-Token` on its HTTP API), so one value cannot be assumed to fit every machine.
  *   A saved preset carries its own password, or the published vendor default. It never
- *   inherits the environment's: the REST API that creates presets is unauthenticated, and
+ *   inherits the environment's: the REST API that creates presets is unauthenticated
+ *   whenever `SERVICE_API_KEY` is unset (ELEG-139), and
  *   inheriting would let anyone who can reach it add a preset pointing at an address they
  *   control and receive the real access code on the next switch.
  *
@@ -444,7 +445,9 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
  *
  * Deliberately **not** on `/mcp`, Moonraker, OctoPrint, Telegram or the WebSocket: the
  * service is unauthenticated, and re-pointing it moves every consumer at once and makes
- * it dial an address a request chose. Writes are off unless the operator opts in.
+ * it dial an address a request chose. Writes are off unless the operator opts in, and
+ * when `SERVICE_API_KEY` is set they also need the key — checked by `rest-api.ts`'s
+ * `/api/*` write gate before this handler runs (ELEG-139).
  *
  * Returns false when the URL is not one of these routes.
  */
@@ -468,7 +471,7 @@ export function handlePresetsRequest(
     if (!deps.writable) {
       throw new PresetError(
         403,
-        `Changing printer presets over the API is disabled. Set ${CONNECTION_PRESETS_API_ENV}=true to enable it — the API has no authentication.`,
+        `Changing printer presets over the API is disabled. Set ${CONNECTION_PRESETS_API_ENV}=true to enable it (and set SERVICE_API_KEY so the change needs the key).`,
       );
     }
     if (!id) {

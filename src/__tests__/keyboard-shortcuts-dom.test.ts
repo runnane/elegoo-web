@@ -5,7 +5,7 @@
  * `keymap.test.ts` covers the pure resolution exhaustively; this file proves the
  * *wiring* actually reaches the real, already-tested confirmation path rather than a
  * stand-in for it. `bindControls` here is the genuine `controls.ts` implementation —
- * not mocked — so `btn-stop`'s `confirm()` gate and `btn-home-all`'s guardedSend are
+ * not mocked — so `btn-stop`'s confirmation gate and `btn-home-all`'s guardedSend are
  * the real ones a person clicking the button would hit. Both a printer button's DOM id
  * and `keyboard-shortcuts.ts`'s reference to it are strings that could drift apart
  * silently (AGENTS.md's "a string inside a string" trap); this file is what would go
@@ -66,6 +66,19 @@ function press(key: string, opts: Partial<KeyboardEventInit> = {}): void {
   );
 }
 
+function dialogOpen(): boolean {
+  return document.getElementById('confirm-dialog-overlay') !== null;
+}
+
+function answer(which: 'confirm' | 'cancel'): void {
+  (document.getElementById(`confirm-dialog-${which}`) as HTMLButtonElement).click();
+}
+
+/** Let the awaiting click handler continue after the dialog settles. */
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('keyboard shortcuts — DOM wiring', () => {
   let sendCommand: ReturnType<
     typeof vi.fn<(method: number, params: Record<string, unknown>) => void>
@@ -75,7 +88,7 @@ describe('keyboard shortcuts — DOM wiring', () => {
     mountLayout();
     sendCommand = vi.fn<(method: number, params: Record<string, unknown>) => void>();
     const client: CommandSender = { sendCommand, printerIp: '10.0.0.1' };
-    bindControls(client); // real click handlers: throttle, in-flight guard, confirm()
+    bindControls(client); // real click handlers: throttle, in-flight guard, confirmation
     bindKeyboardShortcuts();
   });
 
@@ -127,21 +140,17 @@ describe('keyboard shortcuts — DOM wiring', () => {
 
   it('Shift+P pauses immediately — no confirmation, but Shift is required', () => {
     sendCommand.mockClear();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     press('p', { shiftKey: true });
     expect(sendCommand).toHaveBeenCalledWith(1021, {});
-    expect(confirmSpy).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    expect(dialogOpen()).toBe(false);
     onCommandResponse(1021);
   });
 
   it('Shift+R resumes immediately — no confirmation, but Shift is required', () => {
     sendCommand.mockClear();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     press('r', { shiftKey: true });
     expect(sendCommand).toHaveBeenCalledWith(1023, {});
-    expect(confirmSpy).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    expect(dialogOpen()).toBe(false);
     onCommandResponse(1023);
   });
 
@@ -151,19 +160,47 @@ describe('keyboard shortcuts — DOM wiring', () => {
     expect(sendCommand).not.toHaveBeenCalled();
   });
 
-  it('Shift+S sends nothing until the confirmation is accepted', () => {
+  it('Shift+S sends nothing until the confirmation is accepted', async () => {
     sendCommand.mockClear();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     press('s', { shiftKey: true });
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(dialogOpen()).toBe(true);
     expect(sendCommand).not.toHaveBeenCalled();
 
-    confirmSpy.mockReturnValue(true);
+    // Cancelling the dialog still sends nothing.
+    answer('cancel');
+    await flush();
+    expect(dialogOpen()).toBe(false);
+    expect(sendCommand).not.toHaveBeenCalled();
+
     press('s', { shiftKey: true });
+    expect(sendCommand).not.toHaveBeenCalled();
+    answer('confirm');
+    await flush();
     expect(sendCommand).toHaveBeenCalledWith(1022, {});
 
-    confirmSpy.mockRestore();
     onCommandResponse(1022);
+  });
+
+  it('Escape on the stop confirmation cancels it and sends nothing', async () => {
+    sendCommand.mockClear();
+    press('s', { shiftKey: true });
+    expect(dialogOpen()).toBe(true);
+    press('Escape');
+    await flush();
+    expect(dialogOpen()).toBe(false);
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('a shortcut typed while a confirmation is open does not stack another or send', async () => {
+    sendCommand.mockClear();
+    press('s', { shiftKey: true });
+    expect(dialogOpen()).toBe(true);
+    press('h', { shiftKey: true });
+    press('p', { shiftKey: true });
+    expect(document.querySelectorAll('#confirm-dialog-overlay')).toHaveLength(1);
+    expect(sendCommand).not.toHaveBeenCalled();
+    answer('cancel');
+    await flush();
   });
 
   it('bare "h" (no Shift) does not home the axes', () => {
@@ -172,43 +209,41 @@ describe('keyboard shortcuts — DOM wiring', () => {
     expect(sendCommand).not.toHaveBeenCalled();
   });
 
-  it('Shift+H sends nothing until the confirmation is accepted', () => {
+  it('Shift+H sends nothing until the confirmation is accepted', async () => {
     sendCommand.mockClear();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     press('h', { shiftKey: true });
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(dialogOpen()).toBe(true);
+    expect(sendCommand).not.toHaveBeenCalled();
+    answer('cancel');
+    await flush();
     expect(sendCommand).not.toHaveBeenCalled();
 
-    confirmSpy.mockReturnValue(true);
     press('h', { shiftKey: true });
+    answer('confirm');
+    await flush();
     expect(sendCommand).toHaveBeenCalledWith(1026, { homed_axes: 'xyz' });
 
-    confirmSpy.mockRestore();
     onCommandResponse(1026);
   });
 
-  it('a held (repeated) Shift+S never re-sends the stop command', () => {
+  it('a held (repeated) Shift+S never opens the dialog or re-sends the stop command', () => {
     sendCommand.mockClear();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     press('s', { shiftKey: true, repeat: true });
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(dialogOpen()).toBe(false);
     expect(sendCommand).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it('never fires a printer action while a text input has focus', () => {
     sendCommand.mockClear();
     const filter = document.getElementById('files-filter') as HTMLInputElement;
     filter.focus();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     press('p', { shiftKey: true });
     press('s', { shiftKey: true });
 
     expect(sendCommand).not.toHaveBeenCalled();
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(dialogOpen()).toBe(false);
 
-    confirmSpy.mockRestore();
     filter.blur();
   });
 
@@ -216,14 +251,12 @@ describe('keyboard shortcuts — DOM wiring', () => {
     sendCommand.mockClear();
     const modal = document.getElementById('camera-modal')!;
     modal.classList.remove('hidden');
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     press('s', { shiftKey: true });
 
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(dialogOpen()).toBe(false);
     expect(sendCommand).not.toHaveBeenCalled();
 
-    confirmSpy.mockRestore();
     modal.classList.add('hidden');
   });
 });

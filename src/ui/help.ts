@@ -1,5 +1,7 @@
+import { REST_ROUTES } from './api-routes';
 import { $, escapeHtml } from './helpers';
 import { BINDINGS, isDestructiveAction } from './keymap';
+import { MQTT_METHODS } from './mqtt-methods';
 
 let helpRendered = false;
 
@@ -34,6 +36,22 @@ function renderShortcutsTable(): string {
 </div>`;
 }
 
+/** The native REST rows, from `api-routes.ts` so a test can hold them to the server's routes. */
+function renderRestRows(): string {
+  return REST_ROUTES.map(
+    (rt) =>
+      `<tr><td>${rt.method}</td><td>${escapeHtml(rt.path)}</td><td>${escapeHtml(rt.description)}</td><td>${rt.auth ? 'Yes' : 'No'}</td></tr>`,
+  ).join('');
+}
+
+/** The MQTT method rows, from `mqtt-methods.ts` so a test can pin each to its sending code. */
+function renderMqttRows(): string {
+  return MQTT_METHODS.map(
+    (m) =>
+      `<tr><td>${m.method}</td><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.description)}</td></tr>`,
+  ).join('');
+}
+
 export function renderHelp(): void {
   const container = $('help-content');
   if (!container || helpRendered) return;
@@ -43,7 +61,8 @@ export function renderHelp(): void {
 <div class="help-section">
   <h3>Overview</h3>
   <p>This is a browser-based web frontend for Elegoo Centauri Carbon 2 (CC2) FDM printers.
-  It connects to the printer via MQTT over WebSocket. A companion Node.js server provides
+  The browser talks to the service over a WebSocket (<code>/ws</code>) and REST; only the
+  service holds the single MQTT connection to the printer. The Node.js service provides
   REST APIs, compatibility layers for Fluidd/Mainsail (Moonraker), OctoPrint, MCP, and Prometheus metrics.</p>
 
   <table class="help-ports">
@@ -61,30 +80,15 @@ ${renderShortcutsTable()}
 
 <div class="help-section">
   <h3>Native REST API <code>/api/*</code></h3>
-  <p>Primary API on port 8088.</p>
+  <p>Primary API on port 8088. When the service has a <code>SERVICE_API_KEY</code>, every
+  write (anything but GET) needs it, sent as <code>Authorization: Bearer</code> or
+  <code>X-Api-Key</code> — except <code>POST /api/client-error</code>. Reads stay open.</p>
   <table class="help-api">
-    <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+    <thead><tr><th>Method</th><th>Path</th><th>Description</th><th>Key</th></tr></thead>
     <tbody>
-      <tr><td>GET</td><td>/api/health</td><td>Service health check (MQTT status + deployed build)</td></tr>
-      <tr><td>GET</td><td>/api/status</td><td>Full printer state (attributes, status, canvas, files)</td></tr>
-      <tr><td>GET</td><td>/api/snapshot</td><td>JPEG camera snapshot</td></tr>
-      <tr><td>GET</td><td>/api/stream</td><td>MJPEG camera stream proxy</td></tr>
-      <tr><td>GET</td><td>/api/stream/overlay</td><td>MJPEG stream with status overlay</td></tr>
-      <tr><td>GET</td><td>/webcam</td><td>Snapshot (mjpegstreamer-compatible)</td></tr>
-      <tr><td>GET</td><td>/webcam/?action=stream</td><td>Stream (mjpegstreamer-compatible)</td></tr>
-      <tr><td>GET</td><td>/api/metrics</td><td>Structured metrics as JSON</td></tr>
-      <tr><td>GET</td><td>/api/metrics/prometheus</td><td>Prometheus text exposition format</td></tr>
-      <tr><td>GET</td><td>/api/files/download</td><td>Download file from printer (?file=&amp;source=local|u-disk)</td></tr>
-      <tr><td>POST</td><td>/api/files/upload</td><td>Upload file to printer (multipart, ?source=local|u-disk)</td></tr>
-      <tr><td>GET</td><td>/api/config/telegram</td><td>Telegram bot config</td></tr>
-      <tr><td>POST</td><td>/api/config/telegram</td><td>Update Telegram progress interval</td></tr>
-      <tr><td>GET</td><td>/api/config/ai-labels</td><td>AI label configurations</td></tr>
-      <tr><td>POST</td><td>/api/config/ai-labels</td><td>Update AI label configs</td></tr>
-      <tr><td>DELETE</td><td>/api/config/ai-labels</td><td>Reset AI labels to defaults</td></tr>
-      <tr><td>POST</td><td>/api/debug/capture</td><td>Start MQTT capture ({duration: 10-60})</td></tr>
-      <tr><td>GET</td><td>/api/debug/captures</td><td>List MQTT capture files</td></tr>
-      <tr><td>GET</td><td>/api/debug/captures/:file</td><td>Download capture file</td></tr>
-      <tr><td>DELETE</td><td>/api/layer-data</td><td>Clear layer duration history</td></tr>
+      ${renderRestRows()}
+      <tr><td>GET</td><td>/webcam</td><td>Snapshot (mjpegstreamer-compatible)</td><td>No</td></tr>
+      <tr><td>GET</td><td>/webcam/?action=stream</td><td>Stream (mjpegstreamer-compatible)</td><td>No</td></tr>
     </tbody>
   </table>
 </div>
@@ -258,23 +262,7 @@ ${renderShortcutsTable()}
   <table class="help-api">
     <thead><tr><th>Method</th><th>Name</th><th>Description</th></tr></thead>
     <tbody>
-      <tr><td>1001</td><td>Get Attributes</td><td>Printer hostname, model, SN, firmware versions</td></tr>
-      <tr><td>1002</td><td>Get Status</td><td>Full status snapshot (temps, fans, position, print state)</td></tr>
-      <tr><td>1020</td><td>Print Control</td><td>Start print (filename, storage_media)</td></tr>
-      <tr><td>1021</td><td>Pause Print</td><td>Pause current job</td></tr>
-      <tr><td>1022</td><td>Resume Print</td><td>Resume paused job</td></tr>
-      <tr><td>1023</td><td>Stop Print</td><td>Cancel/stop current job</td></tr>
-      <tr><td>1026</td><td>Set Temperature</td><td>Set nozzle/bed/chamber target temps</td></tr>
-      <tr><td>1027</td><td>Move Axis</td><td>Jog axes (X/Y/Z, distance, speed)</td></tr>
-      <tr><td>1028</td><td>Home Axes</td><td>Home specified axes</td></tr>
-      <tr><td>1029</td><td>Set Fan Speed</td><td>Set part/aux/case fan speed</td></tr>
-      <tr><td>1030</td><td>Set LED</td><td>Toggle LED on/off</td></tr>
-      <tr><td>1031</td><td>Set Speed Mode</td><td>Speed profile (silent/balanced/sport/ludicrous)</td></tr>
-      <tr><td>1044</td><td>List Files</td><td>Get file list from storage</td></tr>
-      <tr><td>1045</td><td>Get Thumbnail</td><td>Base64 PNG thumbnail (uses <code>file_name</code>)</td></tr>
-      <tr><td>1046</td><td>Get File Detail</td><td>File metadata (uses <code>filename</code>)</td></tr>
-      <tr><td>2005</td><td>Canvas Status</td><td>AMS/spool slot status</td></tr>
-      <tr><td>6000</td><td>Status Event</td><td>Async status update push from printer</td></tr>
+      ${renderMqttRows()}
     </tbody>
   </table>
 

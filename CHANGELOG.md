@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.2.0](https://github.com/runnane/elegoo-web/compare/v1.1.2...v1.2.0) (2026-11-25)
+
+* **deps-dev:** bump jsdom from 30.1.2 to 30.1.3 ([#169](https://github.com/runnane/elegoo-web/issues/169)) ([65c366f](https://github.com/runnane/elegoo-web/commit/65c366fdeccd638c63f3e0261fd6a91a06a93d3a))
+* **deps-dev:** bump jsdom to 31.0.1 and raise the Node floor to 22.22.2 (ELEG-156) ([#205](https://github.com/runnane/elegoo-web/issues/205)) ([ac9104a](https://github.com/runnane/elegoo-web/commit/ac9104a77aaa7c77ede2950aafe398d231afb08c)), references [#190](https://github.com/runnane/elegoo-web/issues/190)
+* **deps-dev:** bump vite from 8.3.4 to 8.3.8 ([#192](https://github.com/runnane/elegoo-web/issues/192)) ([7b455dc](https://github.com/runnane/elegoo-web/commit/7b455dc48f06bad4f9609fbaf8d210fb681c7be2))
+* **deps:** bump @modelcontextprotocol/sdk from 1.32.1 to 1.32.2 ([#193](https://github.com/runnane/elegoo-web/issues/193)) ([b610f4d](https://github.com/runnane/elegoo-web/commit/b610f4d9388aed0a9a34b7db195058a3ecc16273))
+* **deps:** bump dotenv from 18.0.7 to 18.0.8 ([#168](https://github.com/runnane/elegoo-web/issues/168)) ([93dee17](https://github.com/runnane/elegoo-web/commit/93dee1796d581bf4a06e63cce679553039637553))
+* **deps:** bump fast-uri ([#172](https://github.com/runnane/elegoo-web/issues/172)) ([07f8534](https://github.com/runnane/elegoo-web/commit/07f85345bdd95630ad4502cdab108cca397e99df))
+* **deps:** bump ws from 8.22.0 to 8.23.0 ([#191](https://github.com/runnane/elegoo-web/issues/191)) ([f46a1c3](https://github.com/runnane/elegoo-web/commit/f46a1c3178ef6746288d57186222339fd407c5bd))
+* **deps:** hold @types/node majors to the engines floor in Dependabot (ELEG-146) ([#189](https://github.com/runnane/elegoo-web/issues/189)) ([763bc98](https://github.com/runnane/elegoo-web/commit/763bc985545a2ff698f4db8cf69821b46b1535e0)), references [#176](https://github.com/runnane/elegoo-web/issues/176)
+* **deps:** move the pnpm pin 11.26.0 to 11.28.5 (ELEG-125) ([#165](https://github.com/runnane/elegoo-web/issues/165)) ([5785a43](https://github.com/runnane/elegoo-web/commit/5785a43eecbd25cad1f5e4aef7948ea913c1dfce))
+* **deps:** move the pnpm pin to 12.22.0 with pmOnFail: ignore and a single-document lockfile gate (ELEG-138) ([#204](https://github.com/runnane/elegoo-web/issues/204)) ([4924b1a](https://github.com/runnane/elegoo-web/commit/4924b1aa8ba69898f13ebb445f71b4c37664bcd5))
+* **deps:** pin @types/node to the Node 22 floor and state it in engines (ELEG-124) ([#164](https://github.com/runnane/elegoo-web/issues/164)) ([5e7f9f1](https://github.com/runnane/elegoo-web/commit/5e7f9f174b39e4d4ba85f2493d31db598fe5e4fa))
+* **deps:** refresh transitive dependencies in range (ELEG-122) ([#157](https://github.com/runnane/elegoo-web/issues/157)) ([085669b](https://github.com/runnane/elegoo-web/commit/085669bf44648e7121d26650e38f9259f3aff1ec))
+* **deps:** take the dependency releases ELEG-117 held back (ELEG-119) ([#154](https://github.com/runnane/elegoo-web/issues/154)) ([1431ee6](https://github.com/runnane/elegoo-web/commit/1431ee66ee39fd9f2c97ebfdee4ea681312435f9))
+* **deps:** take the in-range releases ELEG-122 held for age (ELEG-123) ([#166](https://github.com/runnane/elegoo-web/issues/166)) ([9970212](https://github.com/runnane/elegoo-web/commit/99702127924451c152d0c465520e1a15ac01112e))
+* **mcp:** expand the respawn-control url from ${RESPAWN_MCP_URL} (ELEG-133) ([#183](https://github.com/runnane/elegoo-web/issues/183)) ([ef4c6b8](https://github.com/runnane/elegoo-web/commit/ef4c6b867a9b0b3aaa80b102188e9480b3f8ba7c))
+* **server:** wait for the renamed cache file, not the .part, in download-stall (ELEG-147) ([#196](https://github.com/runnane/elegoo-web/issues/196)) ([b544a41](https://github.com/runnane/elegoo-web/commit/b544a412a1c1f268053a62914cf3bee289e5dc37))
+
+### Features
+
+* **mcp:** gate the /mcp control tools behind SERVICE_API_KEY (ELEG-141) ([#199](https://github.com/runnane/elegoo-web/issues/199)) ([2fc1767](https://github.com/runnane/elegoo-web/commit/2fc17678e764f36829caf7a853c36eac85259971))
+* **server:** gate /ws command frames per method behind SERVICE_API_KEY, with a default-deny read allowlist (ELEG-140) ([#200](https://github.com/runnane/elegoo-web/issues/200)) ([5914f8a](https://github.com/runnane/elegoo-web/commit/5914f8ac04d379801db3411023d32b13b51606e3))
+* **server:** gate every /api/* write behind SERVICE_API_KEY, and make the SPA send it (ELEG-139) ([#194](https://github.com/runnane/elegoo-web/issues/194)) ([4d5f455](https://github.com/runnane/elegoo-web/commit/4d5f455f8ec6ca24692b5fb3be92f4598b1cb8e4))
+* **server:** gate Moonraker writes behind SERVICE_API_KEY on /moonraker/*, :7125 HTTP and both :7125 WebSockets (ELEG-142) ([#203](https://github.com/runnane/elegoo-web/issues/203)) ([e100e0e](https://github.com/runnane/elegoo-web/commit/e100e0e1d09eb2b8c36664cd9a72d9c3d9fa5b28))
+* **server:** gate OctoPrint-compat writes behind SERVICE_API_KEY on /octoprint/* and :7125/api/* (ELEG-143) ([#202](https://github.com/runnane/elegoo-web/issues/202)) ([192c635](https://github.com/runnane/elegoo-web/commit/192c6350c559db5aa204e54fe9916bd41b050e0a))
+
+### Bug Fixes
+
+* **contrib:** stop install.sh writing a private LAN address into the generated .env (ELEG-148) ([#197](https://github.com/runnane/elegoo-web/issues/197)) ([659b81e](https://github.com/runnane/elegoo-web/commit/659b81e97d0046852e4f474a15bcfd0d41e491a5))
+* **deps:** bump concurrently to 10.0.6, closing shell-quote GHSA-pqg4-j6r4-53mv (ELEG-121) ([#156](https://github.com/runnane/elegoo-web/issues/156)) ([805676a](https://github.com/runnane/elegoo-web/commit/805676ab3c6391feb6559a70f99e795dd50330b9))
+* **deps:** floor basic-ftp at 6.2.1, closing GHSA-c475-qrg2-pj4r (ELEG-118) ([#155](https://github.com/runnane/elegoo-web/issues/155)) ([f9f9616](https://github.com/runnane/elegoo-web/commit/f9f96164d5ea1b02f4e954041ca550258e4e2750))
+* **deps:** gcode-preview 3.0.0-alpha.7 with three 0.185.1, follow mode kept on the printed layer (ELEG-120) ([#195](https://github.com/runnane/elegoo-web/issues/195)) ([7cfcfc1](https://github.com/runnane/elegoo-web/commit/7cfcfc14a811432c2409ddcd5537bf6150147ecd)), references [#177](https://github.com/runnane/elegoo-web/issues/177)
+* **deps:** raise the transitive security floors past the 15 open Dependabot alerts (ELEG-137) ([#188](https://github.com/runnane/elegoo-web/issues/188)) ([eb4a799](https://github.com/runnane/elegoo-web/commit/eb4a799db2c71164f03d8e4935225043d25ff0fa))
+* **server:** admit DELETE in the /api/* CORS preflight (ELEG-149) ([#198](https://github.com/runnane/elegoo-web/issues/198)) ([cfb7a32](https://github.com/runnane/elegoo-web/commit/cfb7a3264f54c6a8e4fe9ef3d5dfa351732499ed))
+* **server:** end the download response and drop the partial cache when the printer stalls (ELEG-131) ([#185](https://github.com/runnane/elegoo-web/issues/185)) ([a0e2bf5](https://github.com/runnane/elegoo-web/commit/a0e2bf5a3d234a7d28da837b1dcc34d47b06614d))
+* **server:** play timelapses through the printer's authenticated /download endpoint (ELEG-160) ([#211](https://github.com/runnane/elegoo-web/issues/211)) ([0b395b9](https://github.com/runnane/elegoo-web/commit/0b395b952ee24ffdc9664d839a54b4774d0b7a0a)), closes [#209](https://github.com/runnane/elegoo-web/issues/209), references [runnane/elegoo-web#209](https://github.com/runnane/elegoo-web/issues/209)
+* **ui:** drop the dead connect-dialog inputs that carried a hard-coded printer address (ELEG-132) ([#186](https://github.com/runnane/elegoo-web/issues/186)) ([7362a1f](https://github.com/runnane/elegoo-web/commit/7362a1f9f96879e81b6e2f104f01d549c14e9104))
+* **ui:** give each service status indicator a glyph and accessible name, not colour alone (ELEG-130) ([#187](https://github.com/runnane/elegoo-web/issues/187)) ([5da3186](https://github.com/runnane/elegoo-web/commit/5da31863f8b6055a0ebdac17ce34ecb5f0b50d3e))
+* **ui:** say the presets API takes SERVICE_API_KEY, not that it has no authentication (ELEG-157) ([#206](https://github.com/runnane/elegoo-web/issues/206)) ([ed8b966](https://github.com/runnane/elegoo-web/commit/ed8b9664d30680eda7a76c35724d170421be1551))
+* **ui:** stop the gcode animate loop for a file loaded through the local file input (ELEG-151) ([#201](https://github.com/runnane/elegoo-web/issues/201)) ([dae264a](https://github.com/runnane/elegoo-web/commit/dae264a896eb843df70a8c60564e29aec9028634))
+
+### Documentation
+
+* **agents:** say production runs on one host, not necessarily yours (ELEG-155) ([#207](https://github.com/runnane/elegoo-web/issues/207)) ([bcd7a11](https://github.com/runnane/elegoo-web/commit/bcd7a1114694920c68940f701bd0d401dad1231f))
+* **gates:** record the decision to stay on pnpm 11, with the pnpm 12 measurements (ELEG-128) ([#184](https://github.com/runnane/elegoo-web/issues/184)) ([39325a3](https://github.com/runnane/elegoo-web/commit/39325a3470a0acd4fd75640255503f1ee71b3d7f))
+* name the userspace bundle's r-prefixed commands (ELEG-89) ([#163](https://github.com/runnane/elegoo-web/issues/163)) ([6f81a4a](https://github.com/runnane/elegoo-web/commit/6f81a4aff3a2679b3f738952b9e4b8559fb6f4b3))
+* say .mcp.json fixes the portal URL and only the token comes from the env (ELEG-129) ([#167](https://github.com/runnane/elegoo-web/issues/167)) ([2676e61](https://github.com/runnane/elegoo-web/commit/2676e6193e4ea3025050f93e83018ad95c2988e5))
+
 ## [1.1.2](https://github.com/runnane/elegoo-web/compare/v1.1.1...v1.1.2) (2026-10-02)
 
 * **deps-dev:** bump @vitest/coverage-v8 from 4.1.10 to 5.0.1 ([#137](https://github.com/runnane/elegoo-web/issues/137)) ([f395904](https://github.com/runnane/elegoo-web/commit/f395904de1e691298f900a0093c635ebc8f4f45d))

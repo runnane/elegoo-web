@@ -19,6 +19,13 @@ services:
       # CAMERA_ENABLED: "true"           # Camera proxy (default: true)
       # CAMERA_URL: ""                   # Override camera URL (default: http://<PRINTER_IP>:8080)
 
+      # ── Recommended: write authentication ─────────────
+      # Every /api/* write (uploads, print queue, settings) then needs this key; reads
+      # stay open. 32+ characters — generate one with: openssl rand -hex 32
+      # Unset = writes open to anyone who can reach the port. Placeholder only (too
+      # short on purpose: left unreplaced, the service refuses to start):
+      # SERVICE_API_KEY: "<your-random-key>"
+
       # ── Optional: Telegram notifications ──────────────
       # TELEGRAM_BOT_TOKEN: ""
       # TELEGRAM_CHAT_ID: ""

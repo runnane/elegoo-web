@@ -1,3 +1,4 @@
+import { applyPrintLock } from './ui/print-lock';
 import { WsClient } from './ws-client';
 import { PrinterState } from './printer-state';
 import { LogStore } from './log-store';
@@ -54,6 +55,7 @@ import {
   bindKeyboardShortcuts,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
+import { apiWrite } from './ui/api-key';
 import {
   bindPrintQueue,
   handlePrintQueueUpdate,
@@ -67,11 +69,15 @@ import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
 import { initMobileNav } from './ui/mobile-nav';
+import { initTabRoute } from './ui/tab-route';
+import { isCameraUnavailable } from './ui/camera-card';
+import { confirmDialog } from './ui/confirm-dialog';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
   COMMAND_METHOD_NAMES,
   classifyCommandOutcome,
   describeCommandError,
+  isJobActive,
   type CommandOutcome,
 } from './types';
 
@@ -153,6 +159,9 @@ function scheduleRender(): void {
       renderHeader(state);
       renderDashboard(state, client);
       renderCanvas(state);
+      // After every card that (re)builds a lockable control, so freshly rendered tray
+      // buttons are locked in the same frame they appear (ELEG-163).
+      applyPrintLock(document, isJobActive(state.status));
       renderSystemInfo(state);
       renderTimelapse(state);
       renderGcodePreview(state);
@@ -219,9 +228,14 @@ function showDashboard(): void {
       $('timelapse-player-wrap').classList.add('hidden');
     });
     $('btn-reset-layer-data').addEventListener('click', async () => {
-      if (!confirm('Reset all layer duration data?')) return;
+      const ok = await confirmDialog('Reset all layer duration data?', {
+        title: 'Reset layer data',
+        confirmLabel: 'Reset',
+        danger: true,
+      });
+      if (!ok) return;
       try {
-        const res = await fetchTimeout('/api/layer-data', { method: 'DELETE' });
+        const res = await apiWrite('/api/layer-data', { method: 'DELETE' });
         if (res.ok) {
           toast('Layer data reset', 'success');
         } else {
@@ -255,7 +269,7 @@ function showDashboard(): void {
     };
 
     cameraWrap.addEventListener('click', () => {
-      if (!cameraFeed.src || cameraFeed.alt === 'Camera off') return;
+      if (!cameraFeed.src || cameraFeed.alt === 'Camera off' || isCameraUnavailable()) return;
       cameraModalImg.src = cameraFeed.src;
       cameraModal.classList.remove('hidden');
       // Created after `.hidden` is removed: the trap reads the focusable children, and
@@ -322,7 +336,7 @@ function showDashboard(): void {
       } catch {
         toast('Snapshot failed', 'error');
       } finally {
-        snapshotBtn.disabled = false;
+        snapshotBtn.disabled = snapshotBtn.dataset.cameraLock === '1';
         snapshotBtn.textContent = '📸 Snapshot';
       }
     });
@@ -392,7 +406,7 @@ function connectToService(): void {
 
       if (connState === 'error' && !dashboardShown) {
         ($('connect-btn') as HTMLButtonElement).disabled = false;
-        ($('connect-btn') as HTMLButtonElement).textContent = 'Connect';
+        ($('connect-btn') as HTMLButtonElement).textContent = 'Retry';
         $('connect-error').textContent =
           'Cannot reach service. Ensure the elegoo-web service is running.';
         toast('Service connection failed', 'error');
@@ -567,8 +581,8 @@ function connectToService(): void {
           | undefined;
         const err1051 = r1051?.error_code as number | undefined;
         if (err1051 === 0) {
-          if (state.videoUrl) {
-            showTimelapsePlayer(state.videoUrl);
+          if (state.timelapseUrl) {
+            showTimelapsePlayer(state.timelapseUrl);
           } else {
             toast('Timelapse export started — video will be generated', 'info');
           }
@@ -579,9 +593,6 @@ function connectToService(): void {
           toast(`Timelapse export failed: ${describeCommandError(err1051)}`, 'error');
           requestAnimationFrame(() => renderTimelapse(state));
         }
-      }
-      if (method === 1050 && state.videoUrl) {
-        showTimelapsePlayer(state.videoUrl);
       }
       // Only on success. These used to toast "started" whatever came back, so a
       // calibration the printer had refused as busy still read as under way (ELEG-40).
@@ -782,6 +793,11 @@ applyCardLayout();
 
 // Initialise mobile bottom-tab navigation (no-op visually on > 800px desktop)
 initMobileNav(switchToTab);
+
+// Open the tab named in the URL hash last: initMobileNav() resets the bottom nav to the
+// dashboard, so routing first would leave a #settings deep link with the dashboard nav
+// highlighted and the More bar hidden. switchToTab() re-syncs the nav when it routes.
+initTabRoute(switchToTab);
 
 // ---- Sidebar resize handle ----
 {

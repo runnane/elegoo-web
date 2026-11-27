@@ -2,12 +2,41 @@
 
 Start from the accurate statement, because every design decision here follows from it:
 
-> **The service has no authentication.** Not a password, not an API key, not a session.
-> Every REST endpoint, the WebSocket, `/mcp`, the Moonraker layer and the OctoPrint
-> layer answer any request that reaches the port.
+> **Every write surface needs one shared key, `SERVICE_API_KEY` — when it is set:**
+> `/api/*` writes (ELEG-139), `/ws` command frames (ELEG-140), the `/mcp` control tools
+> (ELEG-141), Moonraker writes on `/moonraker/*`, `:7125` HTTP and both `:7125`
+> WebSockets (ELEG-142), and OctoPrint writes on `/octoprint/*` and `:7125/api/*`
+> (ELEG-143). With the key unset, which is the default, every write on every surface is
+> open, exactly as before. With it set, each surface refuses a write without the key —
+> `Authorization: Bearer` or `X-Api-Key` over HTTP, an auth frame or the upgrade headers
+> on `/ws`, `server.connection.identify {api_key}` or the upgrade headers on the Moonraker
+> WebSockets. Reads stay open by design, the camera included (see below).
 
-That is not a bug report, it is the current design — the service was written for a
-trusted LAN. It becomes a serious problem the moment the port is reachable from
+So **the key protects the printer only once it is set in production**: the owner's
+decision (ELEG-25) is read/write separation with one key across every surface, every
+surface now enforces it in code, and ELEG-144 (setting the key in production) is the step
+that turns it on.
+
+How the key works, for whoever extends it to the next surface — `src/server/write-auth.ts`:
+
+- **Unset → open.** Failing closed would break every existing deployment on upgrade.
+  Startup logs a warning; `/api/health` reports `writeAuth: "enabled" | "disabled"`, so the
+  state is verifiable at the receiver.
+- **No key presented → reads pass, writes 401.** "Write" on `/api/*` is default-deny: any
+  method other than GET/HEAD, except the one listed open write (`POST /api/client-error`,
+  a size-capped log line). A new write route is gated without anyone remembering to.
+- **A wrong key → 401 on any request, reads included.** A client then gets an honest
+  answer, and an operator can check the gate with a request that changes nothing.
+- **Compared as SHA-256 digests with `timingSafeEqual`**; at least 32 characters, or boot
+  fails — which is what keeps rate limiting out of scope. Only the `Bearer` scheme
+  counts, so a proxy forwarding `Basic` auth reads as no key, not a wrong one.
+- **Never logged, never echoed** — not in a refusal, not in a boot error.
+- The SPA holds the key in `localStorage` (Settings → API key) and sends it only on
+  writes. Any script running on the page can read it; that is accepted for one shared key
+  on a framework-free SPA with no third-party scripts.
+
+The rest of this page describes the exposure that remains. It was the original design:
+the service was written for a trusted LAN. It becomes a serious problem the moment the port is reachable from
 somewhere else, and **whether it is, is decided outside this repo** (a proxy or tunnel
 configured in the `~/ansible` repo; the specifics for a given deployment belong in the
 tracker, not in this public repository).
@@ -23,15 +52,54 @@ Not just read. The control surface is complete:
 
 | Surface | Reachable without credentials | Includes |
 | --- | --- | --- |
-| `POST /mcp` | yes | `set_temperature`, `fan`, `led`, `home`, `move`, `start_print`, `pause_print`, `resume_print`, `stop_print`, **`emergency_stop`** |
-| `/api/*` | yes | printer commands, file upload, camera snapshot/stream, print reports, the print queue's `start-next` (ELEG-35) |
-| `/moonraker/*` and the dedicated `:7125` server | yes | the same class of control, in Moonraker's vocabulary |
-| `/octoprint/*` | yes | OctoPrint's job + control endpoints |
-| `/ws` | yes | live state, and command frames |
+| `/mcp` control tools | **no, when `SERVICE_API_KEY` is set** (ELEG-141, Bearer or `X-Api-Key`, checked per HTTP request, not per session); yes when unset | all 21: `set_temperature`, `fan`, `speed_mode`, `led`, `home`, `move`, `start_print`, `pause_print`, `resume_print`, `stop_print`, **`emergency_stop`**, the calibrations and self-check, `delete_file`, filament load/unload, `set_auto_refill`, `enable_video_stream` and raw **`send_command`** (always gated) |
+| `/mcp` reads | yes, by design | the 10 read tools, every `printer://*` resource, `initialize`, `tools/list` — a **wrong** key is still a 401 |
+| `/api/*` writes | **no, when `SERVICE_API_KEY` is set** (ELEG-139); yes when unset | file upload and precache, the print queue (incl. `start-next`, ELEG-35), video-stream enable (printer commands), debug capture, layer-data and report deletes, Telegram/AI-label config, connection presets |
+| `/api/*` reads | yes, by design | status, metrics, `/api/metrics/prometheus` (a stock Prometheus scrapes it with no credentials, or with the key as Bearer), camera snapshot/stream/overlay and `/webcam/*`, file and report downloads, `GET /api/queue` |
+| OctoPrint writes: `/octoprint/*` on the main port **and `:7125/api/*`** (one router, two mounts) | **no, when `SERVICE_API_KEY` is set** (ELEG-143, `X-Api-Key` or Bearer — what a slicer's OctoPrint host sends); yes when unset | `POST /api/printer/{tool,bed,printhead}`, `POST /api/job` (start, cancel, pause, resume, restart), and — default-deny by method inside `createOctoPrintRouter` — any non-GET/HEAD request except the `POST /api/login` stub (open, as OctoPrint exempts Login; a keyless caller is answered as an inactive guest), so a future upload route (`POST /api/files/local`) is gated before it exists. Refusals are **403**, OctoPrint's convention, not 401 |
+| OctoPrint reads | yes, by design | version, server, connection, printer/tool/bed/chamber, job, files, settings, printer profiles, current user — a **wrong** key is still a 403, so a slicer's "Test connection" is honest. `/api/settings` reports `api.enabled: true` with the key set and never the key; `/api/currentuser` answers a guest unless the key was presented |
+| Moonraker writes: `/moonraker/*` on 8088, `:7125` HTTP, and **both** `:7125` WebSockets (`/websocket` and the catch-all `/`, `/klippy`, …) | **no, when `SERVICE_API_KEY` is set** (ELEG-142); yes when unset | print start/pause/resume/cancel, **emergency stop**, `gcode.script`, file upload/move/copy/delete and directories, history deletes, job-queue changes, webcam items, `machine.*` and `*restart`, announcements and log rollover. One table, `src/server/moonraker-auth.ts`: HTTP is default-deny on any non-GET; JSON-RPC is default-deny by name (an unclassified method runs nothing). The key arrives as `X-Api-Key` / Bearer, or over the WebSocket as `server.connection.identify {api_key}` (KlipperScreen's `moonraker_api_key`) or on the upgrade; refusals are Moonraker's `{code: 401, message: "Unauthorized"}`. A wrong key is a 401 on any HTTP route, reads included, and over the WebSocket a 401 on identify that leaves the connection read-only. Mainsail and Fluidd cannot send a static key, so they are read-only clients (ELEG-145) |
+| Moonraker reads and the open groups | yes, by design | state, objects query/subscribe, file lists, history/queue status; `server.connection.identify`; `access.*` (which still hand out no key and no token — `access.info` keeps `login_required: false`); `server.database.*` (the clients' UI preferences), **except writes to the `webcams` namespace**, which gated `server.webcams.post_item` also writes |
+| `/ws` command frames | **no, when `SERVICE_API_KEY` is set** (ELEG-140), except proven reads; yes when unset | every `{type:'command'}` method not on the default-deny read allowlist in `src/server/method-policy.ts` (`1002, 1036, 1044, 1045, 1046, 1048, 2005`, each with its evidence) — temperature, motion, print control, emergency stop, deletes, calibration, filament, and every method nobody has proven to be a read (2006 included). The key arrives as an `{type:'auth', key}` frame (browsers cannot set WebSocket headers; a `?key=` would land in proxy logs) or as `Authorization: Bearer` / `X-Api-Key` on the upgrade; a refused frame is answered `command_refused` (`code: 'auth'`) and never forwarded. A wrong key leaves the connection unauthorised but still able to read. **And, while a job is active, the print guard** (ELEG-176, below): an authorised frame can still be refused, as `command_refused` with `code: 'busy'` |
+| `/ws` stream | yes, by design | connecting, the `init` snapshot and every broadcast: the same state `/api/status` serves |
+
+**The print guard (ELEG-176) is a second check, independent of the key.** While
+`machine_status.status` is 2 (printing, paused included) or 15 (power-loss recovery), the
+following are refused, **with the key too**:
+
+- home and move;
+- feed/retract and the Canvas tray load/unload;
+- the four calibrations;
+- a 1028 that would turn a heater off, set the nozzle below 170 °C, or that carries no
+  recognised target at all.
+
+A safe target change still goes through. So do pause, resume, stop, emergency stop, fans,
+light and speed. The rule protects a job from a mis-click or a misbehaving client; it does
+not stand in for the key.
+
+**`src/server/print-guard.ts` is the single policy.** Every surface asks it before sending
+and answers in its own convention:
+
+| Surface | Refusal |
+| --- | --- |
+| `/ws` | `command_refused`, `code: 'busy'` |
+| `/mcp` | `isError` |
+| Moonraker HTTP | 409 |
+| Moonraker JSON-RPC | an rpc 409 plus a `!!` console line |
+| OctoPrint | 409 |
+
+`MqttBridge.setCommandGuard`, wired in `index.ts`, drops anything a surface forgot to ask
+about. It logs a warning when it does. The UI lock (ELEG-163) is stricter on purpose: it
+also locks Set and the presets. "Printing" comes from one predicate, `isJobActive` in
+`src/types.ts`, which the UI lock and the server share. A new surface that sends one of
+these methods must call `printBusyRefusal` (or `printBusyRefusalAll` for a compound
+request) before it answers success. Without that call the bridge still refuses, but the
+caller is told it worked.
 
 **Connection presets (ELEG-95) are the one write that is off by default.** `POST
 /api/printers`, `DELETE /api/printers/:id` and `POST /api/printers/:id/activate` refuse
-with 403 unless `CONNECTION_PRESETS_API=true`. Switching is different in kind from the
+with 403 unless `CONNECTION_PRESETS_API=true` — and, with `SERVICE_API_KEY` set, also
+need the key; the right key does not lift the flag. Switching is different in kind from the
 rows above: it re-points *every* consumer at once, and it makes the service dial — and
 proxy file downloads, uploads and the camera from — an address the request chose. So it
 is exposed on REST only (for the settings page), never on `/mcp`, the compat layers,
@@ -65,15 +133,21 @@ Three things make this sharper than a typical "no auth" note:
    policy for free only if you route through it** — the `:7125` server is the cautionary
    example: it sets the headers once in `handleHttp` precisely because ~100
    `jsonResult`/`jsonError` call sites could each have forgotten.
-3. **The compat layers advertise auth they do not have.** `octoprint-compat.ts` returns
-   a fixed `apikey: 'elegoo-cc2-compat'` and the Moonraker layer answers
-   `access.get_api_key` — so a client shows "connected, authenticated" while nothing was
-   ever checked. Do not read those endpoints as evidence that an auth path exists.
+3. **The compat layers used to advertise auth they did not have.** `octoprint-compat.ts`
+   returned a fixed `apikey: 'elegoo-cc2-compat'` and the Moonraker layer answered
+   `access.get_api_key` — so a client showed "connected, authenticated" while nothing was
+   ever checked. ELEG-26 withdrew both; ELEG-143 makes the OctoPrint answers follow the
+   real key (`src/server/compat-auth.ts`). Keep them truthful: an auth answer must
+   describe what the router actually checks, and must never carry the key.
 
 **Rule:** never add an endpoint on the assumption that only the LAN can reach it, and
-never add one that widens the write surface without saying so on the issue. Adding an
-authentication layer is a *feature* someone has to decide on — file it, don't smuggle it
-in, and don't design new endpoints as though it were already there.
+never add one that widens the write surface without saying so on the issue. A new `/api/*`
+write is gated automatically by the default-deny classifier in `rest-api.ts`, and a new
+OctoPrint route by the method check at the top of `createOctoPrintRouter`, and a new
+Moonraker HTTP write by the one in `moonraker-auth.ts` (a new JSON-RPC `case` runs nothing
+until it is added to that file's open or gated table, and a test fails until it is). A new
+*surface* is not gated by anything until someone gates it — say so on the issue, and don't
+design it as though the key already covered it.
 
 **And before claiming this service is or is not exposed, measure it properly.** A `curl`
 from the host resolves and routes from inside the network, so a `200` proves the service is
@@ -90,6 +164,15 @@ captures are all served over the same unauthenticated API. Treat all of it as pe
 data under the org policy: it is a camera in someone's home or workshop, so an endpoint
 that exposes it more widely, or a fixture that commits one of those images, is not a
 detail.
+
+**The camera stays open under `SERVICE_API_KEY`, deliberately (ELEG-25 plan, decision
+3d).** Viewing changes nothing on the machine, and the owner listed the camera views among
+the reads. More concretely, every consumer embeds it as `<img>` or MJPEG — the SPA, and
+Mainsail/Fluidd webcam tiles — and those cannot send a header. Gating it would need a key
+in the query string (it ends up in proxy logs and browser history) or a cookie (which
+brings back the cross-site request risk a header-only design avoids). So the key keeps
+today's exposure of the image rather than widening it; it does not narrow it. The camera
+*writes* are gated: `POST /api/debug/videostream/*` commands the printer.
 
 **The Telegram bot's inbound commands are gated on the sender — keep it that way.**
 `/start`, `/help`, `/status` and `/photo` once registered with no filter on who sent
@@ -108,12 +191,23 @@ get this right.
 
 ## Secrets
 
-- `PRINTER_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `AI_VLM_API_KEY` come from the environment
+- `PRINTER_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `AI_VLM_API_KEY`, `SERVICE_API_KEY` come from the environment
   (`.env`, gitignored) via `src/server/config.ts`. Read them at runtime through that
   config object — never hardcode one, never send one to the browser, never log one.
   `logger.ts` writes to `${DATA_DIR}/logs`; an `AI_VLM_API_KEY` in a debug line is a
   credential on disk and, given the above, a credential behind an unauthenticated
   endpoint.
+- **The printer's own auth token is redacted from the raw MQTT stream** (ELEG-186). Every
+  raw request and reply is broadcast to every `/ws` client and written to
+  `/api/debug/capture` files, and both are open. The firmware enum names three methods
+  about the token: 1049 `UPDATE_TOKEN`, 1050 `GET_TOKEN`, 1053 `SET_TOKEN_SWITCH`.
+  `StateStore` passes every forwarded payload through `redactSecretPayload`
+  (`src/server/secret-payload.ts`): for those methods only `id`, `method` and
+  `error_code` survive. Nothing in the repo sends them, but another broker client, a `/ws`
+  command frame or MCP `send_command` can. A new consumer of raw payloads reads them from
+  `StateStore`'s events, never from the bridge directly, or it bypasses the redaction.
+  Until ELEG-186 the store also copied a 1050 reply's `url` into a field sent to every
+  browser (`videoUrl`, now `timelapseUrl` and fed by 1051 only).
 - **Committed files carry placeholders only** — `.env.example`,
   `docker-compose.example.yml`, `contrib/install.sh`'s generated default `.env`, any
   fixture. This repo is **public**: a committed secret is published, and rotating it is

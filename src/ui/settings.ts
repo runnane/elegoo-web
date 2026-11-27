@@ -1,8 +1,9 @@
 /** Settings panel — persistent card layout + Telegram config */
 
-import { $, fetchTimeout } from './helpers';
+import { $, escapeHtml, fetchTimeout } from './helpers';
 import { type CardLayout, CARD_NAMES, defaultCardLayout, normaliseCardLayout } from './card-layout';
 import { toast } from './toast';
+import { confirmDialog } from './confirm-dialog';
 import { renderSpoolCalc } from './spool-calc';
 import { renderHelp } from './help';
 import { getThemeChoice, setThemeChoice, isThemeChoice } from './theme';
@@ -12,6 +13,8 @@ import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { mountPrinterPresets } from './printer-presets';
 import { syncMobileNavWithTab, tagMobileCards } from './mobile-nav';
+import { syncTabHash } from './tab-route';
+import { API_KEY_SECTION, apiWrite, getApiKey, setApiKey } from './api-key';
 
 const STORAGE_KEY = 'elegoo-web-card-layout';
 
@@ -123,6 +126,8 @@ export function switchToTab(tab: 'dashboard' | 'settings' | 'tools' | 'help' | '
 
   if (!dashboard || !settingsPage) return;
 
+  syncTabHash(tab);
+
   tabs.forEach((t) => {
     const el = t as HTMLElement;
     el.classList.toggle('active', el.dataset.tab === tab);
@@ -183,7 +188,7 @@ function buildSettingsHTML(content: HTMLElement): void {
           <span class="settings-drag-handle" title="Drag to reorder">⠿</span>
           <label class="settings-card-label">
             <input type="checkbox" class="settings-card-visible" data-card-id="${id}" ${isHidden ? '' : 'checked'}>
-            <span>${name}</span>
+            <span>${escapeHtml(name)}</span>
           </label>
           <select class="settings-card-panel log-select" data-card-id="${id}">
             <option value="sidebar" ${panel === 'sidebar' ? 'selected' : ''}>Sidebar</option>
@@ -262,6 +267,19 @@ function buildSettingsHTML(content: HTMLElement): void {
     </section>
 
     <section class="settings-section">
+      <h3>${API_KEY_SECTION}</h3>
+      <p class="settings-hint">The service's <code>SERVICE_API_KEY</code>. When the service has one set, uploads, the print queue, settings changes and other writes need it; viewing does not. Stored in this browser only.</p>
+      <div class="settings-row">
+        <label for="settings-api-key">${API_KEY_SECTION}</label>
+        <input type="password" id="settings-api-key" class="log-select" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="settings-actions">
+        <button id="settings-api-key-save" class="btn btn-sm btn-ghost">Save key</button>
+        <button id="settings-api-key-clear" class="btn btn-sm btn-ghost">Clear</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h3>Printer connections</h3>
       <p class="settings-hint">Saved printer addresses. The service talks to one printer at a time: switching disconnects from the current one and clears its charts, layer times and event log. <code>PRINTER_IP</code> is always the default entry.</p>
       <div id="settings-printer-presets"></div>
@@ -286,6 +304,22 @@ function buildSettingsHTML(content: HTMLElement): void {
 
   const presetsRoot = document.getElementById('settings-printer-presets');
   if (presetsRoot) mountPrinterPresets(presetsRoot);
+
+  // ---- API key (ELEG-139) ---- set through .value, never interpolated into the HTML.
+  const apiKeyInput = content.querySelector('#settings-api-key') as HTMLInputElement | null;
+  if (apiKeyInput) {
+    apiKeyInput.value = getApiKey();
+    content.querySelector('#settings-api-key-save')?.addEventListener('click', () => {
+      setApiKey(apiKeyInput.value);
+      apiKeyInput.value = getApiKey();
+      toast(getApiKey() ? 'API key saved' : 'API key cleared', 'success');
+    });
+    content.querySelector('#settings-api-key-clear')?.addEventListener('click', () => {
+      setApiKey('');
+      apiKeyInput.value = '';
+      toast('API key cleared', 'success');
+    });
+  }
 
   // Bind card visibility toggles
   content.querySelectorAll('.settings-card-visible').forEach((cb) => {
@@ -466,20 +500,18 @@ function buildSettingsHTML(content: HTMLElement): void {
   }
   renderNotifyStatus();
 
-  content.querySelector('#settings-reset-layout')?.addEventListener('click', () => {
+  content.querySelector('#settings-reset-layout')?.addEventListener('click', async () => {
     // Confirmed because it discards arranging work and cannot be undone. Scoped to the
     // layout key alone: chart resolution, log filters and camera selection live in a
     // separate store (`ui-settings.ts`) and are untouched — which is the whole reason
     // to have this rather than telling people to clear site data (ELEG-44).
-    if (
-      !confirm(
-        'Reset the dashboard layout to its default?\n\n' +
-          'Card order, panel assignment, and hidden and collapsed cards are all restored. ' +
-          'Other settings — chart resolution, log filters, camera selection — are kept.',
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog(
+      'Reset the dashboard layout to its default?\n\n' +
+        'Card order, panel assignment, and hidden and collapsed cards are all restored. ' +
+        'Other settings — chart resolution, log filters, camera selection — are kept.',
+      { title: 'Reset layout', confirmLabel: 'Reset layout', danger: true },
+    );
+    if (!ok) return;
     currentLayout = defaultCardLayout();
     saveCardLayout(currentLayout);
     applyCardLayout();
@@ -548,7 +580,7 @@ async function loadTelegramStatus(): Promise<void> {
         return;
       }
       try {
-        const saveRes = await fetchTimeout('/api/config/telegram', {
+        const saveRes = await apiWrite('/api/config/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ progressInterval: val }),
@@ -625,7 +657,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
       <div class="ai-label-config-row" data-idx="${idx}">
         <div class="ai-label-config-field ai-label-config-label">
           <label>Label</label>
-          <textarea class="settings-input ai-lc-label" rows="2" data-idx="${idx}" title="${lc.label}">${lc.label}</textarea>
+          <textarea class="settings-input ai-lc-label" rows="3" data-idx="${idx}" title="${lc.label}">${lc.label}</textarea>
         </div>
         <div class="ai-label-config-field">
           <label>Issue Type</label>
@@ -639,11 +671,11 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
           <label>Severity</label>
           <select class="settings-input ai-lc-severity" data-idx="${idx}">${sevOpts}</select>
         </div>
-        <div class="ai-label-config-field">
+        <div class="ai-label-config-field ai-label-config-num">
           <label>Warn @</label>
           <input type="number" class="settings-input ai-lc-warn" value="${lc.warnThreshold}" data-idx="${idx}" min="0" max="1" step="0.05">
         </div>
-        <div class="ai-label-config-field">
+        <div class="ai-label-config-field ai-label-config-num">
           <label>Crit @</label>
           <input type="number" class="settings-input ai-lc-crit" value="${lc.critThreshold}" data-idx="${idx}" min="0" max="1" step="0.05">
         </div>
@@ -704,7 +736,7 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
       return;
     }
     try {
-      const res = await fetchTimeout('/api/config/ai-labels', {
+      const res = await apiWrite('/api/config/ai-labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ labels: updated }),
@@ -721,9 +753,14 @@ function renderAILabelEditor(container: HTMLElement, labels: AILabelConfig[]): v
   });
 
   container.querySelector('#ai-labels-reset')?.addEventListener('click', async () => {
-    if (!confirm('Reset all AI label configs to defaults?')) return;
+    const ok = await confirmDialog('Reset all AI label configs to defaults?', {
+      title: 'Reset AI labels',
+      confirmLabel: 'Reset',
+      danger: true,
+    });
+    if (!ok) return;
     try {
-      const res = await fetchTimeout('/api/config/ai-labels', { method: 'DELETE' });
+      const res = await apiWrite('/api/config/ai-labels', { method: 'DELETE' });
       if (res.ok) {
         const data = (await res.json()) as { labels: AILabelConfig[] };
         renderAILabelEditor(container, data.labels);
