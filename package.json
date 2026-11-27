@@ -48,7 +48,7 @@
     "@types/three": "0.185.4",
     "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "^5.0.4",
-    "concurrently": "^10.0.6",
+    "concurrently": "^10.0.7",
     "jsdom": "^31.0.1",
     "knip": "^6.44.1",
     "release-it": "^21.1.1",
