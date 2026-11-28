@@ -10,6 +10,7 @@ import type { MqttBridge } from './mqtt-bridge.js';
 import type { PrinterAttributes, PrinterStatus, CanvasInfo, FileEntry } from '../types.js';
 import { getLogger, getEventLogger } from './logger.js';
 import { methodOf, redactSecretPayload } from './secret-payload.js';
+import { filamentDensity } from '../filament-density.js';
 
 const log = getLogger('State');
 import {
@@ -43,18 +44,6 @@ export interface AIChartPoint {
 
 const AI_CHART_MAX_POINTS = 300_000; // safety valve matching chart data
 
-/** Filament densities (g/cm³) for weight calculation */
-const FILAMENT_DENSITY: Record<string, number> = {
-  PLA: 1.24,
-  ABS: 1.04,
-  ASA: 1.07,
-  PETG: 1.27,
-  TPU: 1.21,
-  PA: 1.14,
-  PC: 1.2,
-  PVA: 1.23,
-  HIPS: 1.04,
-};
 const FILAMENT_RADIUS_MM = 1.75 / 2;
 const CROSS_SECTION_MM2 = Math.PI * FILAMENT_RADIUS_MM * FILAMENT_RADIUS_MM; // ~2.405 mm²
 const CROSS_SECTION_CM2 = Math.PI * (0.175 / 2) ** 2; // in cm² for g/cm³ density
@@ -361,7 +350,7 @@ export class StateStore extends EventEmitter {
 
     // Mass flow: volumetric flow in cm³/s * density (g/cm³)
     const activeType = this.getActiveFilamentType();
-    const density = FILAMENT_DENSITY[activeType.toUpperCase()] ?? FILAMENT_DENSITY.PLA;
+    const density = filamentDensity(activeType);
     const flowCm3s = (extrusionRate / 10) * CROSS_SECTION_CM2; // mm→cm for rate, cm² cross-section
     const massFlowRate = flowCm3s * density; // g/s
 

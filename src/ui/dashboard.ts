@@ -46,3 +46,4 @@ export { renderReports, refreshReports, bindReportControls } from './print-repor
 export { requestPrintDialog, handleFileDetailForPrint } from './print-dialog';
 export { renderDebugPanel, bindDebugPanel, trackStateChanges } from './debug-panel';
 export { bindKeyboardShortcuts } from './keyboard-shortcuts';
+export { setSpoolCalcState } from './spool-calc';

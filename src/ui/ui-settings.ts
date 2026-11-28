@@ -41,6 +41,13 @@ export interface UISettings {
    * the page — accepted for one shared key on a framework-free SPA (`.agents/security.md`).
    */
   apiKey: string;
+  /**
+   * The Retroactive Spool Estimator's preferences (ELEG-197): starting weight, filters,
+   * density choice, per-print gram overrides. Stored as written and validated on read by
+   * `normaliseRetroPrefs` in `spool-retro.ts`, so an older or hand-edited value degrades
+   * field by field to the defaults instead of breaking the tool.
+   */
+  spoolRetro: Record<string, unknown>;
 }
 
 const defaults: UISettings = {
@@ -63,6 +70,7 @@ const defaults: UISettings = {
   // printer's display or someone else's screenshot (ELEG-45).
   relativeTimestamps: false,
   apiKey: '',
+  spoolRetro: {},
 };
 
 let cached: UISettings | null = null;
@@ -135,4 +143,14 @@ export function saveListSelect(key: string, value: string): void {
 /** Get a saved dropdown filter selection, or undefined for "all". */
 export function getListSelect(key: string): string | undefined {
   return loadUISettings().listSelect?.[key];
+}
+
+/** The Retroactive Spool Estimator's saved preferences, unvalidated (ELEG-197). */
+export function getSpoolRetroPrefs(): unknown {
+  return loadUISettings().spoolRetro;
+}
+
+/** Save the Retroactive Spool Estimator's preferences (ELEG-197). */
+export function saveSpoolRetroPrefs(prefs: object): void {
+  saveUISettings({ spoolRetro: JSON.parse(JSON.stringify(prefs)) as Record<string, unknown> });
 }

@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { maybeShowPowerLossDialog } from './power-loss-dialog';
 import { computePrintTiming } from './print-timing';
+import { filamentDensity } from '../filament-density';
 import { $, formatTime, formatClock, fanPct, escapeHtml, applyDarkThumbnailCheck } from './helpers';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { setCameraStreamUrlSource, setPrinterReportsCamera } from './camera-card';
@@ -24,18 +25,6 @@ import {
 
 let lastThumbnailFile = '';
 
-// Filament densities (g/cm³) for length calculation
-const FILAMENT_DENSITY: Record<string, number> = {
-  PLA: 1.24,
-  ABS: 1.04,
-  ASA: 1.07,
-  PETG: 1.27,
-  TPU: 1.21,
-  PA: 1.14,
-  PC: 1.2,
-  PVA: 1.23,
-  HIPS: 1.04,
-};
 const FILAMENT_DIAMETER_CM = 0.175; // 1.75mm
 const CROSS_SECTION_CM2 = Math.PI * (FILAMENT_DIAMETER_CM / 2) ** 2;
 
@@ -50,7 +39,7 @@ let _lastMassFlow = 0;
 let _lastPulseTime = 0;
 
 function gramsToMeters(grams: number, filamentType: string): number {
-  const density = FILAMENT_DENSITY[filamentType.toUpperCase()] ?? FILAMENT_DENSITY.PLA;
+  const density = filamentDensity(filamentType);
   const volumeCm3 = grams / density;
   return volumeCm3 / CROSS_SECTION_CM2 / 100;
 }
@@ -387,7 +376,7 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
       _lastExtRate = (currentE - _prevE) / dt;
       _lastFlowRate = _lastExtRate * CROSS_SECTION_MM2;
       const activeType = getActiveFilamentType(state);
-      const density = FILAMENT_DENSITY[activeType.toUpperCase()] ?? FILAMENT_DENSITY.PLA;
+      const density = filamentDensity(activeType);
       _lastMassFlow = (_lastExtRate / 10) * CROSS_SECTION_CM2 * density * 1000; // mg/s
     }
     _prevE = currentE;
