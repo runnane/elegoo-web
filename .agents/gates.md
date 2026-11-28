@@ -303,6 +303,17 @@ What changed, and what keeps it safe:
   logged `Done … using pnpm v12.22.0` with esbuild's and onnxruntime-node's
   `postinstall: Done`.
 
+**`biome.json`'s `$schema` cannot drift from the CLI (ELEG-195, same shape as ELEG-111).**
+Dependabot bumps `@biomejs/biome` and never edits a versioned schema URL, and biome
+reports the mismatch as an *info* diagnostic (`The configuration schema version does not
+match the CLI version … Found: 2.6.4`) that `biome ci` exits 0 on — a gate that warns and
+passes. Two layers: `$schema` is now `./node_modules/@biomejs/biome/configuration_schema.json`
+(measured: `biome ci` prints no diagnostic with it), and the gate `biome.json $schema
+matches the CLI` fails on a versioned `https://biomejs.dev/schemas/<v>/schema.json`
+whose `<v>` differs from `pnpm exec biome --version`, on a local path whose file is
+missing, and on a `$schema` it does not recognise. If you ever want the versioned URL
+back, `pnpm exec biome migrate --write` rewrites it.
+
 **Invoked directly, pnpm 12 makes the lockfile two YAML documents.** A plain install
 prepends pnpm's own toolchain lock, and the project graph moves into a second document:
 

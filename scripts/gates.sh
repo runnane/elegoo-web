@@ -100,6 +100,47 @@ pnpm_major_matches_pin() {
   echo "running pnpm ${running}, packageManager pnpm@${pin}: same major."
 }
 
+# biome.json's `$schema` must not name a different version than the installed CLI
+# (ELEG-195, same shape as ELEG-111). Dependabot bumps @biomejs/biome and never touches
+# a versioned schema URL, and biome reports the mismatch as an INFO diagnostic that
+# `biome ci` exits 0 on — so it recurs on every bump and nothing else here notices.
+# Accepted: the installed package's own schema (`./node_modules/@biomejs/biome/...`,
+# which cannot drift, and is what biome.json uses), or a versioned URL equal to
+# `biome --version`. Anything else, including a schema this cannot parse, fails.
+biome_schema_matches_cli() {
+  local schema cli
+  schema="$(node -p "require('./biome.json').\$schema || ''")"
+  cli="$(pnpm exec biome --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+  if [ -z "$cli" ]; then
+    echo 'could not read the installed biome version from `pnpm exec biome --version`.'
+    return 1
+  fi
+  case "$schema" in
+    ./node_modules/@biomejs/biome/configuration_schema.json)
+      if [ ! -f "$schema" ]; then
+        echo "biome.json \$schema points at ${schema}, which does not exist (run pnpm install)."
+        return 1
+      fi
+      echo "biome.json \$schema is the installed package's own schema (CLI ${cli}): cannot drift."
+      ;;
+    https://biomejs.dev/schemas/*/schema.json)
+      local ver="${schema#https://biomejs.dev/schemas/}"
+      ver="${ver%/schema.json}"
+      if [ "$ver" != "$cli" ]; then
+        echo "biome.json \$schema names biome ${ver} but the installed CLI is ${cli}."
+        echo "Run \`pnpm exec biome migrate --write\`, or point \$schema at ./node_modules/@biomejs/biome/configuration_schema.json (ELEG-195)."
+        return 1
+      fi
+      echo "biome.json \$schema ${ver} matches the installed CLI ${cli}."
+      ;;
+    *)
+      echo "biome.json \$schema is '${schema}', which this check does not recognise."
+      echo "Use ./node_modules/@biomejs/biome/configuration_schema.json or https://biomejs.dev/schemas/${cli}/schema.json."
+      return 1
+      ;;
+  esac
+}
+
 if [ "$fix" = 1 ]; then
   printf '\n\033[1m▶ biome check --write\033[0m  (fixing before the gates)\n'
   pnpm check || true
@@ -108,6 +149,7 @@ fi
 # Order mirrors ci.yml: cheapest signal first.
 run 'lockfile is one YAML document' lockfile_single_document
 run 'pnpm major matches packageManager' pnpm_major_matches_pin
+run 'biome.json $schema matches the CLI' biome_schema_matches_cli
 run 'biome ci (non-writing, as CI runs it)' pnpm exec biome ci
 run 'typecheck: browser half (tsconfig.json)' pnpm exec tsc
 run 'typecheck: service half (tsconfig.server.json)' pnpm run service:check
