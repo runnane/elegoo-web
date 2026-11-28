@@ -1,18 +1,13 @@
-/** Spool Calculator — visualizes remaining filament on a spool */
+/** Spool Calculator — visualizes remaining filament on a spool, and hosts the Retroactive Spool Estimator */
 
-// Material densities in g/cm³
-const MATERIALS: Record<string, number> = {
-  PLA: 1.24,
-  'PLA+': 1.24,
-  PETG: 1.27,
-  ABS: 1.04,
-  ASA: 1.07,
-  TPU: 1.21,
-  PA: 1.14,
-  PC: 1.2,
-  HIPS: 1.04,
-  PVA: 1.23,
-};
+import type { PrinterState } from '../printer-state';
+import { DEFAULT_FILAMENT_DENSITY, FILAMENT_DENSITY } from '../filament-density';
+import {
+  type ApplyResult,
+  type SpoolEstimate,
+  mountSpoolRetro,
+  setSpoolRetroState,
+} from './spool-retro-view';
 
 const STORAGE_KEY = 'elegoo-web-spool-calc';
 
@@ -23,7 +18,7 @@ export interface SpoolParams {
   emptyWeight: number; // g — weight of the empty spool (no filament)
   currentWeight: number; // g — current total weight (spool + remaining filament)
   filamentDiameter: number; // mm — 1.75 or 2.85
-  material: string; // key into MATERIALS
+  material: string; // key into FILAMENT_DENSITY
   fullWeight: number; // g — full spool weight (spool + full filament, e.g. empty + 1000)
   currentOuterDiameter: number; // mm — measured outer diameter of remaining filament on spool
 }
@@ -65,7 +60,7 @@ function outerDiameterToMass(
   spoolWidth: number,
   material: string,
 ): number {
-  const density = MATERIALS[material] ?? 1.24;
+  const density = FILAMENT_DENSITY[material] ?? DEFAULT_FILAMENT_DENSITY;
   const outerR = outerDiameter / 2 / 10; // cm
   const hubR = hubDiameter / 2 / 10; // cm
   const width = spoolWidth / 10; // cm
@@ -119,7 +114,7 @@ export function validateSpool(p: SpoolParams): SpoolErrors {
 
 /** Calculate filament remaining stats */
 export function calculate(p: SpoolParams) {
-  const density = MATERIALS[p.material] ?? 1.24;
+  const density = FILAMENT_DENSITY[p.material] ?? DEFAULT_FILAMENT_DENSITY;
   const filamentMass = Math.max(0, p.currentWeight - p.emptyWeight); // grams
   const fullFilamentMass = Math.max(0, p.fullWeight - p.emptyWeight);
   const filamentRadius = p.filamentDiameter / 2 / 10; // cm
@@ -361,10 +356,10 @@ export function renderSpoolCalc(): void {
           <div class="form-group">
             <label for="sc-material">Material</label>
             <select id="sc-material" class="log-select">
-              ${Object.keys(MATERIALS)
+              ${Object.keys(FILAMENT_DENSITY)
                 .map(
                   (m) =>
-                    `<option value="${m}"${m === p.material ? ' selected' : ''}>${m} (${MATERIALS[m]} g/cm³)</option>`,
+                    `<option value="${m}"${m === p.material ? ' selected' : ''}>${m} (${FILAMENT_DENSITY[m]} g/cm³)</option>`,
                 )
                 .join('')}
             </select>
@@ -382,6 +377,8 @@ export function renderSpoolCalc(): void {
           </div>
         </div>
       </div>
+
+      <section class="spool-retro" id="spool-retro"></section>
     </div>
   `;
 
@@ -458,6 +455,50 @@ export function renderSpoolCalc(): void {
       updateCalc(p);
     });
   }
+
+  const retroRoot = document.getElementById('spool-retro');
+  if (retroRoot) {
+    void mountSpoolRetro(retroRoot, { apply: (estimate) => applyEstimate(p, estimate) });
+  }
+}
+
+/** Attach live PrinterState for the estimator (Canvas tray names, the active file's grams). */
+export function setSpoolCalcState(state: PrinterState): void {
+  setSpoolRetroState(state);
+}
+
+/**
+ * Fill the calculator from an estimate (ELEG-197). Goes through `validateSpool` like any
+ * typed input: the values are shown with the calculator's normal inline errors, and an
+ * impossible estimate — say, history that used more than the starting spool — is refused
+ * and never persisted (ELEG-170). Returns null when accepted, else the first error.
+ */
+export function applyEstimate(p: SpoolParams, estimate: SpoolEstimate): ApplyResult {
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const candidate: SpoolParams = {
+    ...p,
+    fullWeight: round1(p.emptyWeight + estimate.netFullGrams),
+    currentWeight: round1(p.emptyWeight + estimate.remainingGrams),
+    // A measured diameter is stale once the weights change.
+    currentOuterDiameter: 0,
+    material:
+      estimate.material && estimate.material in FILAMENT_DENSITY ? estimate.material : p.material,
+  };
+  const errors = validateSpool(candidate);
+
+  Object.assign(p, candidate);
+  const setValue = (id: string, value: string) => {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (el) el.value = value;
+  };
+  setValue('sc-full-weight', String(p.fullWeight));
+  setValue('sc-current-weight', String(p.currentWeight));
+  setValue('sc-material', p.material);
+  // Shows the inline errors and blanks the tiles when invalid; saves only when valid.
+  updateCalc(p);
+
+  const first = Object.values(errors)[0];
+  return first ?? null;
 }
 
 const INPUT_IDS: Partial<Record<keyof SpoolParams, string>> = {

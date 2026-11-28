@@ -53,6 +53,7 @@ import {
   bindDebugPanel,
   trackStateChanges,
   bindKeyboardShortcuts,
+  setSpoolCalcState,
 } from './ui/dashboard';
 import { renderLog, bindLogControls } from './ui/log';
 import { apiWrite } from './ui/api-key';
@@ -800,6 +801,7 @@ initTabRoute(switchToTab);
 
 // Apply saved card layout
 applyCardLayout();
+setSpoolCalcState(state);
 
 // ---- Sidebar resize handle ----
 {

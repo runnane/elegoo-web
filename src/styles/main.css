@@ -3864,12 +3864,307 @@ body {
   color: var(--text-muted);
   font-family: monospace;
 }
+
+/* ── Retroactive Spool Estimator ── */
+.spool-retro {
+  margin-top: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.spool-retro-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.spool-retro-header h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.spool-retro-header p {
+  margin: 0;
+}
+.spool-retro-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.spool-retro-setup {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.spool-retro-setup .form-group {
+  margin-bottom: 0;
+}
+.spool-retro-setup label,
+.sr-filter-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.sr-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.sr-density-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.sr-density-row .log-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.sr-custom-density-wrap {
+  width: 115px;
+  flex-shrink: 0;
+}
+.sr-use-active-btn {
+  margin-top: 6px;
+}
+.spool-retro-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.spool-retro-stats .spool-stat {
+  background: var(--bg-secondary);
+}
+.spool-retro-stats .spool-stat-value {
+  font-size: 18px;
+}
+.sr-status-ok {
+  color: var(--success, #66bb6a);
+}
+.sr-status-warn {
+  color: var(--warning, #ffa726);
+}
+.sr-status-danger {
+  color: var(--danger, #ef5350);
+}
+.spool-retro-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.sr-filter-group .log-select,
+.sr-since-row input[type="datetime-local"] {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+.sr-since-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sr-since-row input[type="datetime-local"] {
+  flex: 1;
+  min-width: 0;
+}
+.spool-retro-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.sr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+.sr-bulk-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.spool-retro-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.sr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s ease;
+}
+.sr-row-unchecked {
+  opacity: 0.5;
+}
+.sr-row-check {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.sr-row-info {
+  flex: 1;
+  min-width: 0;
+}
+.sr-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sr-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sr-outcome-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
+.sr-outcome-success {
+  background: rgba(102, 187, 106, 0.16);
+  color: var(--success, #66bb6a);
+}
+.sr-outcome-danger {
+  background: rgba(239, 83, 80, 0.16);
+  color: var(--danger, #ef5350);
+}
+.sr-outcome-warning {
+  background: rgba(255, 167, 38, 0.16);
+  color: var(--warning, #ffa726);
+}
+.sr-outcome-accent {
+  background: rgba(79, 195, 247, 0.16);
+  color: var(--accent-light);
+}
+.sr-filament-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+}
+.sr-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: inline-block;
+}
+.sr-row-usage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.sr-meters {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+  text-align: right;
+}
+.sr-grams-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sr-grams-input {
+  width: 72px;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sr-grams-input.sr-overridden {
+  border-color: var(--accent);
+}
+.sr-density-row .log-select:disabled,
+.sr-custom-density-wrap input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+#sr-apply-status:empty {
+  display: none;
+}
+#sr-apply-status {
+  margin: 0 0 12px;
+}
+.sr-limits {
+  margin: 10px 0 0;
+}
 @media (max-width: 700px) {
   .spool-calc-grid {
     grid-template-columns: 1fr;
   }
   .spool-calc-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .spool-retro-header {
+    flex-direction: column;
+  }
+  .spool-retro-setup,
+  .spool-retro-filters {
+    grid-template-columns: 1fr;
+  }
+  .spool-retro-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sr-row {
+    flex-wrap: wrap;
+  }
+  .sr-row-usage {
+    width: 100%;
+    justify-content: space-between;
+    padding-left: 24px;
+  }
+  .sr-bulk-actions {
+    margin-left: 0;
+    width: 100%;
   }
 }
 

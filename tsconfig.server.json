@@ -12,5 +12,5 @@
     "noEmit": true,
     "lib": ["ES2022"]
   },
-  "include": ["src/server/**/*", "src/types.ts", "scripts/**/*.ts"]
+  "include": ["src/server/**/*", "src/types.ts", "src/filament-density.ts", "scripts/**/*.ts"]
 }
