@@ -227,7 +227,15 @@ export class MqttBridge extends EventEmitter {
     }
 
     if (topic.includes('/register_response')) {
+      // Only the reply to OUR registration counts. `elegoo/#` stays subscribed when the
+      // SN is known, so every other client's register_response arrives here too (the
+      // vendor app, Home Assistant, a second instance). Taken as ours, a foreign success
+      // re-ran init and emitted `connected` again (another Telegram "Printer connected"),
+      // and a foreign `code: 3` marked us rejected (ELEG-189, from PR #158).
+      if (topic !== `elegoo/${this.sn}/${this.requestId}/register_response`) return;
       if (data.error === 'ok') {
+        // A repeated success for a session already up is not a new connection.
+        if (this._connected) return;
         log.info('Registered successfully');
         this._connected = true;
         this._registerAttempts = 0;

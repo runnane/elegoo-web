@@ -104,3 +104,19 @@ describe('PRINTER_IP validation', () => {
     expect(message).toContain('PRINTER_IP');
   });
 });
+
+describe('TELEGRAM_CONNECTION_NOTIFICATIONS (ELEG-189)', () => {
+  it('is on by default, so existing installs keep their connection messages', () => {
+    expect(loadConfig().telegramConnectionNotifications).toBe(true);
+  });
+
+  it('is turned off only by an explicit "false"', () => {
+    process.env.TELEGRAM_CONNECTION_NOTIFICATIONS = 'false';
+    expect(loadConfig().telegramConnectionNotifications).toBe(false);
+    // Anything else leaves it on: a typo must not silently mute a disconnect alert.
+    process.env.TELEGRAM_CONNECTION_NOTIFICATIONS = 'true';
+    expect(loadConfig().telegramConnectionNotifications).toBe(true);
+    process.env.TELEGRAM_CONNECTION_NOTIFICATIONS = 'no';
+    expect(loadConfig().telegramConnectionNotifications).toBe(true);
+  });
+});
