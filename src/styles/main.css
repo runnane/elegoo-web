@@ -2352,10 +2352,16 @@ body {
  * than cropped, so the whole camera fits on screen in either orientation.
  */
 @media (max-width: 800px), (max-width: 1200px) and (max-height: 500px) {
+  /* `overflow-x: clip` replaces the clip `.dashboard-main` gave before it became
+     `display: contents`: without it one unbreakable line (a log row, a long filename)
+     widened the whole document — 28021px at a 390px viewport, measured — and a phone
+     zoomed out to fit. `clip`, not `hidden`: it creates no second scroll container, so
+     `.dashboard` stays the only scroller. */
   .dashboard-panels {
     flex-direction: column;
     gap: 8px;
     padding: 8px;
+    overflow-x: clip;
   }
   .dashboard-sidebar:not(.sidebar-hidden),
   .dashboard-main {
