@@ -14,6 +14,7 @@ import {
 import type { Object3D } from 'three';
 import type { PrinterState } from '../printer-state';
 import { $, fetchTextTimeout } from './helpers';
+import { type DownloadAttempt, decideDownloadAttempt } from './download-attempt';
 import { chartPalette } from './chart-palette';
 import { previewLayerOffset } from './gcode-layer-offset';
 
@@ -297,39 +298,33 @@ export async function loadGcode(filename: string, source = 'local'): Promise<voi
     if (statusEl) statusEl.textContent = 'Downloading gcode…';
 
     const url = `/api/files/download?file=${encodeURIComponent(filename)}&source=${encodeURIComponent(source)}`;
-    let resp: Response | null = null;
+    const MAX_ATTEMPTS = 3;
     let gcode: string | null = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attemptNo = 1; gcode === null; attemptNo++) {
+      let attempt: DownloadAttempt;
       try {
         // The bound covers the body too, not just the headers (ELEG-131).
         const got = await fetchTextTimeout(url, undefined, 120_000);
-        if (got.bodyError) {
-          // Headers arrived, then the printer stalled or dropped the file. Retrying
-          // would only wait out the bound again, so report it straight away.
-          throw new Error(
-            'The printer did not deliver the file (the download stalled or was cut off). ' +
-              'It may refuse file downloads while printing — try again when the print has finished.',
-          );
-        }
-        resp = got.resp;
-        if (resp.ok) {
-          gcode = got.text;
-          break;
-        }
-        resp = null;
+        if (got.bodyError) attempt = { kind: 'bodyError' };
+        else if (!got.resp.ok)
+          attempt = { kind: 'status', status: got.resp.status, body: got.text };
+        else attempt = { kind: 'ok', text: got.text ?? '' };
       } catch (e) {
-        if ((e as Error).message.startsWith('The printer did not deliver')) throw e;
-        if (attempt < 3) {
-          if (statusEl) statusEl.textContent = `Retry ${attempt}/2 — download failed`;
-          await new Promise((r) => setTimeout(r, 2000));
-        } else {
-          throw e;
+        attempt = { kind: 'network', error: e as Error };
+      }
+      // Only a network-level failure is retried: a non-ok response already waited out
+      // the service's bound on the printer, so its message is shown as is (ELEG-200).
+      const decision = decideDownloadAttempt(attempt, attemptNo, MAX_ATTEMPTS);
+      if (decision.action === 'fail') throw new Error(decision.message);
+      if (decision.action === 'done') {
+        gcode = decision.text;
+      } else {
+        if (statusEl) {
+          statusEl.textContent = `Retry ${attemptNo}/${MAX_ATTEMPTS - 1} — download failed`;
         }
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
-    if (!resp || !resp.ok) throw new Error(`Download failed: ${resp?.status ?? 'no response'}`);
-
-    if (gcode === null) throw new Error('Download failed: empty response');
 
     if (statusEl) statusEl.textContent = 'Parsing gcode…';
 

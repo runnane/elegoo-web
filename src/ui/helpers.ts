@@ -26,6 +26,8 @@ export function fetchTimeout(
  * clears it when the headers arrive, so a server that sends headers and then stalls
  * left `resp.text()` pending forever (ELEG-131). `bodyError` is set (and `text` is
  * null) when the headers arrived but the body did not complete in time or broke.
+ * A non-ok response's body is read too, under the same timer, so a caller can show
+ * the server's error message (ELEG-200); if that read fails, `text` is null.
  */
 export async function fetchTextTimeout(
   input: RequestInfo | URL,
@@ -36,7 +38,10 @@ export async function fetchTextTimeout(
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const resp = await fetch(input, { ...init, signal: controller.signal });
-    if (!resp.ok) return { resp, text: null, bodyError: null };
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => null);
+      return { resp, text, bodyError: null };
+    }
     try {
       return { resp, text: await resp.text(), bodyError: null };
     } catch (e) {
