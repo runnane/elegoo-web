@@ -15,9 +15,12 @@ import {
   INIT_AI_CHART_MAX_POINTS,
   INIT_CHART_FULL_RES_POINTS,
   INIT_CHART_MAX_POINTS,
+  INIT_EVENT_LOG_MAX_ENTRIES,
   INIT_HISTORY_MAX_BYTES,
+  INIT_LAYER_TIMES_MAX_ENTRIES,
   boundHistory,
   boundInitHistory,
+  boundTail,
 } from '../init-history.js';
 
 /** `MAX_BACKLOG` in ws-transport.ts, pinned as a literal so the two cannot drift together */
@@ -136,6 +139,23 @@ describe('boundInitHistory with oversized points', () => {
 describe('the init frame a fresh client receives', () => {
   const chart = chartPoints(300_000);
   const ai = aiPoints(300_000);
+  // The store's own caps (state-store.ts): 50,000 events, 50,000 layer times (ELEG-199).
+  const events = Array.from({ length: 50_000 }, (_, i) => ({
+    ts: 1_700_000_000_000 + i * 1000,
+    event: {
+      type: 'print_progress',
+      filename: 'a_rather_long_model_name_plate_v12_final.gcode',
+      progress: i % 100,
+      layer: i,
+      totalLayers: 50_000,
+      remaining: 3600,
+    },
+  }));
+  const layers = Array.from({ length: 50_000 }, (_, i) => ({
+    layer: i + 1,
+    duration: 21.5,
+    timestamp: 1_700_000_000_000 + i * 21_500,
+  }));
   const bridge = Object.assign(new EventEmitter(), {
     isConnected: true,
     brokerConnected: true,
@@ -156,11 +176,11 @@ describe('the init frame a fresh client receives', () => {
     timelapseList: [],
     timelapseUrl: null,
     zones: null,
-    layerTimes: [],
+    layerTimes: layers,
     getFilamentUsageArray: () => [],
     getChartHistory: () => chart,
     getAIChartHistory: () => ai,
-    getEventLog: () => [],
+    getEventLog: () => events,
   });
   let server: Server;
   let transport: WebSocketTransport;
@@ -194,13 +214,46 @@ describe('the init frame a fresh client receives', () => {
       type: string;
       chartHistory: ChartPoint[];
       aiChartHistory: AIChartPoint[];
+      eventLog: typeof events;
+      layerTimes: typeof layers;
     };
     expect(init.type).toBe('init');
     expect(raw.byteLength).toBeLessThan(MAX_BACKLOG / 2);
+    // The stated bound for the whole frame (ELEG-199): the 8 MiB history budget plus 1 MiB
+    // for everything else, with 50,000 events and 50,000 layer times in the store.
+    expect(raw.byteLength).toBeLessThan(INIT_HISTORY_MAX_BYTES + 1024 * 1024);
+    // eventLog: the browser keeps 100 (ui/event-log.ts MAX_ENTRIES); newest, in order.
+    expect(init.eventLog.length).toBeLessThanOrEqual(INIT_EVENT_LOG_MAX_ENTRIES);
+    expect(init.eventLog).toEqual(events.slice(-init.eventLog.length));
+    expect(init.eventLog.at(-1)).toEqual(events.at(-1));
+    // layerTimes: the browser caps at 2000 (printer-state.ts); newest, in order.
+    expect(init.layerTimes.length).toBeLessThanOrEqual(INIT_LAYER_TIMES_MAX_ENTRIES);
+    expect(init.layerTimes).toEqual(layers.slice(-init.layerTimes.length));
+    expect(init.layerTimes.at(-1)).toEqual(layers.at(-1));
+    // The store itself is never trimmed.
+    expect(events).toHaveLength(50_000);
+    expect(layers).toHaveLength(50_000);
     expect(init.chartHistory.length).toBeLessThanOrEqual(INIT_CHART_MAX_POINTS);
     expect(init.chartHistory.at(-1)).toEqual(chart.at(-1));
     expect(init.aiChartHistory.at(-1)).toEqual(ai.at(-1));
   }, 30_000);
+});
+
+describe('boundTail', () => {
+  it('passes a list that fits through unchanged', () => {
+    const small = [1, 2, 3];
+    expect(boundTail(small, 3)).toBe(small);
+  });
+
+  it('keeps the newest entries in order and leaves the input alone', () => {
+    const all = Array.from({ length: 10 }, (_, i) => i);
+    expect(boundTail(all, 4)).toEqual([6, 7, 8, 9]);
+    expect(all).toHaveLength(10);
+  });
+
+  it('never returns an empty tail for a non-empty list', () => {
+    expect(boundTail([1, 2, 3], 0)).toEqual([3]);
+  });
 });
 
 describe('boundHistory', () => {

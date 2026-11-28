@@ -90,7 +90,14 @@ the first match wins, and the static/SPA fallback is last.
    3,600 AI points, and both together held under 8 MiB. Sent whole, the history once
    overran `MAX_BACKLOG` (32 MiB), so every fresh browser was dropped and reconnected for
    ever. The store itself, `state.json` and the REST, MCP and compat readers keep the
-   full history. Anything new added to `init` should be bounded the same way.
+   full history. The same goes for the other two persisted-growing fields (ELEG-199):
+   `eventLog` is the newest 100 entries (the browser's `MAX_ENTRIES` in
+   `src/ui/event-log.ts`; the store keeps 50,000) and `layerTimes` the newest 2,000 (the
+   browser's own cap in `src/printer-state.ts`; the layer chart plots only the last 200).
+   Both are plain tails, not decimated, because the UI never shows anything older. Worst
+   case for the whole frame is the 8 MiB history budget plus well under 1 MiB of the rest,
+   which `init-history.test.ts` pins with 50,000 events and 50,000 layer times in the
+   store. Anything new added to `init` should be bounded the same way.
 
 ## Frontend
 

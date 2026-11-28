@@ -58,6 +58,29 @@ export function boundHistory<T>(
   return out;
 }
 
+/**
+ * Event log entries an `init` carries at most (ELEG-199): the browser's `MAX_ENTRIES` in
+ * `src/ui/event-log.ts` (`loadEventLogHistory` trims to the newest 100 on arrival), so a
+ * tail of this size loses nothing the panel could have shown. The store keeps 50,000
+ * (~8-10 MB of JSON).
+ */
+export const INIT_EVENT_LOG_MAX_ENTRIES = 100;
+/**
+ * Layer-time entries an `init` carries at most (ELEG-199): the browser's own cap in
+ * `PrinterState.addLayerTime` (`src/printer-state.ts`), and ten times what the layer chart
+ * plots (`MAX_VISIBLE = 200` in `src/ui/layer-chart.ts`, the last entries of the trailing
+ * run). A plain tail rather than decimation: the chart never draws the older layers, and
+ * thinning the newest would put gaps into the one series that is drawn. The store keeps
+ * 50,000 (~2.75 MB).
+ */
+export const INIT_LAYER_TIMES_MAX_ENTRIES = 2_000;
+
+/** The newest `max` entries of `items`, in order; the array itself when it already fits */
+export function boundTail<T>(items: readonly T[], max: number): readonly T[] {
+  const n = Math.max(1, Math.floor(max));
+  return items.length <= n ? items : items.slice(items.length - n);
+}
+
 export interface InitHistory<C, A> {
   chartHistory: readonly C[];
   aiChartHistory: readonly A[];

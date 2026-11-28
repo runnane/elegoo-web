@@ -6,7 +6,8 @@
  * Server → Client:
  *   { type: "init", sn, attributes, status, canvas, files, ... , serviceStatus }
  *                                           // chartHistory / aiChartHistory are a bounded
- *                                           // slice of the store (init-history.ts, ELEG-194)
+ *                                           // slice of the store (init-history.ts, ELEG-194);
+ *                                           // eventLog / layerTimes are bounded tails (ELEG-199)
  *   { type: "response", method, data }     // forwarded from printer api_response
  *   { type: "status", data }               // forwarded from printer api_status (delta)
  *   { type: "raw", direction, topic, data } // MQTT raw log entry
@@ -48,7 +49,12 @@ import { getBuildInfo } from './build-info.js';
 import { authorize, checkKey, extractKey } from './write-auth.js';
 import { isReadMethod } from './method-policy.js';
 import { printBusyRefusal } from './print-guard.js';
-import { boundInitHistory } from './init-history.js';
+import {
+  boundInitHistory,
+  boundTail,
+  INIT_EVENT_LOG_MAX_ENTRIES,
+  INIT_LAYER_TIMES_MAX_ENTRIES,
+} from './init-history.js';
 
 const log = getLogger('WS');
 
@@ -243,11 +249,11 @@ export class WebSocketTransport {
       // URL; the SPA does not read this field today.
       timelapseUrl: this.store.timelapseUrl,
       zones: this.store.zones,
-      layerTimes: this.store.layerTimes,
+      layerTimes: boundTail(this.store.layerTimes, INIT_LAYER_TIMES_MAX_ENTRIES),
       filamentUsage: this.store.getFilamentUsageArray(),
       chartHistory: history.chartHistory,
       aiChartHistory: history.aiChartHistory,
-      eventLog: this.store.getEventLog(),
+      eventLog: boundTail(this.store.getEventLog(), INIT_EVENT_LOG_MAX_ENTRIES),
       serviceStatus: this.getServiceStatus(),
     };
     ws.send(JSON.stringify(msg));
