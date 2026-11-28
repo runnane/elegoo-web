@@ -5,6 +5,8 @@
  *
  * Server → Client:
  *   { type: "init", sn, attributes, status, canvas, files, ... , serviceStatus }
+ *                                           // chartHistory / aiChartHistory are a bounded
+ *                                           // slice of the store (init-history.ts, ELEG-194)
  *   { type: "response", method, data }     // forwarded from printer api_response
  *   { type: "status", data }               // forwarded from printer api_status (delta)
  *   { type: "raw", direction, topic, data } // MQTT raw log entry
@@ -46,6 +48,7 @@ import { getBuildInfo } from './build-info.js';
 import { authorize, checkKey, extractKey } from './write-auth.js';
 import { isReadMethod } from './method-policy.js';
 import { printBusyRefusal } from './print-guard.js';
+import { boundInitHistory } from './init-history.js';
 
 const log = getLogger('WS');
 
@@ -220,6 +223,9 @@ export class WebSocketTransport {
   }
 
   private sendInit(ws: WebSocket): void {
+    // A bounded slice, never the whole store: 300k points is ~100 MB, past MAX_BACKLOG,
+    // and the client would be dropped and reconnect for ever (ELEG-194).
+    const history = boundInitHistory(this.store.getChartHistory(), this.store.getAIChartHistory());
     const msg = {
       type: 'init',
       connected: this.bridge.isConnected,
@@ -239,8 +245,8 @@ export class WebSocketTransport {
       zones: this.store.zones,
       layerTimes: this.store.layerTimes,
       filamentUsage: this.store.getFilamentUsageArray(),
-      chartHistory: this.store.getChartHistory(),
-      aiChartHistory: this.store.getAIChartHistory(),
+      chartHistory: history.chartHistory,
+      aiChartHistory: history.aiChartHistory,
       eventLog: this.store.getEventLog(),
       serviceStatus: this.getServiceStatus(),
     };
