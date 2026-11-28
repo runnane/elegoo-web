@@ -83,6 +83,26 @@ export interface PrintReport {
   events: Array<{ ts: number; summary: string }>;
 }
 
+export interface ReportListItem {
+  id: string;
+  filename: string;
+  outcome: string;
+  startedAt: number;
+  endedAt: number;
+  duration: number;
+  progressAtEnd: number;
+  failureReason?: string;
+  filament: FilamentUsage[];
+}
+
+export interface ActivePrintSummary {
+  id: string;
+  filename: string;
+  startedAt: number;
+  progress: number;
+  filament: FilamentUsage[];
+}
+
 interface MinMaxAvg {
   min: number;
   max: number;
@@ -355,26 +375,10 @@ export class PrintReportCollector extends EventEmitter {
   }
 
   /** List all saved reports (most recent first) */
-  async listReports(): Promise<
-    Array<{
-      id: string;
-      filename: string;
-      outcome: string;
-      startedAt: number;
-      endedAt: number;
-      duration: number;
-    }>
-  > {
+  async listReports(): Promise<ReportListItem[]> {
     try {
       const entries = await readdir(this.reportsDir, { withFileTypes: true });
-      const reports: Array<{
-        id: string;
-        filename: string;
-        outcome: string;
-        startedAt: number;
-        endedAt: number;
-        duration: number;
-      }> = [];
+      const reports: ReportListItem[] = [];
 
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
@@ -388,6 +392,9 @@ export class PrintReportCollector extends EventEmitter {
             startedAt: report.startedAt,
             endedAt: report.endedAt,
             duration: report.duration,
+            progressAtEnd: report.stats?.progressAtEnd ?? 0,
+            ...(report.failureReason ? { failureReason: report.failureReason } : {}),
+            filament: Array.isArray(report.filament) ? report.filament : [],
           });
         } catch {
           // Skip broken reports
@@ -449,6 +456,24 @@ export class PrintReportCollector extends EventEmitter {
   /** Check if a print is currently being tracked */
   isActive(): boolean {
     return this.activeReport !== null;
+  }
+
+  /** Summary of the currently active print, including live filament usage so far */
+  getActiveSummary(): ActivePrintSummary | null {
+    const active = this.activeReport;
+    if (!active) return null;
+    const status = this.store.status;
+    const filename =
+      active.filename && active.filename !== 'unknown'
+        ? active.filename
+        : (status?.print_status?.filename ?? active.filename ?? 'unknown');
+    return {
+      id: active.id,
+      filename,
+      startedAt: active.startedAt,
+      progress: status?.machine_status?.progress ?? 0,
+      filament: this.store.getFilamentUsageArray(),
+    };
   }
 }
 
