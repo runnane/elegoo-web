@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.3.0](https://github.com/runnane/elegoo-web/compare/v1.2.0...v1.3.0) (2026-11-28)
+
+* **deps-dev:** bump @biomejs/biome from 2.6.4 to 2.6.9 ([#239](https://github.com/runnane/elegoo-web/issues/239)) ([cc3e934](https://github.com/runnane/elegoo-web/commit/cc3e934c1ed343d211cf328b9f44dba7c9072cdf))
+* **deps-dev:** bump concurrently from 10.0.6 to 10.0.7 ([#236](https://github.com/runnane/elegoo-web/issues/236)) ([1a1eb6b](https://github.com/runnane/elegoo-web/commit/1a1eb6b8a7963ac3c82f66ba0c84517cc07a26d3))
+* **deps:** bump dotenv from 18.0.8 to 18.0.10 ([#237](https://github.com/runnane/elegoo-web/issues/237)) ([1e94809](https://github.com/runnane/elegoo-web/commit/1e94809933d1dd389393000b0859418d8b9a92a5))
+* **deps:** bump pdfkit from 0.20.2 to 0.21.0 ([#235](https://github.com/runnane/elegoo-web/issues/235)) ([5ac43b4](https://github.com/runnane/elegoo-web/commit/5ac43b4336278a2959ca48f16a10f5ef8025c006))
+
+### Features
+
+* **server:** report each print's filament usage and the live print's usage from GET /api/reports (ELEG-196) ([#242](https://github.com/runnane/elegoo-web/issues/242)) ([ed52794](https://github.com/runnane/elegoo-web/commit/ed52794239403faa0430673660bd90e60fe9551e)), references [#182](https://github.com/runnane/elegoo-web/issues/182)
+* **ui:** estimate a spool's remaining filament from print history in the Spool Calculator (ELEG-197) ([#243](https://github.com/runnane/elegoo-web/issues/243)) ([9e4e130](https://github.com/runnane/elegoo-web/commit/9e4e130563bf7818126ba52b0c3dfa69378356dd)), references [#182](https://github.com/runnane/elegoo-web/issues/182)
+* **ui:** mobile bottom navigation and touch-friendly layout on phones (ELEG-191) ([#244](https://github.com/runnane/elegoo-web/issues/244)) ([8e35e1e](https://github.com/runnane/elegoo-web/commit/8e35e1eeccceb5c8dc27b0de3251e1116ebb5f51))
+* **ui:** reflect the active tab in location.hash so reload, Back and links work (ELEG-175) ([#228](https://github.com/runnane/elegoo-web/issues/228)) ([d6cb090](https://github.com/runnane/elegoo-web/commit/d6cb0908f59775eef13b8aefc73720597578a1fa)), references [#tools](https://github.com/runnane/elegoo-web/issues/tools) [#settings](https://github.com/runnane/elegoo-web/issues/settings) [#debug](https://github.com/runnane/elegoo-web/issues/debug) [#help](https://github.com/runnane/elegoo-web/issues/help)
+
+### Bug Fixes
+
+* **compat:** derive paused from status 2 sub-status, not status 3 (ELEG-181) ([#223](https://github.com/runnane/elegoo-web/issues/223)) ([007c34e](https://github.com/runnane/elegoo-web/commit/007c34e7d4ee4019f2f5b6dbeb6905ea3bf4046e))
+* **compat:** map only extruder and heater_bed in SET_HEATER_TEMPERATURE (ELEG-185) ([#230](https://github.com/runnane/elegoo-web/issues/230)) ([1b7265e](https://github.com/runnane/elegoo-web/commit/1b7265e4b6f016dd2bc3df347f7de833f42bc937))
+* **compat:** send the printer's documented home, move and temperature shapes from Moonraker and OctoPrint (ELEG-180) ([#221](https://github.com/runnane/elegoo-web/issues/221)) ([80e952c](https://github.com/runnane/elegoo-web/commit/80e952c0d9334dbd32ff069fcb6725d87d701fbc))
+* **compat:** stop multiplying gcode_move.speed by 60 in the Moonraker compat (ELEG-187) ([#232](https://github.com/runnane/elegoo-web/issues/232)) ([16df5a3](https://github.com/runnane/elegoo-web/commit/16df5a326b50a91af83e9baf9b6609a61a6bbc6c))
+* **pwa:** let the camera stream and live endpoints bypass the service worker ([#234](https://github.com/runnane/elegoo-web/issues/234)) ([fe7d970](https://github.com/runnane/elegoo-web/commit/fe7d9708ac4cdd5ffdd38ce1e1d2cbbfca89ab5a))
+* **server:** answer unknown /api/* paths with a JSON 404, not the SPA shell (ELEG-171) ([#224](https://github.com/runnane/elegoo-web/issues/224)) ([a85fc72](https://github.com/runnane/elegoo-web/commit/a85fc72b6eb4b2b0b11366ba4fd133fbe966daed))
+* **server:** close the idle camera upstream after the last viewer leaves (ELEG-184) ([#229](https://github.com/runnane/elegoo-web/issues/229)) ([a6411b7](https://github.com/runnane/elegoo-web/commit/a6411b7209d6a47162110362e0e6036de95e647c))
+* **server:** derive camera health from evidence, and end a dead /api/stream (ELEG-178) ([#216](https://github.com/runnane/elegoo-web/issues/216)) ([e3da663](https://github.com/runnane/elegoo-web/commit/e3da6630e210322eabf4ee015d85ad8b4ae6b51d))
+* **server:** ignore other clients' MQTT registration replies, so Telegram stops re-announcing "Printer connected" (ELEG-189) ([#241](https://github.com/runnane/elegoo-web/issues/241)) ([14277f9](https://github.com/runnane/elegoo-web/commit/14277f906d92d057df383a0fbaa85efa72b4214a)), references [#158](https://github.com/runnane/elegoo-web/issues/158)
+* **server:** redact the printer auth token methods and drop the dead 1050 video-URL branch (ELEG-186) ([#233](https://github.com/runnane/elegoo-web/issues/233)) ([426a56c](https://github.com/runnane/elegoo-web/commit/426a56cccd3223a764a3eed45b920cf6408a2e13))
+* **server:** refuse motion, homing, heater-off and filament commands while a print runs (ELEG-176) ([#217](https://github.com/runnane/elegoo-web/issues/217)) ([ff6130b](https://github.com/runnane/elegoo-web/commit/ff6130b9b601a6c51cba663bb027795fb29f0fba))
+* **server:** report the AI monitor as degraded when it gets no frames (ELEG-168) ([#219](https://github.com/runnane/elegoo-web/issues/219)) ([a35749f](https://github.com/runnane/elegoo-web/commit/a35749f5bb77a04b330e88e6d4c42a6f10a77e17))
+* **ui:** correct the Help MQTT method table to match what the code sends (ELEG-182) ([#227](https://github.com/runnane/elegoo-web/issues/227)) ([8f3e080](https://github.com/runnane/elegoo-web/commit/8f3e0809c40d7566895efa9e13d5a17be94e3c41))
+* **ui:** derive the print start time from total_duration (ELEG-169) ([#220](https://github.com/runnane/elegoo-web/issues/220)) ([423a553](https://github.com/runnane/elegoo-web/commit/423a553db3d3da788bf235d326787368a62c8bf4))
+* **ui:** keep every dashboard card on screen at phone widths (ELEG-164) ([#213](https://github.com/runnane/elegoo-web/issues/213)) ([c472a67](https://github.com/runnane/elegoo-web/commit/c472a674691872279616540f5a377cb9b3aabb73))
+* **ui:** list every /api route in the Help REST table and correct the overview (ELEG-172) ([#225](https://github.com/runnane/elegoo-web/issues/225)) ([53cd966](https://github.com/runnane/elegoo-web/commit/53cd9666170047e5e7068eb9b0c66875b7214bc4))
+* **ui:** lock motion, heater and tray controls while a print runs (ELEG-163) ([#212](https://github.com/runnane/elegoo-web/issues/212)) ([3194eb7](https://github.com/runnane/elegoo-web/commit/3194eb78abd58a3d0a681eb87c4e232f7eddb046))
+* **ui:** polish the dashboard — whole-degree temperatures, one status word, mm/s speed, labels inside charts (ELEG-174) ([#231](https://github.com/runnane/elegoo-web/issues/231)) ([30be284](https://github.com/runnane/elegoo-web/commit/30be284c9544dadf2f3a3fd531476144eb9e33ca))
+* **ui:** replace browser confirm() dialogs with an in-app confirmation (ELEG-165) ([#215](https://github.com/runnane/elegoo-web/issues/215)) ([ac1114d](https://github.com/runnane/elegoo-web/commit/ac1114d681dbeecafff3c1959d1c74abb7e88f2a))
+* **ui:** scroll Print Reports inside its card and tone down the row delete button (ELEG-173) ([#226](https://github.com/runnane/elegoo-web/issues/226)) ([6ccbf76](https://github.com/runnane/elegoo-web/commit/6ccbf7612b6e2e162d57bcb9438eba68bc4b601b)), references [#print-reports-entries](https://github.com/runnane/elegoo-web/issues/print-reports-entries)
+* **ui:** show an unavailable state on the camera card instead of a black box (ELEG-166) ([#218](https://github.com/runnane/elegoo-web/issues/218)) ([19418dd](https://github.com/runnane/elegoo-web/commit/19418ddf288e8b0ff1dd30280421eb7db9fc1106))
+* **ui:** show Print History statuses with the printer's real codes (ELEG-162) ([#214](https://github.com/runnane/elegoo-web/issues/214)) ([12026b9](https://github.com/runnane/elegoo-web/commit/12026b90be0140045cc00b1ce963bd86006fbc31))
+* **ui:** show the whole camera on phones, near the top, with pinch zoom (ELEG-158) ([#208](https://github.com/runnane/elegoo-web/issues/208)) ([4a7f639](https://github.com/runnane/elegoo-web/commit/4a7f6394ade14e11471ae819428e6dc70b209c1e))
+* **ui:** validate spool calculator input and cap remaining at 100% (ELEG-170) ([#222](https://github.com/runnane/elegoo-web/issues/222)) ([47ee90e](https://github.com/runnane/elegoo-web/commit/47ee90e9b95428a8d9e902caa3dd15b9b139a82a))
+
 ## [1.2.0](https://github.com/runnane/elegoo-web/compare/v1.1.2...v1.2.0) (2026-11-25)
 
 * **deps-dev:** bump jsdom from 30.1.2 to 30.1.3 ([#169](https://github.com/runnane/elegoo-web/issues/169)) ([65c366f](https://github.com/runnane/elegoo-web/commit/65c366fdeccd638c63f3e0261fd6a91a06a93d3a))
