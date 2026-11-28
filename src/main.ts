@@ -69,6 +69,7 @@ import { maybeAlertForEvent } from './ui/alert-sound';
 import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
+import { initMobileNav, refreshMobileSectionEmpty } from './ui/mobile-nav';
 import { initTabRoute } from './ui/tab-route';
 import { isCameraUnavailable } from './ui/camera-card';
 import { attachCameraZoom } from './ui/camera-zoom';
@@ -797,11 +798,19 @@ document.querySelectorAll('.main-tab').forEach((btn) => {
     switchToTab(tab);
   });
 });
-initTabRoute(switchToTab);
 
 // Apply saved card layout
 applyCardLayout();
 setSpoolCalcState(state);
+
+// Initialise mobile bottom-tab navigation (the bar and the section filter are CSS scoped to
+// ≤800px, so above that this only writes inert data attributes)
+initMobileNav(switchToTab);
+
+// Open the tab named in the URL hash last: initMobileNav() resets the bottom nav to the
+// dashboard, so routing first would leave a #settings deep link with the dashboard nav
+// highlighted and the More bar hidden. switchToTab() re-syncs the nav when it routes.
+initTabRoute(switchToTab);
 
 // ---- Sidebar resize handle ----
 {
@@ -817,6 +826,7 @@ setSpoolCalcState(state);
   // Restore sidebar visibility
   const wasHidden = localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1';
   if (wasHidden && sidebar) sidebar.classList.add('sidebar-hidden');
+  refreshMobileSectionEmpty();
 
   if (handle && sidebar) {
     let startX = 0;
@@ -854,6 +864,7 @@ setSpoolCalcState(state);
       sidebar.classList.toggle('sidebar-hidden');
       const hidden = sidebar.classList.contains('sidebar-hidden');
       localStorage.setItem(SIDEBAR_HIDDEN_KEY, hidden ? '1' : '0');
+      refreshMobileSectionEmpty();
     });
   }
 }

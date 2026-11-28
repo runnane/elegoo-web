@@ -178,6 +178,7 @@ export function renderDashboard(state: PrinterState, client: CommandSender): voi
   } else {
     thumbImg.classList.add('hidden');
     thumbPlaceholder.classList.remove('hidden');
+    thumbPlaceholder.classList.toggle('is-text', state.thumbnailFailed);
     thumbPlaceholder.textContent = state.thumbnailFailed ? 'No preview' : '🖨️';
     $('print-thumbnail-wrap').classList.remove('thumbnail-dark');
   }
