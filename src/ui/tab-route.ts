@@ -34,6 +34,17 @@ export function syncTabHash(tab: MainTab): void {
   window.history.pushState(null, '', url);
 }
 
+/**
+ * Mark `dashboard` connected once the service answers, and un-hide it only when the
+ * Dashboard is the active tab (ELEG-198). A `#settings` deep link has already opened its
+ * page via `initTabRoute`; un-hiding the dashboard then rendered it under that page.
+ * `switchToTab('dashboard')` un-hides it later because `dataset.connected` is set here.
+ */
+export function revealDashboardIfActive(dashboard: HTMLElement, hash: string): void {
+  dashboard.dataset.connected = 'true';
+  if (parseTabHash(hash) === 'dashboard') dashboard.classList.remove('hidden');
+}
+
 /** Open the tab named by the current hash and follow later hash changes (Back, links). */
 export function initTabRoute(switchTab: (tab: MainTab) => void): void {
   window.addEventListener('hashchange', () => switchTab(parseTabHash(window.location.hash)));

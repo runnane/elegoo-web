@@ -70,7 +70,7 @@ import { maybeNotifyForEvent } from './ui/notify-desktop';
 import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
 import { initMobileNav, refreshMobileSectionEmpty } from './ui/mobile-nav';
-import { initTabRoute } from './ui/tab-route';
+import { initTabRoute, revealDashboardIfActive } from './ui/tab-route';
 import { isCameraUnavailable } from './ui/camera-card';
 import { attachCameraZoom } from './ui/camera-zoom';
 import { confirmDialog } from './ui/confirm-dialog';
@@ -202,8 +202,7 @@ function showDashboard(): void {
   if (dashboardShown) return;
   dashboardShown = true;
   $('connect-dialog').classList.add('hidden');
-  $('dashboard').classList.remove('hidden');
-  $('dashboard').dataset.connected = 'true';
+  revealDashboardIfActive($('dashboard'), window.location.hash);
 
   if (!controlsBound) {
     controlsBound = true;
