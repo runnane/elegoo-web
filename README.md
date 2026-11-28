@@ -154,6 +154,7 @@ recreated — about 200 MB and roughly 95 seconds here, and a good deal slower o
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (enables notifications) |
 | `TELEGRAM_CHAT_ID` | — | Telegram chat ID — where notifications are **sent** |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | `TELEGRAM_CHAT_ID` | Comma-separated numeric sender ids permitted to **issue** bot commands. Anyone else is ignored silently |
+| `TELEGRAM_CONNECTION_NOTIFICATIONS` | `true` | Set to `false` to stop only the "Printer connected" / "Printer disconnected" messages. Print notifications and bot commands are unaffected |
 | `PROGRESS_INTERVAL` | `25` | Notify every N% progress |
 | `DATA_DIR` | `./data` | Data directory for state, reports, logs |
 | `AI_ENABLED` | `false` | Enable AI print monitoring |

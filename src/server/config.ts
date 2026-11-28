@@ -41,6 +41,8 @@ export interface ServiceConfig {
 
   // Telegram (optional)
   telegramEnabled: boolean;
+  /** Send "Printer connected" / "Printer disconnected"; print events are unaffected (ELEG-189) */
+  telegramConnectionNotifications: boolean;
   telegramToken: string;
   telegramChatId: string;
   /** Numeric sender ids permitted to issue bot commands; empty denies everyone (ELEG-3) */
@@ -209,6 +211,8 @@ export function loadConfig(): ServiceConfig {
     corsPolicy: parseCorsPolicy(env('CORS_ALLOWED_ORIGINS')),
     serviceApiKey,
     telegramEnabled: !!(telegramToken && telegramChatId),
+    // Default on: only an explicit `false` turns the connection messages off.
+    telegramConnectionNotifications: env('TELEGRAM_CONNECTION_NOTIFICATIONS') !== 'false',
     telegramToken,
     telegramChatId,
     telegramAllowedChatIds,

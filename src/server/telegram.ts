@@ -157,6 +157,17 @@ function formatOtaTransition(event: Extract<PrintEvent, { type: 'sub_status_chan
   }
 }
 
+/**
+ * `TELEGRAM_CONNECTION_NOTIFICATIONS=false` mutes the connection messages and nothing
+ * else (ELEG-189). Separate from `handleEvent` so a test can reach it without a bot.
+ */
+export function isMutedConnectionEvent(
+  type: PrintEvent['type'],
+  connectionNotifications: boolean,
+): boolean {
+  return !connectionNotifications && (type === 'connected' || type === 'disconnected');
+}
+
 export class TelegramIntegration {
   private bot: Bot;
   private liveMessageId: number | null = null;
@@ -251,6 +262,7 @@ export class TelegramIntegration {
   }
 
   private async handleEvent(event: PrintEvent): Promise<void> {
+    if (isMutedConnectionEvent(event.type, this.config.telegramConnectionNotifications)) return;
     const { text, urgent } = formatEvent(event);
     if (!text) return;
 
