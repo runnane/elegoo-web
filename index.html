@@ -606,10 +606,11 @@
 
       <!-- Camera Fullscreen Overlay (positioned fixed, outside panels) -->
       <div id="camera-modal" class="camera-modal hidden" tabindex="-1">
-        <div class="camera-modal-content">
+        <div class="camera-modal-content" id="camera-modal-content">
           <img id="camera-modal-img" alt="Camera" class="camera-modal-img">
-          <button id="camera-modal-close" class="camera-modal-close" title="Close">&times;</button>
         </div>
+        <button id="camera-modal-close" class="camera-modal-close" title="Close" aria-label="Close camera view">&times;</button>
+        <div class="camera-modal-hint">Pinch or scroll to zoom · drag to pan · double-tap to zoom in or out</div>
       </div>
     </div>
 

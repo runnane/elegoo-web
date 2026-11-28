@@ -1176,6 +1176,11 @@ body {
   max-height: 60vh;
   object-fit: contain;
 }
+.camera-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .camera-overlay {
   position: absolute;
   inset: 0;
@@ -1222,23 +1227,52 @@ body {
 .camera-modal.hidden {
   display: none;
 }
+/*
+ * ELEG-158. The content box is the zoom surface: it clips the scaled image and takes
+ * every touch itself (`touch-action: none`), so a pinch zooms the stream rather than
+ * the page. `dvh` rather than `vh` because mobile browser chrome eats into `vh`.
+ */
 .camera-modal-content {
   position: relative;
-  max-width: 95vw;
+  max-width: 98vw;
   max-height: 95vh;
+  max-height: 95dvh;
+  overflow: hidden;
+  border-radius: 8px;
+  touch-action: none;
+  cursor: zoom-in;
+}
+.camera-modal-content.zoomed {
+  cursor: grab;
 }
 .camera-modal-img {
-  max-width: 95vw;
-  max-height: 95vh;
+  display: block;
+  max-width: 98vw;
+  /* Leaves a strip under the image for the hint line. */
+  max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
   object-fit: contain;
-  border-radius: 8px;
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.camera-modal-hint {
+  position: fixed;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
 }
 .camera-modal-close {
-  position: absolute;
-  top: -12px;
-  right: -12px;
-  width: 32px;
-  height: 32px;
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: none;
   background: var(--bg-card);
@@ -2054,8 +2088,19 @@ body {
   .sidebar-resize-handle {
     display: none;
   }
+  /*
+   * ELEG-158: one scroller below 1200px, and it is `.dashboard`. Stacked, the panels
+   * kept their desktop `flex: 1` (basis 0) and `overflow-x: hidden` — which turns
+   * `overflow-y: visible` into `auto` — so `.dashboard-main` shrank to whatever height
+   * the sidebar left inside the fixed-height `.dashboard` and scrolled inside itself.
+   * Measured on an 844×390 landscape phone: a 16px-tall main area, the camera a sliver.
+   */
+  .dashboard-panels,
   .dashboard-main {
-    overflow-y: visible;
+    flex: none;
+    overflow: visible;
+  }
+  .dashboard-main {
     padding: 8px;
     gap: 10px;
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -2292,6 +2337,54 @@ body {
     left: 8px;
     right: 8px;
     max-width: none;
+  }
+}
+
+/*
+ * Phones (ELEG-158): ≤800px wide, or a landscape phone — short and not desktop-wide.
+ *
+ * The camera was the first *main* card, and stacked the main area comes after the whole
+ * sidebar, so it sat ~2500px down a 390px-wide page. `order` cannot move a card between
+ * the two panels, so here the panels step out of the box tree (`display: contents`) and
+ * every card becomes one flex column: print status first, then the camera, then the
+ * rest in their configured order. Hiding or collapsing a card still works — those act
+ * on the card itself. The frame is also capped to the screen height, letterboxed rather
+ * than cropped, so the whole camera fits on screen in either orientation.
+ */
+@media (max-width: 800px), (max-width: 1200px) and (max-height: 500px) {
+  /* `overflow-x: clip` replaces the clip `.dashboard-main` gave before it became
+     `display: contents`: without it one unbreakable line (a log row, a long filename)
+     widened the whole document — 28021px at a 390px viewport, measured — and a phone
+     zoomed out to fit. `clip`, not `hidden`: it creates no second scroll container, so
+     `.dashboard` stays the only scroller. */
+  .dashboard-panels {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    overflow-x: clip;
+  }
+  .dashboard-sidebar:not(.sidebar-hidden),
+  .dashboard-main {
+    display: contents;
+  }
+  #print-status-bar {
+    order: -2;
+  }
+  #camera-card {
+    order: -1;
+  }
+  .dashboard-panels > .card,
+  .dashboard-sidebar > .card,
+  .dashboard-main > .card {
+    margin: 0;
+    min-width: 0;
+  }
+  .camera-img,
+  #camera-card.camera-expanded .camera-img {
+    /* The screen minus the sticky header and the card's own title row. */
+    max-height: calc(100vh - 130px);
+    max-height: calc(100dvh - 130px);
+    object-fit: contain;
   }
 }
 

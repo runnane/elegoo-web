@@ -46,6 +46,18 @@ describe('phone layout grid (ELEG-164)', () => {
     expect(body).toMatch(/min-width:\s*0\s*;/);
   });
 
+  it('on phones the card column clips overflow itself, since its panels are display: contents (ELEG-158)', () => {
+    // The panels step out of the box tree on phones, taking `.dashboard-main`'s
+    // overflow-x clip with them. Measured in headless Chromium without this rule: a
+    // 4000-character unbreakable line made the document 28021px wide at 390px.
+    const phones = mediaBlock('max-width: 800px), (max-width: 1200px) and (max-height: 500px');
+    expect(ruleBody(phones, '.dashboard-sidebar:not(.sidebar-hidden), .dashboard-main')).toMatch(
+      /display:\s*contents/,
+    );
+    // `clip`, not `hidden`: hidden would make the panels a second scroll container.
+    expect(ruleBody(phones, '.dashboard-panels')).toMatch(/overflow-x:\s*clip\s*;/);
+  });
+
   it('the five tabs share the row on a narrow phone instead of scrolling Help away', () => {
     const body = ruleBody(mediaBlock('max-width: 480px'), '.main-tab');
     expect(body).toMatch(/flex:\s*1 1 0/);

@@ -70,6 +70,7 @@ import { startTimestampTicker } from './ui/relative-time';
 import { createFocusTrap } from './ui/focus-trap';
 import { initTabRoute } from './ui/tab-route';
 import { isCameraUnavailable } from './ui/camera-card';
+import { attachCameraZoom } from './ui/camera-zoom';
 import { confirmDialog } from './ui/confirm-dialog';
 import type { PrinterStatus, PrinterAttributes, CanvasInfo, FileEntry } from './types';
 import {
@@ -256,6 +257,8 @@ function showDashboard(): void {
     // user cannot see — controls that drive a physical machine. The trap also owns
     // Escape and restores focus to the opener on close.
     let releaseCameraTrap: (() => void) | null = null;
+    // ELEG-158: pinch / wheel / double-tap zoom and drag-to-pan in the enlarged view.
+    const cameraZoom = attachCameraZoom($('camera-modal-content'), cameraModalImg);
 
     const closeModal = () => {
       // Guard: the click handler on the overlay fires for the close button too, so this
@@ -263,6 +266,7 @@ function showDashboard(): void {
       if (cameraModal.classList.contains('hidden')) return;
       cameraModal.classList.add('hidden');
       cameraModalImg.src = '';
+      cameraZoom.reset();
       releaseCameraTrap?.();
       releaseCameraTrap = null;
     };
@@ -270,6 +274,7 @@ function showDashboard(): void {
     cameraWrap.addEventListener('click', () => {
       if (!cameraFeed.src || cameraFeed.alt === 'Camera off' || isCameraUnavailable()) return;
       cameraModalImg.src = cameraFeed.src;
+      cameraZoom.reset();
       cameraModal.classList.remove('hidden');
       // Created after `.hidden` is removed: the trap reads the focusable children, and
       // this repo's `.hidden` class is one of the things it treats as not focusable.
@@ -280,7 +285,12 @@ function showDashboard(): void {
       e.stopPropagation();
       closeModal();
     });
-    cameraModal.addEventListener('click', closeModal);
+    // Only the backdrop closes it. Taps on the image are zoom gestures now (ELEG-158), and
+    // a pan that started on the image and ended over the backdrop is not a close either.
+    cameraModal.addEventListener('click', (e) => {
+      if (cameraZoom.isGestureClick(e.timeStamp)) return;
+      if (e.target === cameraModal) closeModal();
+    });
 
     // Camera expand toggle
     const cameraCard = $('camera-card');
