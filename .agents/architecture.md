@@ -83,6 +83,15 @@ the first match wins, and the static/SPA fallback is last.
    than live data. Layer charts, print history and filament usage all depend on this;
    don't "fix" an empty-looking store by clearing the file.
 
+   The flip side is that restored history can be large: up to 300,000 chart and
+   300,000 AI chart points. The WebSocket `init` frame therefore carries a **bounded
+   slice** of each (`src/server/init-history.ts`, ELEG-194): the last hour of chart
+   points at full resolution, older ones decimated into a 20,000-point budget, the last
+   3,600 AI points, and both together held under 8 MiB. Sent whole, the history once
+   overran `MAX_BACKLOG` (32 MiB), so every fresh browser was dropped and reconnected for
+   ever. The store itself, `state.json` and the REST, MCP and compat readers keep the
+   full history. Anything new added to `init` should be bounded the same way.
+
 ## Frontend
 
 `index.html` + `src/main.ts` compose hand-written DOM modules from `src/ui/*.ts` — no
