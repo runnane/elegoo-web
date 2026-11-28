@@ -1913,9 +1913,12 @@ body {
   white-space: nowrap;
 }
 
-/* File detail popover */
+/* File detail popover. files.ts sets the two custom properties next to the hovered row;
+   mobile.css docks it above the bottom nav on phones instead (ELEG-191). */
 .file-popover {
   position: fixed;
+  left: var(--popover-left, 8px);
+  top: var(--popover-top, 8px);
   z-index: 1000;
   background: var(--bg-card);
   border: 1px solid var(--border);

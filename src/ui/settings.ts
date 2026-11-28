@@ -12,6 +12,7 @@ import { notifySupport, requestNotifyPermission } from './notify-desktop';
 import { refreshTimestamps } from './relative-time';
 import { loadUISettings, saveUISettings } from './ui-settings';
 import { mountPrinterPresets } from './printer-presets';
+import { syncMobileNavWithTab, tagMobileCards } from './mobile-nav';
 import { syncTabHash } from './tab-route';
 import { API_KEY_SECTION, apiWrite, getApiKey, setApiKey } from './api-key';
 
@@ -98,6 +99,9 @@ export function applyCardLayout(): void {
       toggleCardCollapse(card.id);
     });
   }
+
+  // Tag cards with their mobile section (an inert data attribute above 800px)
+  tagMobileCards();
 }
 
 // ---- Settings Tab ----
@@ -156,6 +160,8 @@ export function switchToTab(tab: 'dashboard' | 'settings' | 'tools' | 'help' | '
   } else if (tab === 'debug') {
     debugPage?.classList.remove('hidden');
   }
+
+  syncMobileNavWithTab(tab);
 }
 
 /** Render settings content into the settings page (called on tab switch) */

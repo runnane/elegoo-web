@@ -171,7 +171,12 @@ function parseFilamentFromName(filename: string): { types: string[]; count: numb
   return { types: [...new Set(found)], count: found.length };
 }
 
-function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
+/**
+ * Open the detail popover for `file`. `pinned` is true when the ⋯ button opened it (touch):
+ * a pinned popover ignores hover — mouseleave does not close it and hovering another row
+ * does not replace it — so the emulated mouse events a tap fires cannot fight the tap.
+ */
+function showFilePopover(file: FileEntry, anchor: HTMLElement, pinned = false): void {
   closeFilePopover();
   const fullPath =
     currentDir === '/' ? file.filename : currentDir.replace(/^\//, '') + '/' + file.filename;
@@ -181,13 +186,15 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
 
   const el = document.createElement('div');
   el.className = 'file-popover';
+  el.dataset.filename = file.filename;
+  if (pinned) el.dataset.pinned = 'true';
 
   let html = '<div class="file-popover-inner">';
   if (thumb) {
     html += `<img class="file-popover-thumb ${THUMBNAIL_CLASS}" src="data:image/png;base64,${thumb}" alt="Preview">`;
   }
   html += '<div class="file-popover-details">';
-  html += `<div class="file-popover-name">${escapeHtml(file.filename)}</div>`;
+  html += `<div class="file-popover-header"><div class="file-popover-name">${escapeHtml(file.filename)}</div><button type="button" class="file-popover-close" aria-label="Close">&times;</button></div>`;
   html += '<table class="file-popover-table">';
   html += `<tr><td>Size</td><td>${formatBytes(file.size)}</td></tr>`;
   if (file.print_time)
@@ -230,7 +237,11 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
 
   document.body.appendChild(el);
 
-  // Bind popover action buttons
+  // Bind popover close & action buttons
+  el.querySelector('.file-popover-close')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeFilePopover();
+  });
   const source = currentSource === 'u-disk' ? 'u-disk' : 'local';
   el.querySelector('.file-popover-preview')?.addEventListener('click', () => {
     closeFilePopover();
@@ -275,11 +286,14 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
   const popH = el.offsetHeight || 200;
   let left = rect.right + 8;
   let top = rect.top;
-  // Keep within viewport
+  // Keep within viewport (including narrow phone screens)
   if (left + popW > window.innerWidth) left = rect.left - popW - 8;
+  left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
   if (top + popH > window.innerHeight) top = Math.max(8, window.innerHeight - popH - 8);
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
+  // Custom properties rather than inline left/top, so the phone stylesheet can dock the
+  // popover above the bottom nav without !important.
+  el.style.setProperty('--popover-left', `${left}px`);
+  el.style.setProperty('--popover-top', `${top}px`);
 
   // Apply dark thumbnail check if we have an image
   const img = el.querySelector('.file-popover-thumb') as HTMLImageElement | null;
@@ -289,6 +303,7 @@ function showFilePopover(file: FileEntry, anchor: HTMLElement): void {
 
   // Close when mouse leaves the popover (with delay for moving back)
   el.addEventListener('mouseleave', () => {
+    if (pinned) return;
     closePopoverTimeout = setTimeout(() => closeFilePopover(), 150);
   });
   el.addEventListener('mouseenter', () => {
@@ -318,6 +333,14 @@ function ensureFileDelegation(container: HTMLElement): void {
   if (fileDelegationBound) return;
   fileDelegationBound = true;
 
+  // Close touch/click-opened popover when tapping outside it
+  document.addEventListener('click', (e) => {
+    if (!filePopover) return;
+    const t = e.target as HTMLElement;
+    if (t.closest('.file-popover, .file-info-btn')) return;
+    closeFilePopover();
+  });
+
   // Delegated mouseenter/mouseleave for file popovers (use capture for mouseenter)
   container.addEventListener(
     'mouseenter',
@@ -325,7 +348,9 @@ function ensureFileDelegation(container: HTMLElement): void {
       const target = e.target as HTMLElement;
       const item = target.closest('.file-item[data-type="file"]') as HTMLElement | null;
       if (!item) return;
-      if (target.closest('.file-print-btn, .file-queue-btn')) return;
+      if (target.closest('.file-print-btn, .file-queue-btn, .file-info-btn')) return;
+      // A popover the ⋯ button pinned stays until it is dismissed; hover does not replace it.
+      if (filePopover?.dataset.pinned) return;
       const fn = item.dataset.filename;
       if (!fn) return;
       const file = _fileMap.get(fn);
@@ -359,6 +384,7 @@ function ensureFileDelegation(container: HTMLElement): void {
         popoverTimeout = null;
       }
       closePopoverTimeout = setTimeout(() => {
+        if (filePopover?.dataset.pinned) return;
         if (filePopover && !filePopover.matches(':hover')) closeFilePopover();
       }, 150);
     },
@@ -368,6 +394,32 @@ function ensureFileDelegation(container: HTMLElement): void {
   // Delegated click for folders, breadcrumbs, and print buttons
   container.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+
+    // File details / actions button (essential on touch devices without hover)
+    const infoBtn = target.closest('.file-info-btn') as HTMLElement | null;
+    if (infoBtn) {
+      e.stopPropagation();
+      const item = infoBtn.closest('.file-item') as HTMLElement | null;
+      const filename = item?.dataset.filename;
+      if (item && filename) {
+        const file = _fileMap.get(filename);
+        if (file) {
+          // A hover-opened popover for the same row is pinned rather than toggled shut:
+          // on touch the tap's emulated mouseenter may have opened it a moment earlier.
+          if (popoverTimeout) {
+            clearTimeout(popoverTimeout);
+            popoverTimeout = null;
+          }
+          const open = filePopover?.dataset.filename === filename;
+          if (open && filePopover?.dataset.pinned) {
+            closeFilePopover();
+          } else {
+            showFilePopover(file, item, true);
+          }
+        }
+      }
+      return;
+    }
 
     // Print button
     const printBtn = target.closest('.file-print-btn') as HTMLElement | null;
@@ -628,6 +680,7 @@ export function renderFiles(state: PrinterState, client: CommandSender): void {
             <div class="file-size">${meta}</div>
           </div>
           <div class="file-actions">
+            ${isFolder ? '' : `<button class="btn btn-sm btn-ghost file-info-btn" title="Details &amp; actions" aria-label="Details and actions">⋯</button>`}
             ${isFolder ? '' : `<button class="btn btn-sm btn-ghost file-queue-btn" title="Add to print queue" aria-label="Add to print queue">＋</button>`}
             ${isFolder ? '' : `<button class="btn btn-sm btn-primary file-print-btn" title="Print">▶</button>`}
           </div>
