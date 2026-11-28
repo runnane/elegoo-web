@@ -155,6 +155,27 @@ export interface DownloadUpstreamOptions {
 
 const PRINTER_DOWNLOAD_TIMEOUT_MS = 120_000;
 
+/**
+ * What the printer's `/download` does while a print is running (ELEG-136, measured
+ * 2026-11-28 on firmware 02.01.01.07): it accepts the TCP connection, never sends
+ * response headers, and closes the socket after ~75 s — for the file being printed
+ * and for any other file alike. Node reports that as `ECONNRESET` ("socket hang up"),
+ * which is not a failure to connect, so it gets its own message (ELEG-200).
+ */
+export const PRINTER_CLOSED_DOWNLOAD_MESSAGE =
+  'The printer closed the download without sending the file. It does not serve files ' +
+  'while a print is running — the preview loads if the file was cached before the ' +
+  'print started, or once the print has finished.';
+
+/** Status and message for an upstream request error that arrived before any response. */
+export function printerDownloadError(code: string | undefined): {
+  status: number;
+  message: string;
+} {
+  if (code === 'ECONNRESET') return { status: 502, message: PRINTER_CLOSED_DOWNLOAD_MESSAGE };
+  return { status: 502, message: 'Failed to connect to printer' };
+}
+
 export async function handleFileDownload(
   res: ServerResponse,
   fileName: string,
@@ -294,8 +315,10 @@ export async function handleFileDownload(
     },
   );
   proxyReq.on('error', (err) => {
-    log.error(`Download proxy error: ${(err as NodeJS.ErrnoException).code} ${err.message}`);
-    failDownload('upstream error', 502, 'Failed to connect to printer');
+    const code = (err as NodeJS.ErrnoException).code;
+    log.error(`Download proxy error: ${code} ${err.message}`);
+    const { status, message } = printerDownloadError(code);
+    failDownload('upstream error', status, message);
   });
   proxyReq.on('timeout', () => {
     log.error('Download proxy timeout');

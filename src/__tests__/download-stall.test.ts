@@ -10,7 +10,7 @@ import type { AddressInfo } from 'net';
 import { mkdtemp, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { handleFileDownload } from '../server/rest-api.js';
+import { handleFileDownload, PRINTER_CLOSED_DOWNLOAD_MESSAGE } from '../server/rest-api.js';
 import { gcodeCacheDir, initDataPaths, resetDataPathsForTest } from '../server/data-paths.js';
 import type { ServiceConfig } from '../server/config.js';
 
@@ -56,6 +56,7 @@ interface Outcome {
   status: number | undefined;
   complete: boolean;
   bytes: number;
+  body: string;
   elapsedMs: number;
 }
 
@@ -69,14 +70,16 @@ function fetchVia(port: number): Promise<Outcome> {
     const start = Date.now();
     let status: number | undefined;
     let bytes = 0;
+    let body = '';
     const guard = setTimeout(
-      () => resolve({ status, complete: false, bytes, elapsedMs: BOUND_MS }),
+      () => resolve({ status, complete: false, bytes, body, elapsedMs: BOUND_MS }),
       BOUND_MS,
     );
     get({ host: '127.0.0.1', port, path: '/' }, (r: IncomingMessage) => {
       status = r.statusCode;
       r.on('data', (c: Buffer) => {
         bytes += c.length;
+        body += c.toString();
       });
       const done = (): void => {
         clearTimeout(guard);
@@ -84,6 +87,7 @@ function fetchVia(port: number): Promise<Outcome> {
           status: r.statusCode,
           complete: r.complete,
           bytes,
+          body,
           elapsedMs: Date.now() - start,
         });
       };
@@ -152,5 +156,40 @@ describe('printer download proxy (ELEG-131)', () => {
     }
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/\.gcode$/);
+  });
+});
+
+/**
+ * ELEG-200: mid-print the printer accepts the connection, sends nothing, and closes
+ * it (~75 s on firmware 02.01.01.07). That is not a failure to connect, and saying
+ * so hid the cause from everyone reading the preview's error.
+ */
+describe('printer download proxy, upstream errors before any response (ELEG-200)', () => {
+  it('names a connection the printer closed without answering', async () => {
+    const upstream = await listen(
+      createServer((req) => {
+        req.socket.destroy();
+      }),
+    );
+    const proxy = await startProxy(upstream, 2000);
+
+    const out = await fetchVia(proxy);
+
+    expect(out.status).toBe(502);
+    expect(JSON.parse(out.body)).toEqual({ error: PRINTER_CLOSED_DOWNLOAD_MESSAGE });
+  });
+
+  it('still says "Failed to connect" when nothing is listening', async () => {
+    // Bind an ephemeral port, then free it, so nothing is listening there.
+    const closed = createServer();
+    await new Promise<void>((r) => closed.listen(0, '127.0.0.1', () => r()));
+    const port = (closed.address() as AddressInfo).port;
+    await new Promise<void>((r) => closed.close(() => r()));
+    const proxy = await startProxy(port, 2000);
+
+    const out = await fetchVia(proxy);
+
+    expect(out.status).toBe(502);
+    expect(JSON.parse(out.body)).toEqual({ error: 'Failed to connect to printer' });
   });
 });
